@@ -2,12 +2,7 @@
 
 set -e
 
-main() {
-    PLATFORM="$(uname | tr '[:upper:]' '[:lower:]')"
-    if [ "$PLATFORM" = "mingw32_nt" ] || [ "$PLATFORM" = "mingw64_nt" ]; then
-        PLATFORM="windows"
-    fi
-
+setup_shell_and_path() {
     BIN_DIR=${BIN_DIR:-$HOME/.local/bin}
 
     case $SHELL in
@@ -31,6 +26,13 @@ main() {
     if [[ ":$PATH:" != *":${BIN_DIR}:"* ]]; then
         echo >> "$PROFILE" && echo "export PATH=\"\$PATH:$BIN_DIR\"" >> "$PROFILE"
     fi
+}
+
+detect_platform_and_arch() {
+    PLATFORM="$(uname | tr '[:upper:]' '[:lower:]')"
+    if [ "$PLATFORM" = "mingw32_nt" ] || [ "$PLATFORM" = "mingw64_nt" ]; then
+        PLATFORM="windows"
+    fi
 
     ARCHITECTURE="$(uname -m)"
     if [ "${ARCHITECTURE}" = "x86_64" ]; then
@@ -47,27 +49,122 @@ main() {
     fi
 
     if [[ "$PLATFORM" == "windows" ]]; then
+        ARCHIVE_EXT=".zip"
         EXTENSION=".exe"
     else
+        ARCHIVE_EXT=".tar.gz"
         EXTENSION=""
     fi
+}
 
-    BINARY_URL="https://github.com/stmg-ai/claude-squad/releases/latest/download/claude-squad-${PLATFORM}-${ARCHITECTURE}/claude-squad${EXTENSION}"
+get_latest_version() {
+    # Get latest version from GitHub API, including prereleases
+    API_RESPONSE=$(curl -sS "https://api.github.com/repos/smtg-ai/claude-squad/releases")
+    if [ $? -ne 0 ]; then
+        echo "Failed to connect to GitHub API"
+        exit 1
+    fi
+    
+    if echo "$API_RESPONSE" | grep -q "Not Found"; then
+        echo "No releases found in the repository"
+        exit 1
+    fi
+    
+    # Get the first release (latest) from the array
+    LATEST_VERSION=$(echo "$API_RESPONSE" | grep -m1 '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//')
+    if [ -z "$LATEST_VERSION" ]; then
+        echo "Failed to parse version from GitHub API response:"
+        echo "$API_RESPONSE" | grep -v "upload_url" # Filter out long upload_url line
+        exit 1
+    fi
+    echo "$LATEST_VERSION"
+}
 
-    if [ ! -d "$BIN_DIR" ]; then
-        mkdir -p "$BIN_DIR"
+download_release() {
+    local version=$1
+    local binary_url=$2
+    local archive_name=$3
+    local tmp_dir=$4
+
+    echo "Downloading binary from $binary_url"
+    DOWNLOAD_OUTPUT=$(curl -sS -L -f -w '%{http_code}' "$binary_url" -o "${tmp_dir}/${archive_name}" 2>&1)
+    HTTP_CODE=$?
+    
+    if [ $HTTP_CODE -ne 0 ]; then
+        echo "Error: Failed to download release asset"
+        echo "This could be because:"
+        echo "1. The release ${version} doesn't have assets uploaded yet"
+        echo "2. The asset for ${PLATFORM}_${ARCHITECTURE} wasn't built"
+        echo "3. The asset name format has changed"
+        echo ""
+        echo "Expected asset name: ${archive_name}"
+        echo "URL attempted: ${binary_url}"
+        if [ "$version" == "latest" ]; then
+            echo ""
+            echo "Tip: Try installing a specific version instead of 'latest'"
+            echo "Available versions:"
+            echo "$API_RESPONSE" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' | sed 's/^v//'
+        fi
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+}
+
+extract_and_install() {
+    local tmp_dir=$1
+    local archive_name=$2
+    local bin_dir=$3
+    local extension=$4
+
+    if [[ "$PLATFORM" == "windows" ]]; then
+        if ! unzip -t "${tmp_dir}/${archive_name}" > /dev/null 2>&1; then
+            echo "Error: Downloaded file is not a valid zip archive"
+            rm -rf "$tmp_dir"
+            exit 1
+        fi
+        ensure unzip "${tmp_dir}/${archive_name}" -d "$tmp_dir"
+    else
+        if ! tar tzf "${tmp_dir}/${archive_name}" > /dev/null 2>&1; then
+            echo "Error: Downloaded file is not a valid tar.gz archive"
+            rm -rf "$tmp_dir"
+            exit 1
+        fi
+        ensure tar xzf "${tmp_dir}/${archive_name}" -C "$tmp_dir"
     fi
 
-    echo "Downloading latest binary from $BINARY_URL to $BIN_DIR"
-    ensure curl -L "$BINARY_URL" -o "$BIN_DIR/claude-squad${EXTENSION}"
+    if [ ! -d "$bin_dir" ]; then
+        mkdir -p "$bin_dir"
+    fi
 
-    if [ ! -f "$BIN_DIR/claude-squad${EXTENSION}" ]; then
-        echo "Download failed, could not find $BIN_DIR/claude-squad${EXTENSION}"
+    mv "${tmp_dir}/claude-squad${extension}" "$bin_dir/claude-squad${extension}"
+    rm -rf "$tmp_dir"
+
+    if [ ! -f "$bin_dir/claude-squad${extension}" ]; then
+        echo "Installation failed, could not find $bin_dir/claude-squad${extension}"
         exit 1
     fi
 
-    chmod +x "$BIN_DIR/claude-squad${EXTENSION}"
-    echo "installed - $("$BIN_DIR/claude-squad${EXTENSION}" --version)"
+    chmod +x "$bin_dir/claude-squad${extension}"
+    echo "installed:"
+    echo " $("$bin_dir/claude-squad${extension}" version)"
+}
+
+main() {
+    detect_platform_and_arch
+    setup_shell_and_path
+
+    VERSION=${VERSION:-"latest"}
+    if [[ "$VERSION" == "latest" ]]; then
+        VERSION=$(get_latest_version)
+    fi
+
+    RELEASE_URL="https://github.com/smtg-ai/claude-squad/releases/download/v${VERSION}"
+    ARCHIVE_NAME="claude-squad_${VERSION}_${PLATFORM}_${ARCHITECTURE}${ARCHIVE_EXT}"
+    BINARY_URL="${RELEASE_URL}/${ARCHIVE_NAME}"
+    TMP_DIR=$(mktemp -d)
+    
+    download_release "$VERSION" "$BINARY_URL" "$ARCHIVE_NAME" "$TMP_DIR"
+    extract_and_install "$TMP_DIR" "$ARCHIVE_NAME" "$BIN_DIR" "$EXTENSION"
 }
 
 # Run a command that should never fail. If the command fails execution
@@ -83,4 +180,3 @@ err() {
 }
 
 main "$@" || exit 1
- 
