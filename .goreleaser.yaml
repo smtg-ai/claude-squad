@@ -10,6 +10,14 @@ builds:
     env:
       - CGO_ENABLED=0
 
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
 release:
   prerelease: auto
   draft: true
