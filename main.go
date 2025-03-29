@@ -17,6 +17,7 @@ import (
 )
 
 var (
+	version     = "0.0.1-prerelease"
 	resetFlag   bool
 	programFlag string
 	autoYesFlag bool
@@ -113,6 +114,15 @@ var (
 			return nil
 		},
 	}
+
+	versionCmd = &cobra.Command{
+		Use:   "version",
+		Short: "Print the version number of claude-squad",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("claude-squad version %s\n", version)
+			fmt.Printf("https://github.com/smtg-ai/claude-squad/releases/tag/v%s\n", version)
+		},
+	}
 )
 
 func init() {
@@ -123,6 +133,7 @@ func init() {
 		"[experimental] If enabled, all instances will automatically accept prompts")
 	rootCmd.Flags().BoolVar(&daemonFlag, "daemon", false, "Run a program that loads all sessions"+
 		" and runs autoyes mode on them.")
+
 	// Hide the daemonFlag as it's only for internal use
 	err := rootCmd.Flags().MarkHidden("daemon")
 	if err != nil {
@@ -130,6 +141,7 @@ func init() {
 	}
 
 	rootCmd.AddCommand(debugCmd)
+	rootCmd.AddCommand(versionCmd)
 }
 
 func main() {
