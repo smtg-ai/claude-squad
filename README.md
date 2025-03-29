@@ -18,9 +18,13 @@ The easiest way to install `claude-squad` is by running the following command:
 curl -fsSL https://raw.githubusercontent.com/stmg-ai/claude-squad/main/install.sh | bash
 ```
 
-This will install the `claude-squad` binary to `~/.local/bin` and add it to your PATH.
+This will install the `cs` binary to `~/.local/bin` and add it to your PATH. To install with a different name, use the `--name` flag:
 
-Alternatively, you can install `claude-squad` by building from source or installing a pre-built binary (see project repository for details).
+```bash
+curl -fsSL https://raw.githubusercontent.com/stmg-ai/claude-squad/main/install.sh | bash -s -- --name <name>
+```
+
+Alternatively, you can also install `claude-squad` by building from source or installing a pre-built binary (see project repository for details).
 
 ### Prerequisites
 

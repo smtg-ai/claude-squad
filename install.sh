@@ -136,20 +136,45 @@ extract_and_install() {
         mkdir -p "$bin_dir"
     fi
 
-    mv "${tmp_dir}/claude-squad${extension}" "$bin_dir/claude-squad${extension}"
+    # Install binary with desired name
+    mv "${tmp_dir}/claude-squad${extension}" "$bin_dir/$INSTALL_NAME${extension}"
     rm -rf "$tmp_dir"
 
-    if [ ! -f "$bin_dir/claude-squad${extension}" ]; then
-        echo "Installation failed, could not find $bin_dir/claude-squad${extension}"
+    if [ ! -f "$bin_dir/$INSTALL_NAME${extension}" ]; then
+        echo "Installation failed, could not find $bin_dir/$INSTALL_NAME${extension}"
         exit 1
     fi
 
-    chmod +x "$bin_dir/claude-squad${extension}"
-    echo "installed:"
-    echo " $("$bin_dir/claude-squad${extension}" version)"
+    chmod +x "$bin_dir/$INSTALL_NAME${extension}"
+    echo "installed as '$INSTALL_NAME':"
+    echo " $("$bin_dir/$INSTALL_NAME${extension}" version)"
+}
+
+check_command_exists() {
+    if command -v "$INSTALL_NAME" &> /dev/null; then
+        echo "Error: Command '$INSTALL_NAME' already exists in PATH"
+        exit 1
+    fi
 }
 
 main() {
+    # Parse command line arguments
+    INSTALL_NAME="cs"
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --name)
+                INSTALL_NAME="$2"
+                shift 2
+                ;;
+            *)
+                echo "Unknown option: $1"
+                echo "Usage: install.sh [--name <name>]"
+                exit 1
+                ;;
+        esac
+    done
+
+    check_command_exists
     detect_platform_and_arch
     setup_shell_and_path
 
