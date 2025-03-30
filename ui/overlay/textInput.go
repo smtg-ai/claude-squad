@@ -39,72 +39,6 @@ func (t *TextInputOverlay) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles messages and updates the model
-func (t *TextInputOverlay) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyLeft:
-			if t.FocusIndex == 0 && t.CursorPos > 0 {
-				t.CursorPos--
-			}
-			return t, nil
-		case tea.KeyRight:
-			// Allow moving the cursor only if it is before the end of the text.
-			if t.FocusIndex == 0 && t.CursorPos < len(t.Value) {
-				t.CursorPos++
-			}
-			return t, nil
-		case tea.KeyTab:
-			// Toggle focus between input and enter button.
-			t.FocusIndex = (t.FocusIndex + 1) % 2
-			return t, nil
-		case tea.KeyShiftTab:
-			// Toggle focus in reverse.
-			t.FocusIndex = (t.FocusIndex + 1) % 2
-			return t, nil
-		case tea.KeyEnter:
-			if t.FocusIndex == 1 {
-				// Enter button is focused, so submit.
-				t.Submitted = true
-				if t.OnSubmit != nil {
-					t.OnSubmit()
-				}
-				return t, nil
-			}
-			// Input is focused; in multiline mode, add a new line.
-			if t.FocusIndex == 0 && t.Multiline {
-				beforeCursor := t.Value[:t.CursorPos]
-				afterCursor := t.Value[t.CursorPos:]
-				t.Value = beforeCursor + "\n" + afterCursor
-				t.CursorPos++ // Move cursor past the newline.
-			}
-			return t, nil
-		case tea.KeyEsc:
-			t.Canceled = true
-			return t, nil
-		case tea.KeyRunes:
-			// Handle character input only when input is focused.
-			if t.FocusIndex == 0 && len(msg.Runes) > 0 {
-				t.Value = t.Value[:t.CursorPos] + string(msg.Runes) + t.Value[t.CursorPos:]
-				t.CursorPos += len(msg.Runes)
-			}
-			return t, nil
-		case tea.KeyBackspace:
-			// Handle backspace only when input is focused.
-			if t.FocusIndex == 0 && t.CursorPos > 0 {
-				t.Value = t.Value[:t.CursorPos-1] + t.Value[t.CursorPos:]
-				t.CursorPos--
-			}
-			return t, nil
-		default:
-			return t, nil
-		}
-	default:
-		return t, nil
-	}
-}
-
 // View renders the model's view
 func (t *TextInputOverlay) View() string {
 	// Default to full width and height
@@ -154,6 +88,14 @@ func (t *TextInputOverlay) HandleKeyPress(key tea.KeyMsg) bool {
 	case tea.KeyEsc:
 		t.Canceled = true
 		return true
+	case tea.KeySpace:
+		if t.FocusIndex == 0 {
+			beforeCursor := t.Value[:t.CursorPos]
+			afterCursor := t.Value[t.CursorPos:]
+			t.Value = beforeCursor + " " + afterCursor
+			t.CursorPos++
+		}
+		return false
 	case tea.KeyRunes:
 		// Handle character input only when input is focused.
 		if t.FocusIndex == 0 && len(key.Runes) > 0 {
@@ -335,20 +277,36 @@ func wrapText(text string, maxWidth int) []string {
 	if len(text) == 0 {
 		return []string{""}
 	}
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return []string{text}
-	}
+
 	var lines []string
-	currentLine := words[0]
-	for _, word := range words[1:] {
-		if len(currentLine)+1+len(word) <= maxWidth {
-			currentLine += " " + word
-		} else {
+	var currentLine string
+	var currentWidth int
+
+	// Process each character individually to preserve all whitespace
+	for _, char := range text {
+		if char == '\n' {
+			// Handle explicit line breaks
 			lines = append(lines, currentLine)
-			currentLine = word
+			currentLine = ""
+			currentWidth = 0
+			continue
+		}
+
+		// If adding this char would exceed maxWidth, start a new line
+		if currentWidth >= maxWidth {
+			lines = append(lines, currentLine)
+			currentLine = string(char)
+			currentWidth = 1
+		} else {
+			currentLine += string(char)
+			currentWidth++
 		}
 	}
-	lines = append(lines, currentLine)
+
+	// Add the last line if it's not empty
+	if currentLine != "" || len(lines) == 0 {
+		lines = append(lines, currentLine)
+	}
+
 	return lines
 }
