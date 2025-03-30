@@ -67,6 +67,12 @@ func (g *GitWorktree) PushChanges(commitMessage string) error {
 		return fmt.Errorf("failed to sync changes: %s (%w)", output, err)
 	}
 
+	// Open the branch in the browser
+	if err := g.OpenBranchURL(); err != nil {
+		// Just log the error but don't fail the push operation
+		log.ErrorLog.Printf("failed to open branch URL: %v", err)
+	}
+
 	return nil
 }
 
@@ -86,4 +92,19 @@ func (g *GitWorktree) IsBranchCheckedOut() (bool, error) {
 		return false, fmt.Errorf("failed to get current branch: %w", err)
 	}
 	return strings.TrimSpace(string(output)) == g.branchName, nil
+}
+
+// OpenBranchURL opens the branch URL in the default browser
+func (g *GitWorktree) OpenBranchURL() error {
+	// Check if GitHub CLI is available
+	if err := checkGHCLI(); err != nil {
+		return err
+	}
+
+	cmd := exec.Command("gh", "browse", "--branch", g.branchName)
+	cmd.Dir = g.worktreePath
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to open branch URL: %w", err)
+	}
+	return nil
 }
