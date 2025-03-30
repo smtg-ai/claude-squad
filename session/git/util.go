@@ -3,8 +3,11 @@ package git
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/go-git/go-git/v5"
 )
 
 // sanitizeBranchName transforms an arbitrary string into a Git branch name friendly string.
@@ -46,4 +49,20 @@ func checkGHCLI() error {
 	}
 
 	return nil
+}
+
+// IsGitRepo checks if the given path is within a git repository
+func IsGitRepo(path string) bool {
+	for {
+		_, err := git.PlainOpen(path)
+		if err == nil {
+			return true
+		}
+
+		parent := filepath.Dir(path)
+		if parent == path {
+			return false
+		}
+		path = parent
+	}
 }
