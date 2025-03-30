@@ -210,7 +210,7 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 
 	// Only set hasPrompt for claude and aider. Use these strings to check for a prompt.
 	if t.program == ProgramClaude {
-		hasPrompt = strings.Contains(content, "Yes, and don't ask again this session")
+		hasPrompt = strings.Contains(content, "Yes, and don't ask again")
 	} else if strings.HasPrefix(t.program, ProgramAider) {
 		hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
 	}
