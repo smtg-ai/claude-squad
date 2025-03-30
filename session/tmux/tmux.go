@@ -55,11 +55,14 @@ type TmuxSession struct {
 	wg     *sync.WaitGroup
 }
 
-const TmuxPrefix = "claudesquad-"
+const TmuxPrefix = "claudesquad_"
+
+var whiteSpaceRegex = regexp.MustCompile(`\s+`)
 
 func toClaudeSquadTmuxName(str string) string {
-	re := regexp.MustCompile(`\s+`)
-	return fmt.Sprintf("%s%s", TmuxPrefix, re.ReplaceAllString(str, ""))
+	str = whiteSpaceRegex.ReplaceAllString(str, "")
+	str = strings.ReplaceAll(str, ".", "_") // tmux replaces all . with _
+	return fmt.Sprintf("%s%s", TmuxPrefix, str)
 }
 
 func NewTmuxSession(name string, program string) *TmuxSession {
@@ -103,7 +106,7 @@ func (t *TmuxSession) Start(program string, workDir string) error {
 			if cleanupErr := t.Close(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
 			}
-			return fmt.Errorf("timed out waiting for tmux session: %v", err)
+			return fmt.Errorf("timed out waiting for tmux session %s: %v", t.sanitizedName, err)
 		default:
 			time.Sleep(time.Millisecond * 10)
 		}
