@@ -38,7 +38,7 @@ func (e *ErrBox) String() string {
 		err = e.err.Error()
 		if len(err) > e.width {
 			if e.width-3 < len(err) {
-				log.ErrorLog.Printf(err)
+				log.ErrorLog.Print(err)
 				err = "error: ...(truncated)"
 			} else {
 				err = err[:e.width-3] + "..."
