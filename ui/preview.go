@@ -97,12 +97,18 @@ func (p *PreviewPane) String() string {
 
 		// Calculate padding needed above and below to center the content
 		totalPadding := availableHeight - fallbackLines
-		topPadding := totalPadding / 2
-		bottomPadding := totalPadding - topPadding // accounts for odd numbers
+		topPadding := 0
+		bottomPadding := 0
+		if totalPadding > 0 {
+			topPadding = totalPadding / 2
+			bottomPadding = totalPadding - topPadding // accounts for odd numbers
+		}
 
 		// Build the centered content
 		var lines []string
-		lines = append(lines, strings.Repeat("\n", topPadding))
+		if topPadding > 0 {
+			lines = append(lines, strings.Repeat("\n", topPadding))
+		}
 		lines = append(lines, p.previewState.text)
 		if bottomPadding > 0 {
 			lines = append(lines, strings.Repeat("\n", bottomPadding))
