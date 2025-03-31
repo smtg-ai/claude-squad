@@ -45,10 +45,7 @@ var (
 				return fmt.Errorf("error: claude-squad must be run from within a git repository")
 			}
 
-			cfg, err := config.LoadConfig()
-			if err != nil {
-				return fmt.Errorf("failed to load config: %w", err)
-			}
+			cfg := config.LoadConfig()
 
 			if resetFlag {
 				storage, err := session.NewStorage()
@@ -109,10 +106,7 @@ var (
 		Use:   "debug",
 		Short: "Print debug information like config paths",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.LoadConfig()
-			if err != nil {
-				return fmt.Errorf("failed to load config: %w", err)
-			}
+			cfg := config.LoadConfig()
 
 			configDir, err := config.GetConfigDir()
 			if err != nil {
@@ -120,7 +114,7 @@ var (
 			}
 			configJson, _ := json.MarshalIndent(cfg, "", "  ")
 
-			fmt.Printf("Config: %s\n%s\n", filepath.Join(configDir, "config.json"), configJson)
+			fmt.Printf("Config: %s\n%s\n", filepath.Join(configDir, config.ConfigFileName), configJson)
 
 			return nil
 		},

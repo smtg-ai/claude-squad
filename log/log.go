@@ -32,7 +32,7 @@ func Initialize(daemon bool) {
 
 	fmtS := "%s"
 	if daemon {
-		fmtS = "%s [DAEMON]"
+		fmtS = "[DAEMON] %s"
 	}
 	InfoLog = log.New(f, fmt.Sprintf(fmtS, "INFO:"), log.Ldate|log.Ltime|log.Lshortfile)
 	WarningLog = log.New(f, fmt.Sprintf(fmtS, "WARNING:"), log.Ldate|log.Ltime|log.Lshortfile)
