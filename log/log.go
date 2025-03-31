@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 var (
@@ -32,7 +33,7 @@ func Initialize(daemon bool) {
 
 	fmtS := "%s"
 	if daemon {
-		fmtS = "%s [DAEMON]"
+		fmtS = "[DAEMON] %s"
 	}
 	InfoLog = log.New(f, fmt.Sprintf(fmtS, "INFO:"), log.Ldate|log.Ltime|log.Lshortfile)
 	WarningLog = log.New(f, fmt.Sprintf(fmtS, "WARNING:"), log.Ldate|log.Ltime|log.Lshortfile)
@@ -45,4 +46,31 @@ func Close() {
 	_ = globalLogFile.Close()
 	// TODO: maybe only print if verbose flag is set?
 	fmt.Println("wrote logs to " + logFileName)
+}
+
+// Every is used to log at most once every timeout duration.
+type Every struct {
+	timeout time.Duration
+	timer   *time.Timer
+}
+
+func NewEvery(timeout time.Duration) *Every {
+	return &Every{timeout: timeout}
+}
+
+// ShouldLog returns true if the timeout has passed since the last log.
+func (e *Every) ShouldLog() bool {
+	if e.timer == nil {
+		e.timer = time.NewTimer(e.timeout)
+		e.timer.Reset(e.timeout)
+		return true
+	}
+
+	select {
+	case <-e.timer.C:
+		e.timer.Reset(e.timeout)
+		return true
+	default:
+		return false
+	}
 }

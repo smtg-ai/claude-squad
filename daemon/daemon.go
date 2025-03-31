@@ -14,11 +14,9 @@ import (
 	"time"
 )
 
-var daemonPollInterval = 1 * time.Second
-
 // RunDaemon runs the daemon process which iterates over all sessions and runs AutoYes mode on them.
 // It's expected that the main process kills the daemon when the main process starts.
-func RunDaemon() error {
+func RunDaemon(cfg *config.Config) error {
 	log.InfoLog.Printf("starting daemon")
 	storage, err := session.NewStorage()
 	if err != nil {
@@ -34,12 +32,17 @@ func RunDaemon() error {
 		instance.AutoYes = true
 	}
 
+	pollInterval := time.Duration(cfg.DaemonPollInterval) * time.Millisecond
+
+	// If we get an error for a session, it's likely that we'll keep getting the error. Log every 30 seconds.
+	everyN := log.NewEvery(60 * time.Second)
+
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	stopCh := make(chan struct{})
 	go func() {
 		defer wg.Done()
-		ticker := time.NewTimer(daemonPollInterval)
+		ticker := time.NewTimer(pollInterval)
 		for {
 			for _, instance := range instances {
 				// We only store started instances, but check anyway.
@@ -47,7 +50,9 @@ func RunDaemon() error {
 					if _, hasPrompt := instance.HasUpdated(); hasPrompt {
 						instance.TapEnter()
 						if err := instance.UpdateDiffStats(); err != nil {
-							log.WarningLog.Printf("could not update diff stats for %s: %v", instance.Title, err)
+							if everyN.ShouldLog() {
+								log.WarningLog.Printf("could not update diff stats for %s: %v", instance.Title, err)
+							}
 						}
 					}
 				}
@@ -61,10 +66,8 @@ func RunDaemon() error {
 			}
 
 			<-ticker.C
-
-			ticker.Reset(daemonPollInterval)
+			ticker.Reset(pollInterval)
 		}
-
 	}()
 
 	// Notify on SIGINT (Ctrl+C) and SIGTERM. Save instances before
@@ -122,7 +125,8 @@ func LaunchDaemon() error {
 	return nil
 }
 
-// StopDaemon attempts to stop a running daemon process if it exists.
+// StopDaemon attempts to stop a running daemon process if it exists. Returns no error if the daemon is not found
+// (assumes the daemon does not exist).
 func StopDaemon() error {
 	pidDir, err := config.GetConfigDir()
 	if err != nil {
@@ -158,6 +162,6 @@ func StopDaemon() error {
 		return fmt.Errorf("failed to remove PID file: %w", err)
 	}
 
-	log.InfoLog.Printf("Daemon process (PID: %d) stopped successfully", pid)
+	log.InfoLog.Printf("daemon process (PID: %d) stopped successfully", pid)
 	return nil
 }

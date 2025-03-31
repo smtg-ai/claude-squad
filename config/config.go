@@ -8,11 +8,13 @@ import (
 	"path/filepath"
 )
 
+const ConfigFileName = "config.json"
+
 // GetConfigDir returns the path to the application's configuration directory
 func GetConfigDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
+		return "", fmt.Errorf("failed to get config home directory: %w", err)
 	}
 	return filepath.Join(homeDir, ".claude-squad"), nil
 }
@@ -21,49 +23,56 @@ func GetConfigDir() (string, error) {
 type Config struct {
 	// DefaultProgram is the default program to run in new instances
 	DefaultProgram string `json:"default_program"`
-	// AutoYes
+	// AutoYes is a flag to automatically accept all prompts.
 	AutoYes bool `json:"auto_yes"`
+	// DaemonPollInterval is the interval (ms) at which the daemon polls sessions for autoyes mode.
+	DaemonPollInterval int `json:"daemon_poll_interval"`
 }
 
 // DefaultConfig returns the default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		DefaultProgram: "claude",
-		AutoYes:        false,
+		DefaultProgram:     "claude",
+		AutoYes:            false,
+		DaemonPollInterval: 1000,
 	}
 }
 
-// LoadConfig loads the configuration from disk
-func LoadConfig() (*Config, error) {
+// LoadConfig loads the configuration from disk. If it cannot be done, we return the default configuration.
+func LoadConfig() *Config {
 	configDir, err := GetConfigDir()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get config directory: %w", err)
+		log.ErrorLog.Printf("failed to get config directory: %v", err)
+		return DefaultConfig()
 	}
 
-	configPath := filepath.Join(configDir, "config.json")
+	configPath := filepath.Join(configDir, ConfigFileName)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Create and save default config if file doesn't exist
 			defaultCfg := DefaultConfig()
-			if saveErr := SaveConfig(defaultCfg); saveErr != nil {
-				log.ErrorLog.Printf("Warning: failed to save default config: %v", saveErr)
+			if saveErr := saveConfig(defaultCfg); saveErr != nil {
+				log.WarningLog.Printf("failed to save default config: %v", saveErr)
 			}
-			return defaultCfg, nil
+			return defaultCfg
 		}
-		return DefaultConfig(), fmt.Errorf("failed to read config file: %w", err)
+
+		log.WarningLog.Printf("failed to get config file: %v", err)
+		return DefaultConfig()
 	}
 
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
-		return DefaultConfig(), fmt.Errorf("failed to parse config file: %w", err)
+		log.ErrorLog.Printf("failed to parse config file: %v", err)
+		return DefaultConfig()
 	}
 
-	return &config, nil
+	return &config
 }
 
-// SaveConfig saves the configuration to disk
-func SaveConfig(config *Config) error {
+// saveConfig saves the configuration to disk
+func saveConfig(config *Config) error {
 	configDir, err := GetConfigDir()
 	if err != nil {
 		return fmt.Errorf("failed to get config directory: %w", err)
@@ -73,7 +82,7 @@ func SaveConfig(config *Config) error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	configPath := filepath.Join(configDir, "config.json")
+	configPath := filepath.Join(configDir, ConfigFileName)
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
