@@ -31,7 +31,9 @@ var (
 			defer log.Close()
 
 			if daemonFlag {
-				err := daemon.RunDaemon()
+				cfg := config.LoadConfig()
+				err := daemon.RunDaemon(cfg)
+				log.ErrorLog.Printf("failed to start daemon %v", err)
 				return err
 			}
 
@@ -69,9 +71,9 @@ var (
 
 				// Kill any daemon that's running.
 				if err := daemon.StopDaemon(); err != nil {
-					log.ErrorLog.Printf("failed to stop daemon: %v", err)
+					return err
 				}
-				fmt.Println("Daemon has been stopped")
+				fmt.Println("daemon has been stopped")
 
 				return nil
 			}

@@ -23,15 +23,18 @@ func GetConfigDir() (string, error) {
 type Config struct {
 	// DefaultProgram is the default program to run in new instances
 	DefaultProgram string `json:"default_program"`
-	// AutoYes
+	// AutoYes is a flag to automatically accept all prompts.
 	AutoYes bool `json:"auto_yes"`
+	// DaemonPollInterval is the interval (ms) at which the daemon polls sessions for autoyes mode.
+	DaemonPollInterval int `json:"daemon_poll_interval"`
 }
 
 // DefaultConfig returns the default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		DefaultProgram: "claude",
-		AutoYes:        false,
+		DefaultProgram:     "claude",
+		AutoYes:            false,
+		DaemonPollInterval: 1000,
 	}
 }
 
