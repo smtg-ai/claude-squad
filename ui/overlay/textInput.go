@@ -24,7 +24,7 @@ func NewTextInputOverlay(title string, initialValue string) *TextInputOverlay {
 	ti.Focus()
 	ti.ShowLineNumbers = false
 	ti.Prompt = ""
-	ti.FocusedStyle.CursorLine = lipgloss.NewStyle().Background(lipgloss.Color("#8282ff"))
+	ti.FocusedStyle.CursorLine = lipgloss.NewStyle()
 
 	return &TextInputOverlay{
 		textarea:   ti,
