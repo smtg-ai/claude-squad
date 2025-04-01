@@ -40,7 +40,7 @@ func (d *DiffPane) SetSize(width, height int) {
 	}
 }
 
-func (d *DiffPane) SetDiff(instance *session.Instance) error {
+func (d *DiffPane) SetDiff(instance *session.Instance) {
 	centeredFallbackMessage := lipgloss.Place(
 		d.width,
 		d.height,
@@ -49,9 +49,9 @@ func (d *DiffPane) SetDiff(instance *session.Instance) error {
 		"No changes",
 	)
 
-	if instance == nil || !instance.Started() {
+	if !instance.Started() {
 		d.viewport.SetContent(centeredFallbackMessage)
-		return nil
+		return
 	}
 
 	stats := instance.GetDiffStats()
@@ -65,7 +65,7 @@ func (d *DiffPane) SetDiff(instance *session.Instance) error {
 			"Setting up worktree...",
 		)
 		d.viewport.SetContent(centeredMessage)
-		return nil
+		return
 	}
 
 	if stats.Error != nil {
@@ -78,7 +78,7 @@ func (d *DiffPane) SetDiff(instance *session.Instance) error {
 			fmt.Sprintf("Error: %v", stats.Error),
 		)
 		d.viewport.SetContent(centeredMessage)
-		return nil
+		return
 	}
 
 	if stats.IsEmpty() {
@@ -93,7 +93,7 @@ func (d *DiffPane) SetDiff(instance *session.Instance) error {
 		d.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, d.stats, d.diff))
 	}
 
-	return nil
+	return
 }
 
 func (d *DiffPane) String() string {
