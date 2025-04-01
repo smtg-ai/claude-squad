@@ -37,7 +37,7 @@ const (
 	stateNew
 	// statePrompt is the state when the user is entering a prompt.
 	statePrompt
-	// stateHelp is the state when the user is viewing the help menu.
+	// stateHelp is the state when a help screen is displayed.
 	stateHelp
 )
 
@@ -69,10 +69,11 @@ type home struct {
 
 	// textInputOverlay is the component for handling text input with state
 	textInputOverlay *overlay.TextInputOverlay
-	// helpOverlay is the component for displaying the help menu
-	helpOverlay *overlay.HelpOverlay
 
-	// keySent is used to manage underlines
+	// textOverlay is the component for displaying text information
+	textOverlay *overlay.TextOverlay
+
+	// keySent is used to manage underlining menu items
 	keySent bool
 }
 
@@ -90,7 +91,6 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		menu:         ui.NewMenu(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
 		errBox:       ui.NewErrBox(),
-		helpOverlay:  &overlay.HelpOverlay{},
 		storage:      storage,
 		program:      program,
 		autoYes:      autoYes,
@@ -135,7 +135,9 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	if m.textInputOverlay != nil {
 		m.textInputOverlay.SetSize(int(float32(msg.Width)*0.6), int(float32(msg.Height)*0.4))
 	}
-	m.helpOverlay.SetSize(msg.Width / 2)
+	if m.textOverlay != nil {
+		m.textOverlay.SetWidth(int(float32(msg.Width) * 0.3))
+	}
 
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
 	if err := m.list.SetSessionPreviewSize(previewWidth, previewHeight); err != nil {
@@ -249,11 +251,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	m.keySent = false
 
 	if m.state == stateHelp {
-		if msg.String() == "ctrl+q" {
-			m.state = stateDefault
-			return m, nil
-		}
-		return m, nil
+		return m.handleHelpState(msg)
 	}
 
 	if m.state == stateNew {
@@ -298,7 +296,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.promptAfterName = false
 			} else {
 				m.menu.SetState(ui.StateDefault)
+				m.showHelpScreen(helpTypeInstanceStart, nil)
 			}
+
 			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 		case tea.KeyRunes:
 			if len(instance.Title) >= 32 {
@@ -355,6 +355,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				tea.WindowSize(),
 				func() tea.Msg {
 					m.menu.SetState(ui.StateDefault)
+					m.showHelpScreen(helpTypeInstanceStart, nil)
 					return nil
 				},
 			)
@@ -374,6 +375,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 
 	switch name {
+	case keys.KeyHelp:
+		return m.showHelpScreen(helpTypeGeneral, nil)
 	case keys.KeyPrompt:
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
@@ -435,9 +438,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.tabbedWindow.Toggle()
 		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
 		return m, m.instanceChanged()
-	case keys.KeyHelp:
-		m.state = stateHelp
-		return m, nil
 	case keys.KeyKill:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
@@ -474,10 +474,15 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if selected == nil {
 			return m, nil
 		}
-		if err := selected.Pause(); err != nil {
-			return m, m.handleError(err)
-		}
-		return m, m.instanceChanged()
+
+		// Show help screen before pausing
+		m.showHelpScreen(helpTypeInstanceCheckout, func() {
+			if err := selected.Pause(); err != nil {
+				m.handleError(err)
+			}
+			m.instanceChanged()
+		})
+		return m, nil
 	case keys.KeyResume:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
@@ -491,13 +496,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if m.list.NumInstances() == 0 {
 			return m, nil
 		}
-		ch, err := m.list.Attach()
-		if err != nil {
-			return m, m.handleError(err)
-		}
-		<-ch
-		// WindowSize clears the screen.
-		return m, tea.WindowSize()
+		// Show help screen before attaching
+		m.showHelpScreen(helpTypeInstanceAttach, func() {
+			ch, err := m.list.Attach()
+			if err != nil {
+				m.handleError(err)
+				return
+			}
+			<-ch
+			m.state = stateDefault
+		})
+		return m, nil
 	default:
 		return m, nil
 	}
@@ -582,10 +591,11 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	}
-
-	if m.state == stateHelp {
-		return overlay.PlaceOverlay(0, 0, m.helpOverlay.Render(), mainView, true, true)
+	} else if m.state == stateHelp {
+		if m.textOverlay == nil {
+			log.ErrorLog.Printf("text overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
 	}
 
 	return mainView
