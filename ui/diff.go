@@ -92,8 +92,6 @@ func (d *DiffPane) SetDiff(instance *session.Instance) {
 		d.diff = colorizeDiff(stats.Content)
 		d.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, d.stats, d.diff))
 	}
-
-	return
 }
 
 func (d *DiffPane) String() string {

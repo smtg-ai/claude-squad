@@ -19,14 +19,20 @@ func (t *TmuxSession) monitorWindowSize() {
 	// Send initial SIGWINCH to trigger the first resize
 	_ = syscall.Kill(syscall.Getpid(), syscall.SIGWINCH)
 
+	everyN := log.NewEvery(60 * time.Second)
+
 	doUpdate := func() {
 		// Use the current terminal height and width.
 		cols, rows, err := term.GetSize(int(os.Stdin.Fd()))
 		if err != nil {
-			log.ErrorLog.Printf("failed to update window size: %v", err)
+			if everyN.ShouldLog() {
+				log.ErrorLog.Printf("failed to update window size: %v", err)
+			}
 		} else {
 			if err := t.updateWindowSize(cols, rows); err != nil {
-				log.ErrorLog.Printf("failed to update window size: %v", err)
+				if everyN.ShouldLog() {
+					log.ErrorLog.Printf("failed to update window size: %v", err)
+				}
 			}
 		}
 	}
