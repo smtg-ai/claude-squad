@@ -215,7 +215,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-		return m.showErrorMessageForShortTime(err)
+		return m, m.handleError(err)
 	}
 	return m, tea.Quit
 }
@@ -253,17 +253,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Start the instance (enable previews etc) and go back to the main menu state.
 		case tea.KeyEnter:
 			if len(instance.Title) == 0 {
-				return m.showErrorMessageForShortTime(fmt.Errorf("title cannot be empty"))
+				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
 			if err := instance.Start(true); err != nil {
 				m.list.Kill()
 				m.state = stateDefault
-				return m.showErrorMessageForShortTime(err)
+				return m, m.handleError(err)
 			}
 			// Save after adding new instance
 			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-				return m.showErrorMessageForShortTime(err)
+				return m, m.handleError(err)
 			}
 			// Instance added successfully, call the finalizer.
 			m.newInstanceFinalizer()
@@ -285,21 +285,21 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, tea.WindowSize()
 		case tea.KeyRunes:
 			if len(instance.Title) >= 32 {
-				return m.showErrorMessageForShortTime(fmt.Errorf("title cannot be longer than 32 characters"))
+				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
 			}
 			if err := instance.SetTitle(instance.Title + string(msg.Runes)); err != nil {
-				return m.showErrorMessageForShortTime(err)
+				return m, m.handleError(err)
 			}
 		case tea.KeyBackspace:
 			if len(instance.Title) == 0 {
 				return m, nil
 			}
 			if err := instance.SetTitle(instance.Title[:len(instance.Title)-1]); err != nil {
-				return m.showErrorMessageForShortTime(err)
+				return m, m.handleError(err)
 			}
 		case tea.KeySpace:
 			if err := instance.SetTitle(instance.Title + " "); err != nil {
-				return m.showErrorMessageForShortTime(err)
+				return m, m.handleError(err)
 			}
 		case tea.KeyEsc:
 			m.list.Kill()
@@ -327,7 +327,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					return m, nil
 				}
 				if err := selected.SendPrompt(m.textInputOverlay.GetValue()); err != nil {
-					return m.showErrorMessageForShortTime(err)
+					return m, m.handleError(err)
 				}
 			}
 
@@ -359,7 +359,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	switch name {
 	case keys.KeyPrompt:
 		if m.list.NumInstances() >= GlobalInstanceLimit {
-			return m.showErrorMessageForShortTime(
+			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
@@ -368,7 +368,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			Program: m.program,
 		})
 		if err != nil {
-			return m.showErrorMessageForShortTime(err)
+			return m, m.handleError(err)
 		}
 
 		m.newInstanceFinalizer = m.list.AddInstance(instance)
@@ -380,7 +380,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyNew:
 		if m.list.NumInstances() >= GlobalInstanceLimit {
-			return m.showErrorMessageForShortTime(
+			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
@@ -389,7 +389,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			Program: m.program,
 		})
 		if err != nil {
-			return m.showErrorMessageForShortTime(err)
+			return m, m.handleError(err)
 		}
 
 		m.newInstanceFinalizer = m.list.AddInstance(instance)
@@ -426,7 +426,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		// Delete from storage first
 		if err := m.storage.DeleteInstance(selected.Title); err != nil {
-			return m.showErrorMessageForShortTime(err)
+			return m, m.handleError(err)
 		}
 
 		// Then kill the instance
@@ -442,10 +442,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
 		worktree, err := selected.GetGitWorktree()
 		if err != nil {
-			return m.showErrorMessageForShortTime(err)
+			return m, m.handleError(err)
 		}
 		if err = worktree.PushChanges(commitMsg); err != nil {
-			return m.showErrorMessageForShortTime(err)
+			return m, m.handleError(err)
 		}
 
 		return m, nil
@@ -455,7 +455,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		if err := selected.Pause(); err != nil {
-			return m.showErrorMessageForShortTime(err)
+			return m, m.handleError(err)
 		}
 		return m.updatePreview()
 	case keys.KeyResume:
@@ -464,7 +464,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		if err := selected.Resume(); err != nil {
-			return m.showErrorMessageForShortTime(err)
+			return m, m.handleError(err)
 		}
 		return m, tea.WindowSize()
 	case keys.KeyEnter:
@@ -473,7 +473,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		ch, err := m.list.Attach()
 		if err != nil {
-			return m.showErrorMessageForShortTime(err)
+			return m, m.handleError(err)
 		}
 		<-ch
 		// WindowSize clears the screen.
@@ -488,11 +488,11 @@ func (m *home) updatePreview() (tea.Model, tea.Cmd) {
 	selected := m.list.GetSelectedInstance()
 
 	if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
-		return m.showErrorMessageForShortTime(err)
+		return m, m.handleError(err)
 	}
 
 	if err := m.tabbedWindow.UpdateDiff(selected); err != nil {
-		return m.showErrorMessageForShortTime(err)
+		return m, m.handleError(err)
 	}
 
 	// Update menu with current instance
@@ -530,13 +530,12 @@ var tickUpdateMetadataCmd = func() tea.Msg {
 	return tickUpdateMetadataMessage{}
 }
 
-// showErrorMessageForShortTime sets the error message. We return a callback. I assume bubbletea calls the
-// callback in a goroutine because it says that tea.Msg / tea.Cmd should be used for IO operations. These
-// tend to block... Eventually, the callback returns a message which is sent back to the Update function.
-// Then, we clear the error.
-func (m *home) showErrorMessageForShortTime(err error) (tea.Model, tea.Cmd) {
+// handleError handles all errors which get bubbled up to the app. sets the error message. We return a callback tea.Cmd that returns a hideErrMsg message
+// which clears the error message after 3 seconds.
+func (m *home) handleError(err error) tea.Cmd {
+	log.ErrorLog.Printf("%v", err)
 	m.errBox.SetError(err)
-	return m, func() tea.Msg {
+	return func() tea.Msg {
 		select {
 		case <-m.ctx.Done():
 		case <-time.After(3 * time.Second):
