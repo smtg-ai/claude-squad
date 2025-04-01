@@ -152,9 +152,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case hideErrMsg:
 		m.errBox.Clear()
 	case previewTickMsg:
-		var cmd tea.Cmd
-		model, cmd := m.updatePreview()
-		m = model.(*home)
+		cmd := m.instanceChanged()
 		return m, tea.Batch(
 			cmd,
 			func() tea.Msg {
@@ -192,10 +190,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch msg.Button {
 				case tea.MouseButtonWheelUp:
 					m.tabbedWindow.ScrollUp()
-					return m.updatePreview()
+					return m, m.instanceChanged()
 				case tea.MouseButtonWheelDown:
 					m.tabbedWindow.ScrollDown()
-					return m.updatePreview()
+					return m, m.instanceChanged()
 				}
 			}
 		}
@@ -282,7 +280,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			} else {
 				m.menu.SetState(ui.StateDefault)
 			}
-			return m, tea.WindowSize()
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 		case tea.KeyRunes:
 			if len(instance.Title) >= 32 {
 				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
@@ -400,24 +398,24 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyUp:
 		m.list.Up()
-		return m.updatePreview()
+		return m, m.instanceChanged()
 	case keys.KeyDown:
 		m.list.Down()
-		return m.updatePreview()
+		return m, m.instanceChanged()
 	case keys.KeyShiftUp:
 		if m.tabbedWindow.IsInDiffTab() {
 			m.tabbedWindow.ScrollUp()
 		}
-		return m.updatePreview()
+		return m, m.instanceChanged()
 	case keys.KeyShiftDown:
 		if m.tabbedWindow.IsInDiffTab() {
 			m.tabbedWindow.ScrollDown()
 		}
-		return m.updatePreview()
+		return m, m.instanceChanged()
 	case keys.KeyTab:
 		m.tabbedWindow.Toggle()
 		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
-		return m.updatePreview()
+		return m, m.instanceChanged()
 	case keys.KeyKill:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
@@ -431,7 +429,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		// Then kill the instance
 		m.list.Kill()
-		return m, tea.WindowSize()
+		return m, m.instanceChanged()
 	case keys.KeySubmit:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
@@ -457,7 +455,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if err := selected.Pause(); err != nil {
 			return m, m.handleError(err)
 		}
-		return m.updatePreview()
+		return m, m.instanceChanged()
 	case keys.KeyResume:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
@@ -483,21 +481,21 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 }
 
-// updatePreview updates the preview pane with the currently selected instance
-func (m *home) updatePreview() (tea.Model, tea.Cmd) {
+// instanceChanged updates the preview pane, menu, and diff pane based on the selected instance. It returns an error
+// Cmd if there was any error.
+func (m *home) instanceChanged() tea.Cmd {
+	// selected may be nil
 	selected := m.list.GetSelectedInstance()
 
-	if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
-		return m, m.handleError(err)
-	}
-
-	if err := m.tabbedWindow.UpdateDiff(selected); err != nil {
-		return m, m.handleError(err)
-	}
-
+	m.tabbedWindow.UpdateDiff(selected)
 	// Update menu with current instance
 	m.menu.SetInstance(selected)
-	return m, nil
+
+	// If there's no selected instance, we don't need to update the preview.
+	if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
+		return m.handleError(err)
+	}
+	return nil
 }
 
 type keyupMsg struct{}

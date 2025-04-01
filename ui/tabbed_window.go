@@ -93,6 +93,7 @@ func (w *TabbedWindow) Toggle() {
 	w.activeTab = (w.activeTab + 1) % len(w.tabs)
 }
 
+// UpdatePreview updates the content of the preview pane. instance may be nil.
 func (w *TabbedWindow) UpdatePreview(instance *session.Instance) error {
 	if w.activeTab != PreviewTab {
 		return nil
@@ -100,11 +101,11 @@ func (w *TabbedWindow) UpdatePreview(instance *session.Instance) error {
 	return w.preview.UpdateContent(instance)
 }
 
-func (w *TabbedWindow) UpdateDiff(instance *session.Instance) error {
+func (w *TabbedWindow) UpdateDiff(instance *session.Instance) {
 	if w.activeTab != DiffTab {
-		return nil
+		return
 	}
-	return w.diff.SetDiff(instance)
+	w.diff.SetDiff(instance)
 }
 
 // Add these new methods for handling scroll events
