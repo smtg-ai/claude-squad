@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	"golang.org/x/term"
 )
 
 const ProgramClaude = "claude"
@@ -46,8 +45,6 @@ type TmuxSession struct {
 	//
 	// Channel to be closed at the very end of detaching. Used to signal callers.
 	attachCh chan struct{}
-	// Terminal state before attach. Gets restored when detaching.
-	oldState *term.State
 	// While attached, we use some goroutines to manage the window size and stdin/stdout. This stuff
 	// is used to terminate them on Detach. We don't want them to outlive the attached window.
 	ctx    context.Context
@@ -223,11 +220,6 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 }
 
 func (t *TmuxSession) Attach() (chan struct{}, error) {
-	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
-	if err != nil {
-		return nil, fmt.Errorf("error making terminal raw: %v", err)
-	}
-	t.oldState = oldState
 	t.attachCh = make(chan struct{})
 
 	t.wg = &sync.WaitGroup{}
@@ -273,16 +265,14 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 			select {
 			case <-timeoutCh:
 			default:
-				log.ErrorLog.Printf("nuked first stdin: %s", buf[:nr])
+				log.InfoLog.Printf("nuked first stdin: %s", buf[:nr])
 				continue
 			}
 
 			// Check for Ctrl+q (ASCII 17)
 			if nr == 1 && buf[0] == 17 {
 				// Detach from the session
-				if err := t.Detach(); err != nil {
-					log.ErrorLog.Printf("Error detaching from tmux session: %v", err)
-				}
+				t.Detach()
 				return
 			}
 
@@ -295,38 +285,40 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 	return t.attachCh, nil
 }
 
-// Detach disconnects from the current tmux session
-func (t *TmuxSession) Detach() (err error) {
+// Detach disconnects from the current tmux session. It panics if detaching fails. At the moment, there's no
+// way to recover from a failed detach.
+func (t *TmuxSession) Detach() {
 	// TODO: control flow is a bit messy here. If there's an error,
 	// I'm not sure if we get into a bad state. Needs testing.
 	defer func() {
 		close(t.attachCh)
 		t.attachCh = nil
-		t.oldState = nil
 		t.cancel = nil
 		t.ctx = nil
 		t.wg = nil
 	}()
 
 	// Close the attached pty session.
-	if err := t.ptmx.Close(); err != nil {
-		return fmt.Errorf("error closing attach pty session: %w", err)
+	err := t.ptmx.Close()
+	if err != nil {
+		// This is a fatal error. We can't detach if we can't close the PTY. It's better to just panic and have the
+		// user re-invoke the program than to ruin their terminal pane.
+		msg := fmt.Sprintf("error closing attach pty session: %v", err)
+		log.ErrorLog.Println(msg)
+		panic(msg)
 	}
 	// Attach goroutines should die on EOF due to the ptmx closing. Call
 	// t.Restore to set a new t.ptmx.
-	if err := t.Restore(); err != nil {
-		return err
-	}
-	// Yeild the stdin/stdout back to the UI.
-	if err := term.Restore(int(os.Stdin.Fd()), t.oldState); err != nil {
-		return fmt.Errorf("error restoring terminal state: %w", err)
+	if err = t.Restore(); err != nil {
+		// This is a fatal error. Our invariant that a started TmuxSession always has a valid ptmx is violated.
+		msg := fmt.Sprintf("error closing attach pty session: %v", err)
+		log.ErrorLog.Println(msg)
+		panic(msg)
 	}
 
 	// Cancel goroutines created by Attach.
 	t.cancel()
 	t.wg.Wait()
-
-	return nil
 }
 
 // Close terminates the tmux session and cleans up resources
