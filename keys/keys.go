@@ -12,7 +12,6 @@ const (
 	KeyEnter
 	KeyNew
 	KeyKill
-	KeyHelp
 	KeyQuit
 	KeyReview
 	KeyPush
@@ -24,6 +23,7 @@ const (
 	KeyCheckout
 	KeyResume
 	KeyPrompt // New key for entering a prompt
+	KeyHelp   // Key for showing help screen
 
 	// Diff keybindings
 	KeyShiftUp
@@ -48,7 +48,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"c":          KeyCheckout,
 	"r":          KeyResume,
 	"p":          KeySubmit,
-	"h":          KeyHelp,
+	"?":          KeyHelp,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -82,8 +82,8 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithHelp("D", "kill"),
 	),
 	KeyHelp: key.NewBinding(
-		key.WithKeys("h"),
-		key.WithHelp("h", "help"),
+		key.WithKeys("?"),
+		key.WithHelp("?", "help"),
 	),
 	KeyQuit: key.NewBinding(
 		key.WithKeys("q"),
