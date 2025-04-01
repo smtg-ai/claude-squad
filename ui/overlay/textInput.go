@@ -8,12 +8,13 @@ import (
 
 // TextInputOverlay represents a text input overlay with state management.
 type TextInputOverlay struct {
-	textarea   textarea.Model
-	Title      string
-	FocusIndex int // 0 for text input, 1 for enter button
-	Submitted  bool
-	Canceled   bool
-	OnSubmit   func()
+	textarea      textarea.Model
+	Title         string
+	FocusIndex    int // 0 for text input, 1 for enter button
+	Submitted     bool
+	Canceled      bool
+	OnSubmit      func()
+	width, height int
 }
 
 // NewTextInputOverlay creates a new text input overlay with the given title and initial value.
@@ -23,7 +24,7 @@ func NewTextInputOverlay(title string, initialValue string) *TextInputOverlay {
 	ti.Focus()
 	ti.ShowLineNumbers = false
 	ti.Prompt = ""
-	ti.SetHeight(10) // Set textarea height to 10 lines
+	ti.FocusedStyle.CursorLine = lipgloss.NewStyle().Background(lipgloss.Color("#8282ff"))
 
 	return &TextInputOverlay{
 		textarea:   ti,
@@ -34,6 +35,12 @@ func NewTextInputOverlay(title string, initialValue string) *TextInputOverlay {
 	}
 }
 
+func (t *TextInputOverlay) SetSize(width, height int) {
+	t.textarea.SetHeight(height) // Set textarea height to 10 lines
+	t.width = width
+	t.height = height
+}
+
 // Init initializes the text input overlay model
 func (t *TextInputOverlay) Init() tea.Cmd {
 	return textarea.Blink
@@ -41,8 +48,7 @@ func (t *TextInputOverlay) Init() tea.Cmd {
 
 // View renders the model's view
 func (t *TextInputOverlay) View() string {
-	// Default to full width and height
-	return t.Render(40, 80)
+	return t.Render()
 }
 
 // HandleKeyPress processes a key press and updates the state accordingly.
@@ -109,7 +115,7 @@ func (t *TextInputOverlay) SetOnSubmit(onSubmit func()) {
 }
 
 // Render renders the text input overlay.
-func (t *TextInputOverlay) Render(height, width int, opts ...WhitespaceOption) string {
+func (t *TextInputOverlay) Render() string {
 	// Create styles
 	style := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -130,7 +136,7 @@ func (t *TextInputOverlay) Render(height, width int, opts ...WhitespaceOption) s
 		Foreground(lipgloss.Color("0"))
 
 	// Set textarea width to fit within the overlay
-	t.textarea.SetWidth(width - 6) // Account for padding and borders
+	t.textarea.SetWidth(t.width - 6) // Account for padding and borders
 
 	// Build the view
 	content := titleStyle.Render(t.Title) + "\n"
