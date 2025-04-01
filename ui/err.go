@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"claude-squad/log"
 	"github.com/charmbracelet/lipgloss"
+	"strings"
 )
 
 type ErrBox struct {
@@ -36,13 +36,10 @@ func (e *ErrBox) String() string {
 	var err string
 	if e.err != nil {
 		err = e.err.Error()
-		if len(err) > e.width {
-			if e.width-3 < len(err) {
-				log.ErrorLog.Print(err)
-				err = "error: ...(truncated)"
-			} else {
-				err = err[:e.width-3] + "..."
-			}
+		lines := strings.Split(err, "\n")
+		err = strings.Join(lines, "//")
+		if len(err) > e.width-3 && e.width-3 >= 0 {
+			err = err[:e.width-3] + "..."
 		}
 	}
 	return lipgloss.Place(e.width, e.height, lipgloss.Center, lipgloss.Center, errStyle.Render(err))

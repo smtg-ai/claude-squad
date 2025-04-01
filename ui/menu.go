@@ -52,7 +52,7 @@ type Menu struct {
 	keyDown keys.KeyName
 }
 
-var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyPrompt, keys.KeyQuit}
+var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyPrompt, keys.KeyHelp, keys.KeyQuit}
 var newInstanceMenuOptions = []keys.KeyName{keys.KeySubmitName}
 var promptMenuOptions = []keys.KeyName{keys.KeyEnter}
 
@@ -128,7 +128,7 @@ func (m *Menu) addInstanceOptions() {
 	}
 
 	// System group
-	systemGroup := []keys.KeyName{keys.KeyTab, keys.KeyQuit}
+	systemGroup := []keys.KeyName{keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
 
 	// Combine all groups
 	options = append(options, actionGroup...)
@@ -153,7 +153,7 @@ func (m *Menu) String() string {
 	}{
 		{0, 2}, // Instance management group (n, d)
 		{2, 5}, // Action group (enter, submit, pause/resume)
-		{5, 7}, // System group (tab, q)
+		{6, 8}, // System group (tab, help, q)
 	}
 
 	for i, k := range m.options {

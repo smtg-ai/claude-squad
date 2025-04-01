@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"claude-squad/log"
 	"claude-squad/session"
 	"fmt"
 	"strings"
@@ -139,5 +140,7 @@ func (p *PreviewPane) String() string {
 	}
 
 	content := strings.Join(lines, "\n")
-	return previewPaneStyle.Width(p.width).Render(content)
+	rendered := previewPaneStyle.Width(p.width).Render(content)
+	log.InfoLog.Println(len(strings.Split(rendered, "\n")), p.width)
+	return rendered
 }

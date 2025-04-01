@@ -12,6 +12,7 @@ const (
 	KeyEnter
 	KeyNew
 	KeyKill
+	KeyHelp
 	KeyQuit
 	KeyReview
 	KeyPush
@@ -46,7 +47,8 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"tab":        KeyTab,
 	"c":          KeyCheckout,
 	"r":          KeyResume,
-	"s":          KeySubmit,
+	"p":          KeySubmit,
+	"h":          KeyHelp,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -79,13 +81,17 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithKeys("D"),
 		key.WithHelp("D", "kill"),
 	),
+	KeyHelp: key.NewBinding(
+		key.WithKeys("h"),
+		key.WithHelp("h", "help"),
+	),
 	KeyQuit: key.NewBinding(
 		key.WithKeys("q"),
 		key.WithHelp("q", "quit"),
 	),
 	KeySubmit: key.NewBinding(
-		key.WithKeys("s"),
-		key.WithHelp("s", "submit PR"),
+		key.WithKeys("p"),
+		key.WithHelp("p", "push branch"),
 	),
 	KeyPrompt: key.NewBinding(
 		key.WithKeys("N"),
@@ -97,7 +103,7 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeyTab: key.NewBinding(
 		key.WithKeys("tab"),
-		key.WithHelp("tab", "switch tab"),
+		key.WithHelp("tab", "tab"),
 	),
 	KeyResume: key.NewBinding(
 		key.WithKeys("r"),

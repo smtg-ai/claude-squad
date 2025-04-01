@@ -37,6 +37,8 @@ const (
 	stateNew
 	// statePrompt is the state when the user is entering a prompt.
 	statePrompt
+	// stateHelp is the state when the user is viewing the help menu.
+	stateHelp
 )
 
 type home struct {
@@ -67,6 +69,8 @@ type home struct {
 
 	// textInputOverlay is the component for handling text input with state
 	textInputOverlay *overlay.TextInputOverlay
+	// helpOverlay is the component for displaying the help menu
+	helpOverlay *overlay.HelpOverlay
 
 	// keySent is used to manage underlines
 	keySent bool
@@ -86,6 +90,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		menu:         ui.NewMenu(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
 		errBox:       ui.NewErrBox(),
+		helpOverlay:  &overlay.HelpOverlay{},
 		storage:      storage,
 		program:      program,
 		autoYes:      autoYes,
@@ -121,8 +126,8 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 
 	// Menu takes 10% of height, list and window take 90%
 	contentHeight := int(float32(msg.Height) * 0.9)
-	menuHeight := msg.Height - contentHeight - 1 // minus 1 for error box
-	m.errBox.SetSize(msg.Width, 1)               // error box takes 1 row
+	menuHeight := msg.Height - contentHeight - 1     // minus 1 for error box
+	m.errBox.SetSize(int(float32(msg.Width)*0.9), 1) // error box takes 1 row
 
 	m.tabbedWindow.SetSize(tabsWidth, contentHeight)
 	m.list.SetSize(listWidth, contentHeight)
@@ -130,6 +135,7 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	if m.textInputOverlay != nil {
 		m.textInputOverlay.SetSize(int(float32(msg.Width)*0.6), int(float32(msg.Height)*0.4))
 	}
+	m.helpOverlay.SetSize(msg.Width / 2)
 
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
 	if err := m.list.SetSessionPreviewSize(previewWidth, previewHeight); err != nil {
@@ -225,7 +231,7 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	// Handle menu highlighting when you press a button. We intercept it here and immediately return to
 	// update the ui while re-sending the keypress. Then, on the next call to this, we actually handle the keypress.
-	if !m.keySent && m.state != statePrompt {
+	if !m.keySent && m.state != statePrompt && m.state != stateHelp {
 		// If it's in the global keymap, we should try to highlight it.
 		name, ok := keys.GlobalKeyStringsMap[msg.String()]
 		// Skip the menu highlighting if the key is not in the map or we are using the shift up and down keys.
@@ -241,6 +247,15 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 	}
 	m.keySent = false
+
+	if m.state == stateHelp {
+		if msg.String() == "ctrl+q" {
+			m.state = stateDefault
+			return m, nil
+		}
+		return m, nil
+	}
+
 	if m.state == stateNew {
 		// Handle quit commands first. Don't handle q because the user might want to type that.
 		if msg.String() == "ctrl+c" {
@@ -420,6 +435,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.tabbedWindow.Toggle()
 		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
 		return m, m.instanceChanged()
+	case keys.KeyHelp:
+		m.state = stateHelp
+		return m, nil
 	case keys.KeyKill:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
@@ -564,6 +582,10 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	}
+
+	if m.state == stateHelp {
+		return overlay.PlaceOverlay(0, 0, m.helpOverlay.Render(), mainView, true, true)
 	}
 
 	return mainView
