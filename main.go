@@ -48,9 +48,10 @@ var (
 			}
 
 			cfg := config.LoadConfig()
+			state := config.LoadState()
 
 			if resetFlag {
-				storage, err := session.NewStorage()
+				storage, err := session.NewStorage(state)
 				if err != nil {
 					return fmt.Errorf("failed to initialize storage: %w", err)
 				}

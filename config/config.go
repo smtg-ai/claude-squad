@@ -90,3 +90,8 @@ func saveConfig(config *Config) error {
 
 	return os.WriteFile(configPath, data, 0644)
 }
+
+// SaveConfig exports the saveConfig function for use by other packages
+func SaveConfig(config *Config) error {
+	return saveConfig(config)
+}

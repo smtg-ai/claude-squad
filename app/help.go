@@ -1,6 +1,7 @@
 package app
 
 import (
+	"claude-squad/log"
 	"claude-squad/session"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
@@ -18,6 +19,14 @@ const (
 	helpTypeInstanceStart
 	helpTypeInstanceAttach
 	helpTypeInstanceCheckout
+)
+
+// Help screen bit flags for tracking in config
+const (
+	HelpFlagGeneral          uint32 = 1 << helpTypeGeneral
+	HelpFlagInstanceStart    uint32 = 1 << helpTypeInstanceStart
+	HelpFlagInstanceAttach   uint32 = 1 << helpTypeInstanceAttach
+	HelpFlagInstanceCheckout uint32 = 1 << helpTypeInstanceCheckout
 )
 
 var (
@@ -99,13 +108,41 @@ func (h helpType) ToContent(instance *session.Instance) string {
 	return ""
 }
 
-// showHelpScreen displays the help screen overlay
+// showHelpScreen displays the help screen overlay if it hasn't been shown before
 func (m *home) showHelpScreen(helpType helpType, onDismiss func()) (tea.Model, tea.Cmd) {
-	content := helpType.ToContent(m.list.GetSelectedInstance())
+	// Get the flag for this help type
+	var helpFlag uint32
+	switch helpType {
+	case helpTypeGeneral:
+		helpFlag = HelpFlagGeneral
+	case helpTypeInstanceStart:
+		helpFlag = HelpFlagInstanceStart
+	case helpTypeInstanceAttach:
+		helpFlag = HelpFlagInstanceAttach
+	case helpTypeInstanceCheckout:
+		helpFlag = HelpFlagInstanceCheckout
+	}
 
-	m.textOverlay = overlay.NewTextOverlay(content)
-	m.textOverlay.OnDismiss = onDismiss
-	m.state = stateHelp
+	// Check if this help screen has been seen before
+	// Only show if we're showing the general help screen or the corresponding flag is not set in the seen bitmask.
+	if helpType == helpTypeGeneral || (m.appState.GetHelpScreensSeen()&helpFlag) == 0 {
+		// Mark this help screen as seen and save state
+		if err := m.appState.SetHelpScreensSeen(m.appState.GetHelpScreensSeen() | helpFlag); err != nil {
+			log.WarningLog.Printf("Failed to save help screen state: %v", err)
+		}
+
+		content := helpType.ToContent(m.list.GetSelectedInstance())
+
+		m.textOverlay = overlay.NewTextOverlay(content)
+		m.textOverlay.OnDismiss = onDismiss
+		m.state = stateHelp
+		return m, nil
+	}
+
+	// Skip displaying the help screen
+	if onDismiss != nil {
+		onDismiss()
+	}
 	return m, nil
 }
 
