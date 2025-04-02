@@ -4,87 +4,57 @@ import (
 	"claude-squad/config"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 )
 
+// InstanceData represents the serializable data of an Instance
+type InstanceData struct {
+	Title     string    `json:"title"`
+	Path      string    `json:"path"`
+	Branch    string    `json:"branch"`
+	Status    Status    `json:"status"`
+	Height    int       `json:"height"`
+	Width     int       `json:"width"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	AutoYes   bool      `json:"auto_yes"`
+
+	Program   string          `json:"program"`
+	Worktree  GitWorktreeData `json:"worktree"`
+	DiffStats DiffStatsData   `json:"diff_stats"`
+}
+
 // GitWorktreeData represents the serializable data of a GitWorktree
 type GitWorktreeData struct {
-	RepoPath      string
-	WorktreePath  string
-	SessionName   string
-	BranchName    string
-	BaseCommitSHA string
+	RepoPath      string `json:"repo_path"`
+	WorktreePath  string `json:"worktree_path"`
+	SessionName   string `json:"session_name"`
+	BranchName    string `json:"branch_name"`
+	BaseCommitSHA string `json:"base_commit_sha"`
 }
 
 // DiffStatsData represents the serializable data of a DiffStats
 type DiffStatsData struct {
-	Added   int
-	Removed int
-	Content string
+	Added   int    `json:"added"`
+	Removed int    `json:"removed"`
+	Content string `json:"content"`
 }
 
-// InstanceData represents the serializable data of an Instance
-type InstanceData struct {
-	Title     string
-	Path      string
-	Branch    string
-	Status    Status
-	Height    int
-	Width     int
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	AutoYes   bool
-
-	Program   string
-	Worktree  GitWorktreeData
-	DiffStats DiffStatsData
-}
-
-// Storage handles saving and loading instances
+// Storage handles saving and loading instances using the state interface
 type Storage struct {
-	filePath  string
-	backupDir string
+	state config.InstanceStorage
 }
 
 // NewStorage creates a new storage instance
-func NewStorage() (*Storage, error) {
-	dir, err := config.GetConfigDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get config directory: %w", err)
-	}
-
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	backupDir := filepath.Join(dir, "backups")
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create backup directory: %w", err)
-	}
-
+func NewStorage(state config.InstanceStorage) (*Storage, error) {
 	return &Storage{
-		filePath:  filepath.Join(dir, "instances.json"),
-		backupDir: backupDir,
+		state: state,
 	}, nil
 }
 
 // SaveInstances saves the list of instances to disk
 func (s *Storage) SaveInstances(instances []*Instance) error {
-	// Create backup if file exists
-	if _, err := os.Stat(s.filePath); err == nil {
-		timestamp := time.Now().Format("20060102_150405")
-		backupFile := filepath.Join(s.backupDir, fmt.Sprintf("instances_%s.json", timestamp))
-		if data, err := os.ReadFile(s.filePath); err == nil {
-			err = os.WriteFile(backupFile, data, 0644)
-			if err != nil {
-				return fmt.Errorf("failed to create backup: %w", err)
-			}
-		}
-	}
-
-	// Convert and save instances
+	// Convert instances to InstanceData
 	data := make([]InstanceData, 0)
 	for _, instance := range instances {
 		if instance.Started() {
@@ -92,31 +62,26 @@ func (s *Storage) SaveInstances(instances []*Instance) error {
 		}
 	}
 
-	jsonData, err := json.MarshalIndent(data, "", "  ")
+	// Marshal to JSON
+	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("failed to marshal instances: %w", err)
 	}
 
-	return os.WriteFile(s.filePath, jsonData, 0644)
+	return s.state.SaveInstances(jsonData)
 }
 
 // LoadInstances loads the list of instances from disk
 func (s *Storage) LoadInstances() ([]*Instance, error) {
-	data, err := os.ReadFile(s.filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []*Instance{}, nil
-		}
-		return nil, fmt.Errorf("failed to read instances: %w", err)
+	jsonData := s.state.GetInstances()
+
+	var instancesData []InstanceData
+	if err := json.Unmarshal(jsonData, &instancesData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal instances: %w", err)
 	}
 
-	var instanceData []InstanceData
-	if err := json.Unmarshal(data, &instanceData); err != nil {
-		return nil, fmt.Errorf("failed to parse instances: %w", err)
-	}
-
-	instances := make([]*Instance, len(instanceData))
-	for i, data := range instanceData {
+	instances := make([]*Instance, len(instancesData))
+	for i, data := range instancesData {
 		instance, err := FromInstanceData(data)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create instance %s: %w", data.Title, err)
@@ -131,57 +96,53 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 func (s *Storage) DeleteInstance(title string) error {
 	instances, err := s.LoadInstances()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load instances: %w", err)
 	}
 
-	for i, instance := range instances {
-		if instance.Title == title {
-			instances = append(instances[:i], instances[i+1:]...)
-			return s.SaveInstances(instances)
+	found := false
+	newInstances := make([]*Instance, 0)
+	for _, instance := range instances {
+		data := instance.ToInstanceData()
+		if data.Title != title {
+			newInstances = append(newInstances, instance)
+		} else {
+			found = true
 		}
 	}
 
-	return fmt.Errorf("instance not found: %s", title)
+	if !found {
+		return fmt.Errorf("instance not found: %s", title)
+	}
+
+	return s.SaveInstances(newInstances)
 }
 
 // UpdateInstance updates an existing instance in storage
 func (s *Storage) UpdateInstance(instance *Instance) error {
 	instances, err := s.LoadInstances()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load instances: %w", err)
 	}
 
+	data := instance.ToInstanceData()
+	found := false
 	for i, existing := range instances {
-		if existing.Title == instance.Title {
+		existingData := existing.ToInstanceData()
+		if existingData.Title == data.Title {
 			instances[i] = instance
-			return s.SaveInstances(instances)
+			found = true
+			break
 		}
 	}
 
-	return fmt.Errorf("instance not found: %s", instance.Title)
+	if !found {
+		return fmt.Errorf("instance not found: %s", data.Title)
+	}
+
+	return s.SaveInstances(instances)
 }
 
-// DeleteAllInstances removes all stored instances and their backups
+// DeleteAllInstances removes all stored instances
 func (s *Storage) DeleteAllInstances() error {
-	// Remove the main instances file
-	if err := os.Remove(s.filePath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to delete instances file: %w", err)
-	}
-
-	// Remove all backup files
-	entries, err := os.ReadDir(s.backupDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("failed to read backup directory: %w", err)
-	}
-
-	for _, entry := range entries {
-		if err := os.Remove(filepath.Join(s.backupDir, entry.Name())); err != nil {
-			return fmt.Errorf("failed to delete backup file %s: %w", entry.Name(), err)
-		}
-	}
-
-	return nil
+	return s.state.DeleteAllInstances()
 }

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"claude-squad/config"
 	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/session"
@@ -55,8 +56,12 @@ type home struct {
 	// global spinner instance. we plumb this down to where it's needed
 	spinner spinner.Model
 
-	// storage
+	// storage is the interface for saving/loading data to/from the app's state
 	storage *session.Storage
+	// appConfig stores persistent application configuration
+	appConfig *config.Config
+	// appState stores persistent application state like seen help screens
+	appState config.AppState
 
 	// state
 	state state
@@ -78,8 +83,14 @@ type home struct {
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
+	// Load application config
+	appConfig := config.LoadConfig()
+
+	// Load application state
+	appState := config.LoadState()
+
 	// Initialize storage
-	storage, err := session.NewStorage()
+	storage, err := session.NewStorage(appState)
 	if err != nil {
 		fmt.Printf("Failed to initialize storage: %v\n", err)
 		os.Exit(1)
@@ -92,9 +103,11 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
 		errBox:       ui.NewErrBox(),
 		storage:      storage,
+		appConfig:    appConfig,
 		program:      program,
 		autoYes:      autoYes,
 		state:        stateDefault,
+		appState:     appState,
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 
