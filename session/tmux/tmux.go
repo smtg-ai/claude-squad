@@ -412,10 +412,14 @@ func CleanupSessions() error {
 		return fmt.Errorf("failed to list tmux sessions: %v", err)
 	}
 
-	re := regexp.MustCompile(fmt.Sprintf(`^%s\d+`, TmuxPrefix))
+	re := regexp.MustCompile(fmt.Sprintf(`%s.*:`, TmuxPrefix))
 	matches := re.FindAllString(string(output), -1)
+	for i, match := range matches {
+		matches[i] = match[:strings.Index(match, ":")]
+	}
 
 	for _, match := range matches {
+		log.InfoLog.Printf("cleaning up session: %s", match)
 		cmd := exec.Command("tmux", "kill-session", "-t", match)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to kill tmux session %s: %v", match, err)
