@@ -21,7 +21,7 @@ func (g *GitWorktree) runGitCommand(path string, args ...string) (string, error)
 }
 
 // PushChanges commits and pushes changes in the worktree to the remote branch
-func (g *GitWorktree) PushChanges(commitMessage string) error {
+func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 	if err := checkGHCLI(); err != nil {
 		return err
 	}

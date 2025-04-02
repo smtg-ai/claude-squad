@@ -477,7 +477,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if err != nil {
 			return m, m.handleError(err)
 		}
-		if err = worktree.PushChanges(commitMsg); err != nil {
+		if err = worktree.PushChanges(commitMsg, true); err != nil {
 			return m, m.handleError(err)
 		}
 

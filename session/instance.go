@@ -378,7 +378,7 @@ func (i *Instance) Pause() error {
 	} else if dirty {
 		// Commit changes with timestamp
 		commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s (paused)", i.Title, time.Now().Format(time.RFC822))
-		if err := i.gitWorktree.PushChanges(commitMsg); err != nil {
+		if err := i.gitWorktree.PushChanges(commitMsg, false); err != nil {
 			errs = append(errs, fmt.Errorf("failed to commit changes: %w", err))
 			log.ErrorLog.Print(err)
 			// Return early if we can't commit changes to avoid corrupted state
