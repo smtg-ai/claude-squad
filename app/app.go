@@ -149,7 +149,7 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 		m.textInputOverlay.SetSize(int(float32(msg.Width)*0.6), int(float32(msg.Height)*0.4))
 	}
 	if m.textOverlay != nil {
-		m.textOverlay.SetWidth(int(float32(msg.Width) * 0.3))
+		m.textOverlay.SetWidth(int(float32(msg.Width) * 0.6))
 	}
 
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
