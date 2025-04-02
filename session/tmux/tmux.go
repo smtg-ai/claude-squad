@@ -374,6 +374,10 @@ func DoesSessionExist(name string) bool {
 	return existsCmd.Run() == nil
 }
 
+func (t *TmuxSession) DoesSessionExist() bool {
+	return DoesSessionExist(t.sanitizedName)
+}
+
 // CapturePaneContent captures the content of the tmux pane
 func (t *TmuxSession) CapturePaneContent() (string, error) {
 	// Add -e flag to preserve escape sequences (ANSI color codes)

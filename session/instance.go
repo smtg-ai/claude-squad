@@ -360,6 +360,11 @@ func (i *Instance) Paused() bool {
 	return i.Status == Paused
 }
 
+// TmuxAlive returns true if the tmux session is alive. This is a sanity check before attaching.
+func (i *Instance) TmuxAlive() bool {
+	return i.tmuxSession.DoesSessionExist()
+}
+
 // Pause stops the tmux session and removes the worktree, preserving the branch
 func (i *Instance) Pause() error {
 	if !i.started {
