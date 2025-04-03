@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 
 	"github.com/spf13/cobra"
 )
@@ -71,15 +72,15 @@ var (
 				log.ErrorLog.Printf("failed to stop daemon: %v", err)
 			}
 
-			// filter cfg.MCPServers to be only the ones included in mcpServersFlag
-			mcpServers := make([]string, 0)
-			for name, _ := range cfg.MCPServers {
-				if contains(mcpServersFlag, name) {
+			// Filter cfg.MCPServers to be only the ones included in mcpServersFlag
+			mcpServers := make([]string, 0, len(cfg.MCPServers))
+			for name := range cfg.MCPServers {
+				if slices.Contains(mcpServersFlag, name) {
 					mcpServers = append(mcpServers, name)
 				}
 			}
 
-			return app.Run(ctx, program, autoYes, mcpServers)
+			return app.Run(ctx, cfg, program, autoYes, mcpServers)
 		},
 	}
 

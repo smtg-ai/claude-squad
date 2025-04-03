@@ -49,8 +49,6 @@ type Instance struct {
 	UpdatedAt time.Time
 	// AutoYes is true if the instance should automatically press enter when prompted.
 	AutoYes bool
-	// UseMCP is true if Model Control Plane support should be enabled for Claude sessions.
-	UseMCP bool
 	// MCPServers is a list of MCP servers to enable. If empty and UseMCP is true, all configured servers will be used.
 	MCPServers []string
 	// Prompt is the initial prompt to pass to the instance on startup
@@ -81,7 +79,6 @@ func (i *Instance) ToInstanceData() InstanceData {
 		UpdatedAt:  time.Now(),
 		Program:    i.Program,
 		AutoYes:    i.AutoYes,
-		UseMCP:     i.UseMCP,
 		MCPServers: i.MCPServers,
 	}
 
@@ -121,7 +118,6 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		UpdatedAt:  data.UpdatedAt,
 		Program:    data.Program,
 		AutoYes:    data.AutoYes,
-		UseMCP:     data.UseMCP,
 		MCPServers: data.MCPServers,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
@@ -184,7 +180,6 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		CreatedAt:  t,
 		UpdatedAt:  t,
 		AutoYes:    opts.AutoYes,
-		UseMCP:     opts.UseMCP,
 		MCPServers: opts.MCPServers,
 	}, nil
 }

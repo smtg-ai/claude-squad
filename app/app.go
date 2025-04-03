@@ -20,9 +20,9 @@ import (
 const GlobalInstanceLimit = 10
 
 // Run is the main entrypoint into the application.
-func Run(ctx context.Context, program string, autoYes bool, mcpServers []string) error {
+func Run(ctx context.Context, appConfig *config.Config, program string, autoYes bool, mcpServers []string) error {
 	p := tea.NewProgram(
-		newHome(ctx, program, autoYes, mcpServers),
+		newHome(ctx, appConfig, program, autoYes, mcpServers),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(), // Mouse scroll
 	)
@@ -83,10 +83,7 @@ type home struct {
 	keySent bool
 }
 
-func newHome(ctx context.Context, program string, autoYes bool, mcpServers []string) *home {
-	// Load application config
-	appConfig := config.LoadConfig()
-
+func newHome(ctx context.Context, appConfig *config.Config, program string, autoYes bool, mcpServers []string) *home {
 	// Load application state
 	appState := config.LoadState()
 

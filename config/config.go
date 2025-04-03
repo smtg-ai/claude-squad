@@ -10,6 +10,9 @@ import (
 
 const ConfigFileName = "config.json"
 
+// Global config instance
+var ConfigInstance *Config
+
 // MCPServerConfig represents the configuration for an MCP server
 type MCPServerConfig struct {
 	// Command is the command to execute to start the MCP server
@@ -18,15 +21,6 @@ type MCPServerConfig struct {
 	Args []string `json:"args"`
 	// Env is a map of environment variables to set for the MCP server
 	Env map[string]string `json:"env,omitempty"`
-}
-
-// GetConfigDir returns the path to the application's configuration directory
-func GetConfigDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get config home directory: %w", err)
-	}
-	return filepath.Join(homeDir, ".claude-squad"), nil
 }
 
 // Config represents the application configuration
@@ -51,8 +45,24 @@ func DefaultConfig() *Config {
 	}
 }
 
+// GetConfigDir returns the path to the application's configuration directory
+func GetConfigDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get config home directory: %w", err)
+	}
+	return filepath.Join(homeDir, ".claude-squad"), nil
+}
+
 // LoadConfig loads the configuration from disk. If it cannot be done, we return the default configuration.
+// This should only be called once (in main).
 func LoadConfig() *Config {
+	ConfigInstance = loadConfigFromDisk()
+	return ConfigInstance
+}
+
+// loadConfigFromDisk is the internal function that actually loads the config from disk
+func loadConfigFromDisk() *Config {
 	configDir, err := GetConfigDir()
 	if err != nil {
 		log.ErrorLog.Printf("failed to get config directory: %v", err)
@@ -65,7 +75,7 @@ func LoadConfig() *Config {
 		if os.IsNotExist(err) {
 			// Create and save default config if file doesn't exist
 			defaultCfg := DefaultConfig()
-			if saveErr := saveConfig(defaultCfg); saveErr != nil {
+			if saveErr := SaveConfig(); saveErr != nil {
 				log.WarningLog.Printf("failed to save default config: %v", saveErr)
 			}
 			return defaultCfg
@@ -81,11 +91,18 @@ func LoadConfig() *Config {
 		return DefaultConfig()
 	}
 
-	return &config
+	ConfigInstance = &config
+	return ConfigInstance
 }
 
-// saveConfig saves the configuration to disk
-func saveConfig(config *Config) error {
+// ReloadConfig forces a reload of the config from disk
+func ReloadConfig() *Config {
+	ConfigInstance = loadConfigFromDisk()
+	return ConfigInstance
+}
+
+// SaveConfig saves the configuration to disk
+func SaveConfig() error {
 	configDir, err := GetConfigDir()
 	if err != nil {
 		return fmt.Errorf("failed to get config directory: %w", err)
@@ -96,15 +113,10 @@ func saveConfig(config *Config) error {
 	}
 
 	configPath := filepath.Join(configDir, ConfigFileName)
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := json.MarshalIndent(ConfigInstance, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	return os.WriteFile(configPath, data, 0644)
-}
-
-// SaveConfig exports the saveConfig function for use by other packages
-func SaveConfig(config *Config) error {
-	return saveConfig(config)
 }

@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"bytes"
+	"claude-squad/config"
 	"claude-squad/log"
 	"context"
 	"crypto/sha256"
@@ -80,15 +81,22 @@ func (t *TmuxSession) Start(program string, workDir string, mcpServers []string)
 
 	// If using MCP and the program is claude or starts with "claude ",
 	// run 'claude mcp add' first
-	if len(mcpServers) > 0 && (program == ProgramClaude || strings.HasPrefix(program, ProgramClaude+" ")) {
-		// Run 'claude mcp add linear npx -y @tacticlaunch/mcp-linear' to set up the MCP server
-		mcpCmd := exec.Command("claude", "mcp", "add", "linear", "npx", "-y", "@tacticlaunch/mcp-linear")
-		mcpCmd.Dir = workDir
+	if program == ProgramClaude && len(mcpServers) > 0 {
+		cfg := config.ConfigInstance
 		for _, server := range mcpServers {
-			mcpCmd.Args = append(mcpCmd.Args, server)
-		}
-		if err := mcpCmd.Run(); err != nil {
-			return fmt.Errorf("error running 'claude mcp add': %w", err)
+			mcpCfg := cfg.MCPServers[server]
+			mcpCmd := exec.Command("claude", "mcp", "add", server)
+			mcpCmd.Args = append(mcpCmd.Args, mcpCfg.Command)
+			mcpCmd.Args = append(mcpCmd.Args, mcpCfg.Args...)
+
+			for k, v := range mcpCfg.Env {
+				mcpCmd.Env = append(mcpCmd.Env, fmt.Sprintf("%s=%s", k, v))
+			}
+			mcpCmd.Dir = workDir
+
+			if err := mcpCmd.Run(); err != nil {
+				return fmt.Errorf("error running 'claude mcp add': %w", err)
+			}
 		}
 	}
 
