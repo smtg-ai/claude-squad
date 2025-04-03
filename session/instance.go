@@ -49,6 +49,10 @@ type Instance struct {
 	UpdatedAt time.Time
 	// AutoYes is true if the instance should automatically press enter when prompted.
 	AutoYes bool
+	// UseMCP is true if Model Control Plane support should be enabled for Claude sessions.
+	UseMCP bool
+	// MCPServers is a list of MCP servers to enable. If empty and UseMCP is true, all configured servers will be used.
+	MCPServers []string
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
 
@@ -67,16 +71,18 @@ type Instance struct {
 // ToInstanceData converts an Instance to its serializable form
 func (i *Instance) ToInstanceData() InstanceData {
 	data := InstanceData{
-		Title:     i.Title,
-		Path:      i.Path,
-		Branch:    i.Branch,
-		Status:    i.Status,
-		Height:    i.Height,
-		Width:     i.Width,
-		CreatedAt: i.CreatedAt,
-		UpdatedAt: time.Now(),
-		Program:   i.Program,
-		AutoYes:   i.AutoYes,
+		Title:      i.Title,
+		Path:       i.Path,
+		Branch:     i.Branch,
+		Status:     i.Status,
+		Height:     i.Height,
+		Width:      i.Width,
+		CreatedAt:  i.CreatedAt,
+		UpdatedAt:  time.Now(),
+		Program:    i.Program,
+		AutoYes:    i.AutoYes,
+		UseMCP:     i.UseMCP,
+		MCPServers: i.MCPServers,
 	}
 
 	// Only include worktree data if gitWorktree is initialized
@@ -105,15 +111,18 @@ func (i *Instance) ToInstanceData() InstanceData {
 // FromInstanceData creates a new Instance from serialized data
 func FromInstanceData(data InstanceData) (*Instance, error) {
 	instance := &Instance{
-		Title:     data.Title,
-		Path:      data.Path,
-		Branch:    data.Branch,
-		Status:    data.Status,
-		Height:    data.Height,
-		Width:     data.Width,
-		CreatedAt: data.CreatedAt,
-		UpdatedAt: data.UpdatedAt,
-		Program:   data.Program,
+		Title:      data.Title,
+		Path:       data.Path,
+		Branch:     data.Branch,
+		Status:     data.Status,
+		Height:     data.Height,
+		Width:      data.Width,
+		CreatedAt:  data.CreatedAt,
+		UpdatedAt:  data.UpdatedAt,
+		Program:    data.Program,
+		AutoYes:    data.AutoYes,
+		UseMCP:     data.UseMCP,
+		MCPServers: data.MCPServers,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,
@@ -150,6 +159,10 @@ type InstanceOptions struct {
 	Program string
 	// If AutoYes is true, then
 	AutoYes bool
+	// If UseMCP is true, enables Model Control Plane support for Claude sessions
+	UseMCP bool
+	// MCPServers is a list of MCP servers to enable. If empty and UseMCP is true, all configured servers will be used.
+	MCPServers []string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -162,15 +175,17 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 	}
 
 	return &Instance{
-		Title:     opts.Title,
-		Status:    Ready,
-		Path:      absPath,
-		Program:   opts.Program,
-		Height:    0,
-		Width:     0,
-		CreatedAt: t,
-		UpdatedAt: t,
-		AutoYes:   false,
+		Title:      opts.Title,
+		Status:     Ready,
+		Path:       absPath,
+		Program:    opts.Program,
+		Height:     0,
+		Width:      0,
+		CreatedAt:  t,
+		UpdatedAt:  t,
+		AutoYes:    opts.AutoYes,
+		UseMCP:     opts.UseMCP,
+		MCPServers: opts.MCPServers,
 	}, nil
 }
 
@@ -229,7 +244,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 
 		// Create new session
-		if err := i.tmuxSession.Start(i.Program, i.gitWorktree.GetWorktreePath()); err != nil {
+		if err := i.tmuxSession.Start(i.Program, i.gitWorktree.GetWorktreePath(), i.MCPServers); err != nil {
 			// Cleanup git worktree if tmux session creation fails
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
@@ -450,7 +465,7 @@ func (i *Instance) Resume() error {
 	}
 
 	// Create new tmux session
-	if err := i.tmuxSession.Start(i.Program, i.gitWorktree.GetWorktreePath()); err != nil {
+	if err := i.tmuxSession.Start(i.Program, i.gitWorktree.GetWorktreePath(), i.MCPServers); err != nil {
 		log.ErrorLog.Print(err)
 		// Cleanup git worktree if tmux session creation fails
 		if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {

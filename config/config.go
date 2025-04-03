@@ -10,6 +10,16 @@ import (
 
 const ConfigFileName = "config.json"
 
+// MCPServerConfig represents the configuration for an MCP server
+type MCPServerConfig struct {
+	// Command is the command to execute to start the MCP server
+	Command string `json:"command"`
+	// Args are the arguments to pass to the command
+	Args []string `json:"args"`
+	// Env is a map of environment variables to set for the MCP server
+	Env map[string]string `json:"env,omitempty"`
+}
+
 // GetConfigDir returns the path to the application's configuration directory
 func GetConfigDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
@@ -27,6 +37,8 @@ type Config struct {
 	AutoYes bool `json:"auto_yes"`
 	// DaemonPollInterval is the interval (ms) at which the daemon polls sessions for autoyes mode.
 	DaemonPollInterval int `json:"daemon_poll_interval"`
+	// MCPServers is a map of MCP server configurations.
+	MCPServers map[string]MCPServerConfig `json:"mcp_servers,omitempty"`
 }
 
 // DefaultConfig returns the default configuration
@@ -35,6 +47,7 @@ func DefaultConfig() *Config {
 		DefaultProgram:     "claude",
 		AutoYes:            false,
 		DaemonPollInterval: 1000,
+		MCPServers:         map[string]MCPServerConfig{},
 	}
 }
 

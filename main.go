@@ -17,11 +17,12 @@ import (
 )
 
 var (
-	version     = "0.0.1-prerelease"
-	programFlag string
-	autoYesFlag bool
-	daemonFlag  bool
-	rootCmd     = &cobra.Command{
+	version        = "0.0.1-prerelease"
+	programFlag    string
+	autoYesFlag    bool
+	daemonFlag     bool
+	mcpServersFlag []string
+	rootCmd        = &cobra.Command{
 		Use:   "claude-squad",
 		Short: "Claude Squad - A terminal-based session manager",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -70,7 +71,15 @@ var (
 				log.ErrorLog.Printf("failed to stop daemon: %v", err)
 			}
 
-			return app.Run(ctx, program, autoYes)
+			// filter cfg.MCPServers to be only the ones included in mcpServersFlag
+			mcpServers := make([]string, 0)
+			for name, _ := range cfg.MCPServers {
+				if contains(mcpServersFlag, name) {
+					mcpServers = append(mcpServers, name)
+				}
+			}
+
+			return app.Run(ctx, program, autoYes, mcpServers)
 		},
 	}
 
@@ -144,6 +153,8 @@ func init() {
 		"Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')")
 	rootCmd.Flags().BoolVarP(&autoYesFlag, "autoyes", "y", false,
 		"[experimental] If enabled, all instances will automatically accept prompts")
+	rootCmd.Flags().StringSliceVar(&mcpServersFlag, "mcp-servers", nil,
+		"[experimental] List of MCP servers to enable for Claude sessions (if empty, all configured servers will be used)")
 	rootCmd.Flags().BoolVar(&daemonFlag, "daemon", false, "Run a program that loads all sessions"+
 		" and runs autoyes mode on them.")
 

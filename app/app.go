@@ -20,9 +20,9 @@ import (
 const GlobalInstanceLimit = 10
 
 // Run is the main entrypoint into the application.
-func Run(ctx context.Context, program string, autoYes bool) error {
+func Run(ctx context.Context, program string, autoYes bool, mcpServers []string) error {
 	p := tea.NewProgram(
-		newHome(ctx, program, autoYes),
+		newHome(ctx, program, autoYes, mcpServers),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(), // Mouse scroll
 	)
@@ -45,8 +45,9 @@ const (
 type home struct {
 	ctx context.Context
 
-	program string
-	autoYes bool
+	program    string
+	autoYes    bool
+	mcpServers []string
 
 	// ui components
 	list         *ui.List
@@ -82,7 +83,7 @@ type home struct {
 	keySent bool
 }
 
-func newHome(ctx context.Context, program string, autoYes bool) *home {
+func newHome(ctx context.Context, program string, autoYes bool, mcpServers []string) *home {
 	// Load application config
 	appConfig := config.LoadConfig()
 
@@ -106,6 +107,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		appConfig:    appConfig,
 		program:      program,
 		autoYes:      autoYes,
+		mcpServers:   mcpServers,
 		state:        stateDefault,
 		appState:     appState,
 	}
@@ -424,9 +426,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
+			Title:      "",
+			Path:       ".",
+			Program:    m.program,
+			AutoYes:    m.autoYes,
+			UseMCP:     m.mcpServers != nil,
+			MCPServers: m.mcpServers,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -445,9 +450,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
+			Title:      "",
+			Path:       ".",
+			Program:    m.program,
+			AutoYes:    m.autoYes,
+			UseMCP:     m.mcpServers != nil,
+			MCPServers: m.mcpServers,
 		})
 		if err != nil {
 			return m, m.handleError(err)

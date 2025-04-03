@@ -71,11 +71,25 @@ func NewTmuxSession(name string, program string) *TmuxSession {
 }
 
 // Start creates and starts a new tmux session, then attaches to it. Program is the command to run in
-// the session (ex. claude). workdir is the git worktree directory.
-func (t *TmuxSession) Start(program string, workDir string) error {
+// the session (ex. claude). workDir is the git worktree directory. mcpServers is a list of MCP servers to enable.
+func (t *TmuxSession) Start(program string, workDir string, mcpServers []string) error {
 	// Check if the session already exists
 	if DoesSessionExist(t.sanitizedName) {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
+	}
+
+	// If using MCP and the program is claude or starts with "claude ",
+	// run 'claude mcp add' first
+	if len(mcpServers) > 0 && (program == ProgramClaude || strings.HasPrefix(program, ProgramClaude+" ")) {
+		// Run 'claude mcp add linear npx -y @tacticlaunch/mcp-linear' to set up the MCP server
+		mcpCmd := exec.Command("claude", "mcp", "add", "linear", "npx", "-y", "@tacticlaunch/mcp-linear")
+		mcpCmd.Dir = workDir
+		for _, server := range mcpServers {
+			mcpCmd.Args = append(mcpCmd.Args, server)
+		}
+		if err := mcpCmd.Run(); err != nil {
+			return fmt.Errorf("error running 'claude mcp add': %w", err)
+		}
 	}
 
 	// Create a new detached tmux session and start claude in it
