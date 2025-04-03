@@ -484,6 +484,20 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 
+		worktree, err := selected.GetGitWorktree()
+		if err != nil {
+			return m, m.handleError(err)
+		}
+
+		checkedOut, err := worktree.IsBranchCheckedOut()
+		if err != nil {
+			return m, m.handleError(err)
+		}
+
+		if checkedOut {
+			return m, m.handleError(fmt.Errorf("instance %s is currently checked out", selected.Title))
+		}
+
 		// Delete from storage first
 		if err := m.storage.DeleteInstance(selected.Title); err != nil {
 			return m, m.handleError(err)
