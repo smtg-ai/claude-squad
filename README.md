@@ -57,6 +57,8 @@ Run the application with:
 cs
 ```
 
+For detailed usage examples and best practices, see the [User Guide](GUIDE.md).
+
 To use a specific AI assistant program:
 
 ```bash
