@@ -1,6 +1,7 @@
 package app
 
 import (
+	"claude-squad/cache"
 	"claude-squad/config"
 	"claude-squad/keys"
 	"claude-squad/log"
@@ -80,6 +81,11 @@ type home struct {
 
 	// keySent is used to manage underlining menu items
 	keySent bool
+
+	// Cache for rendered view
+	renderCache *cache.RenderCache
+	// Track if the view needs to be re-rendered
+	viewDirty bool
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -108,6 +114,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		autoYes:      autoYes,
 		state:        stateDefault,
 		appState:     appState,
+		renderCache:  cache.NewRenderCache(),
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 
@@ -154,6 +161,9 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 		log.ErrorLog.Print(err)
 	}
 	m.menu.SetSize(msg.Width, menuHeight)
+
+	// Invalidate the render cache when window size changes
+	m.renderCache.Invalidate()
 }
 
 func (m *home) Init() tea.Cmd {
@@ -584,6 +594,10 @@ func (m *home) instanceChanged() tea.Cmd {
 	if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
 		return m.handleError(err)
 	}
+
+	// Invalidate the render cache when instance changes
+	m.renderCache.Invalidate()
+
 	return nil
 }
 
@@ -633,28 +647,31 @@ func (m *home) handleError(err error) tea.Cmd {
 }
 
 func (m *home) View() string {
-	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.list.String())
-	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.tabbedWindow.String())
-	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, listWithPadding, previewWithPadding)
+	// Use the render cache to avoid recomputing the string when nothing has changed
+	return m.renderCache.Get(0, 0, func(_, _ int) string {
+		listWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.list.String())
+		previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.tabbedWindow.String())
+		listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, listWithPadding, previewWithPadding)
 
-	mainView := lipgloss.JoinVertical(
-		lipgloss.Center,
-		listAndPreview,
-		m.menu.String(),
-		m.errBox.String(),
-	)
+		mainView := lipgloss.JoinVertical(
+			lipgloss.Center,
+			listAndPreview,
+			m.menu.String(),
+			m.errBox.String(),
+		)
 
-	if m.state == statePrompt {
-		if m.textInputOverlay == nil {
-			log.ErrorLog.Printf("text input overlay is nil")
+		if m.state == statePrompt {
+			if m.textInputOverlay == nil {
+				log.ErrorLog.Printf("text input overlay is nil")
+			}
+			return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+		} else if m.state == stateHelp {
+			if m.textOverlay == nil {
+				log.ErrorLog.Printf("text overlay is nil")
+			}
+			return overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
 		}
-		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	} else if m.state == stateHelp {
-		if m.textOverlay == nil {
-			log.ErrorLog.Printf("text overlay is nil")
-		}
-		return overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
-	}
 
-	return mainView
+		return mainView
+	})
 }
