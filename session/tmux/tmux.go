@@ -30,6 +30,7 @@ type TmuxSession struct {
 	Name          string
 	sanitizedName string
 	program       string
+	autoYes       bool
 
 	// Initialized by Start or Restore
 	//
@@ -62,11 +63,12 @@ func toClaudeSquadTmuxName(str string) string {
 	return fmt.Sprintf("%s%s", TmuxPrefix, str)
 }
 
-func NewTmuxSession(name string, program string) *TmuxSession {
+func NewTmuxSession(name string, program string, autoYes bool) *TmuxSession {
 	return &TmuxSession{
 		Name:          name,
 		sanitizedName: toClaudeSquadTmuxName(name),
 		program:       program,
+		autoYes:       autoYes,
 	}
 }
 
@@ -141,6 +143,17 @@ func (t *TmuxSession) Start(program string, workDir string) error {
 				break
 			}
 		}
+		if t.autoYes && program == ProgramClaude {
+			time.Sleep(250 * time.Millisecond)
+			// Have some retries.
+			for i := 0; i < 3; i++ {
+				if err := t.TapShiftTab(); err != nil {
+					log.ErrorLog.Printf("could not tap shift tab: %v", err)
+				} else {
+					break
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -191,6 +204,15 @@ func (t *TmuxSession) TapDAndEnter() error {
 	return nil
 }
 
+// TapShiftTab sends 'D' followed by an enter keystroke to the tmux pane.
+func (t *TmuxSession) TapShiftTab() error {
+	_, err := t.ptmx.Write([]byte{0x1B, 0x5B, 0x5A})
+	if err != nil {
+		return fmt.Errorf("error sending enter keystroke to PTY: %w", err)
+	}
+	return nil
+}
+
 func (t *TmuxSession) SendKeys(keys string) error {
 	_, err := t.ptmx.Write([]byte(keys))
 	return err
@@ -205,11 +227,13 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 		return false, false
 	}
 
-	// Only set hasPrompt for claude and aider. Use these strings to check for a prompt.
-	if t.program == ProgramClaude {
-		hasPrompt = strings.Contains(content, "Yes, and don't ask again")
-	} else if strings.HasPrefix(t.program, ProgramAider) {
-		hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
+	// Don't waste CPU if autoYes is disabled. Only set hasPrompt for claude and aider. Use these strings to check for a prompt.
+	if t.autoYes {
+		if t.program == ProgramClaude {
+			hasPrompt = strings.Contains(content, "No, and tell Claude what to do differently")
+		} else if strings.HasPrefix(t.program, ProgramAider) {
+			hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
+		}
 	}
 
 	if !bytes.Equal(t.monitor.hash(content), t.monitor.prevOutputHash) {

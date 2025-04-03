@@ -130,7 +130,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 
 	if instance.Paused() {
 		instance.started = true
-		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program)
+		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.AutoYes)
 	} else {
 		if err := instance.Start(false); err != nil {
 			return nil, err
@@ -170,7 +170,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		Width:     0,
 		CreatedAt: t,
 		UpdatedAt: t,
-		AutoYes:   false,
+		AutoYes:   opts.AutoYes,
 	}, nil
 }
 
@@ -191,7 +191,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		return fmt.Errorf("instance title cannot be empty")
 	}
 
-	tmuxSession := tmux.NewTmuxSession(i.Title, i.Program)
+	tmuxSession := tmux.NewTmuxSession(i.Title, i.Program, i.AutoYes)
 	i.tmuxSession = tmuxSession
 
 	if firstTimeSetup {

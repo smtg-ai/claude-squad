@@ -122,9 +122,6 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	for _, instance := range instances {
 		// Call the finalizer immediately.
 		h.list.AddInstance(instance)()
-		if autoYes {
-			instance.AutoYes = true
-		}
 	}
 
 	return h
@@ -427,6 +424,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			Title:   "",
 			Path:    ".",
 			Program: m.program,
+			AutoYes: m.autoYes,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -448,6 +446,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			Title:   "",
 			Path:    ".",
 			Program: m.program,
+			AutoYes: m.autoYes,
 		})
 		if err != nil {
 			return m, m.handleError(err)
