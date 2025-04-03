@@ -81,21 +81,29 @@ func (t *TmuxSession) Start(program string, workDir string, mcpServers []string)
 
 	// If using MCP and the program is claude or starts with "claude ",
 	// run 'claude mcp add' first
+
 	if program == ProgramClaude && len(mcpServers) > 0 {
 		cfg := config.ConfigInstance
+
 		for _, server := range mcpServers {
 			mcpCfg := cfg.MCPServers[server]
-			mcpCmd := exec.Command("claude", "mcp", "add", server)
-			mcpCmd.Args = append(mcpCmd.Args, mcpCfg.Command)
-			mcpCmd.Args = append(mcpCmd.Args, mcpCfg.Args...)
+
+			mcpServerCmd := fmt.Sprintf("%s %s", mcpCfg.Command, strings.Join(mcpCfg.Args, " "))
+			mcpCmd := exec.Command("claude", "mcp", "add", server, fmt.Sprintf("%q", mcpServerCmd))
 
 			for k, v := range mcpCfg.Env {
-				mcpCmd.Env = append(mcpCmd.Env, fmt.Sprintf("%s=%s", k, v))
+				mcpCmd.Args = append(mcpCmd.Args, fmt.Sprintf("-e%s=%s", k, v))
 			}
+			// Add PATH environment variable to ensure Node.js binaries are available
+			// This ensures commands like npx can be found
+			path := os.Getenv("PATH")
+			mcpCmd.Args = append(mcpCmd.Args, fmt.Sprintf("-ePATH=%s", path))
 			mcpCmd.Dir = workDir
 
+			log.InfoLog.Printf("Running command: %s", mcpCmd.String())
+
 			if err := mcpCmd.Run(); err != nil {
-				return fmt.Errorf("error running 'claude mcp add': %w", err)
+				log.ErrorLog.Printf("error running 'claude mcp add': %v", err)
 			}
 		}
 	}

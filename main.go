@@ -72,11 +72,17 @@ var (
 				log.ErrorLog.Printf("failed to stop daemon: %v", err)
 			}
 
-			// Filter cfg.MCPServers to be only the ones included in mcpServersFlag
+			// If no flag is provided, use all configured MCP servers
 			mcpServers := make([]string, 0, len(cfg.MCPServers))
-			for name := range cfg.MCPServers {
-				if slices.Contains(mcpServersFlag, name) {
+			if len(mcpServersFlag) == 0 {
+				for name := range cfg.MCPServers {
 					mcpServers = append(mcpServers, name)
+				}
+			} else {
+				for name := range cfg.MCPServers {
+					if slices.Contains(mcpServersFlag, name) {
+						mcpServers = append(mcpServers, name)
+					}
 				}
 			}
 
