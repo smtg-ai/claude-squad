@@ -71,6 +71,27 @@ func (s *Storage) SaveInstances(instances []*Instance) error {
 	return s.state.SaveInstances(jsonData)
 }
 
+// LoadAndStartInstances loads the list of instances from disk and starts them (resolving paused ones).
+func (s *Storage) LoadAndStartInstances(autoYes bool) ([]*Instance, error) {
+	jsonData := s.state.GetInstances()
+
+	var instancesData []InstanceData
+	if err := json.Unmarshal(jsonData, &instancesData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal instances: %w", err)
+	}
+
+	instances := make([]*Instance, len(instancesData))
+	for i, data := range instancesData {
+		instance, err := FromInstanceDataAndStart(data, autoYes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create instance %s: %w", data.Title, err)
+		}
+		instances[i] = instance
+	}
+
+	return instances, nil
+}
+
 // LoadInstances loads the list of instances from disk
 func (s *Storage) LoadInstances() ([]*Instance, error) {
 	jsonData := s.state.GetInstances()
@@ -82,10 +103,7 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 
 	instances := make([]*Instance, len(instancesData))
 	for i, data := range instancesData {
-		instance, err := FromInstanceData(data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create instance %s: %w", data.Title, err)
-		}
+		instance := FromInstanceData(data)
 		instances[i] = instance
 	}
 

@@ -30,7 +30,6 @@ type TmuxSession struct {
 	Name          string
 	sanitizedName string
 	program       string
-	autoYes       bool
 
 	// Initialized by Start or Restore
 	//
@@ -63,18 +62,17 @@ func toClaudeSquadTmuxName(str string) string {
 	return fmt.Sprintf("%s%s", TmuxPrefix, str)
 }
 
-func NewTmuxSession(name string, program string, autoYes bool) *TmuxSession {
+func NewTmuxSession(name string, program string) *TmuxSession {
 	return &TmuxSession{
 		Name:          name,
 		sanitizedName: toClaudeSquadTmuxName(name),
 		program:       program,
-		autoYes:       autoYes,
 	}
 }
 
 // Start creates and starts a new tmux session, then attaches to it. Program is the command to run in
 // the session (ex. claude). workdir is the git worktree directory.
-func (t *TmuxSession) Start(program string, workDir string) error {
+func (t *TmuxSession) Start(program string, workDir string, autoYes bool) error {
 	// Check if the session already exists
 	if DoesSessionExist(t.sanitizedName) {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
@@ -143,7 +141,7 @@ func (t *TmuxSession) Start(program string, workDir string) error {
 				break
 			}
 		}
-		if t.autoYes && program == ProgramClaude {
+		if autoYes && program == ProgramClaude {
 			time.Sleep(250 * time.Millisecond)
 			// Have some retries.
 			for i := 0; i < 3; i++ {
@@ -228,12 +226,10 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 	}
 
 	// Don't waste CPU if autoYes is disabled. Only set hasPrompt for claude and aider. Use these strings to check for a prompt.
-	if t.autoYes {
-		if t.program == ProgramClaude {
-			hasPrompt = strings.Contains(content, "No, and tell Claude what to do differently")
-		} else if strings.HasPrefix(t.program, ProgramAider) {
-			hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
-		}
+	if t.program == ProgramClaude {
+		hasPrompt = strings.Contains(content, "No, and tell Claude what to do differently")
+	} else if strings.HasPrefix(t.program, ProgramAider) {
+		hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
 	}
 
 	if !bytes.Equal(t.monitor.hash(content), t.monitor.prevOutputHash) {
