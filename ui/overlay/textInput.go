@@ -26,6 +26,11 @@ func NewTextInputOverlay(title string, initialValue string) *TextInputOverlay {
 	ti.Prompt = ""
 	ti.FocusedStyle.CursorLine = lipgloss.NewStyle()
 
+	// Ensure no character limit
+	ti.CharLimit = 0
+	// Ensure no maximum height limit
+	ti.MaxHeight = 0
+
 	return &TextInputOverlay{
 		textarea:   ti,
 		Title:      title,
