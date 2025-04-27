@@ -210,7 +210,6 @@ func (m *home) Init() tea.Cmd {
 }
 
 func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Delegate event handling to the current mode's strategy
 	return m.modeStrategy.Update(m, msg)
 }
 
@@ -253,21 +252,6 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 	return tea.Batch(
 		func() tea.Msg { return msg },
 		m.keydownCallback(name)), true
-}
-
-func (m *home) instanceChanged() tea.Cmd {
-	// selected may be nil
-	selected := m.list.GetSelectedInstance()
-
-	m.tabbedWindow.UpdateDiff(selected)
-	// Update menu with current instance
-	m.menu.SetInstance(selected)
-
-	// If there's no selected instance, we don't need to update the preview.
-	if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
-		return m.handleError(err)
-	}
-	return nil
 }
 
 type keyupMsg struct{}

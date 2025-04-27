@@ -49,7 +49,7 @@ func (im *instanceMode) Update(h *home, msg tea.Msg) (tea.Model, tea.Cmd) {
 	case hideErrMsg:
 		h.errBox.Clear()
 	case previewTickMsg:
-		cmd := h.instanceChanged()
+		cmd := im.instanceChanged(h)
 		return h, tea.Batch(
 			cmd,
 			func() tea.Msg {
@@ -87,16 +87,16 @@ func (im *instanceMode) Update(h *home, msg tea.Msg) (tea.Model, tea.Cmd) {
 				switch msg.Button {
 				case tea.MouseButtonWheelUp:
 					h.tabbedWindow.ScrollUp()
-					return h, h.instanceChanged()
+					return h, im.instanceChanged(h)
 				case tea.MouseButtonWheelDown:
 					h.tabbedWindow.ScrollDown()
-					return h, h.instanceChanged()
+					return h, im.instanceChanged(h)
 				}
 			}
 		}
 		return h, nil
 	case tea.KeyMsg:
-		return h.handleKeyPress(msg)
+		return im.handleKeyPress(h, msg)
 	case tea.WindowSizeMsg:
 		h.updateHandleWindowSizeEvent(msg)
 		return h, nil
@@ -108,7 +108,7 @@ func (im *instanceMode) Update(h *home, msg tea.Msg) (tea.Model, tea.Cmd) {
 	return h, nil
 }
 
-func (h *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
+func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	cmd, returnEarly := h.handleMenuHighlighting(msg)
 	if returnEarly {
 		return h, cmd
@@ -168,7 +168,7 @@ func (h *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				h.showHelpScreen(helpTypeInstanceStart, nil)
 			}
 
-			return h, tea.Batch(tea.WindowSize(), h.instanceChanged())
+			return h, tea.Batch(tea.WindowSize(), im.instanceChanged(h))
 		case tea.KeyRunes:
 			if len(instance.Title) >= 32 {
 				return h, h.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
@@ -190,7 +190,7 @@ func (h *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		case tea.KeyEsc:
 			h.list.Kill()
 			h.state = stateDefault
-			h.instanceChanged()
+			im.instanceChanged(h)
 
 			return h, tea.Sequence(
 				tea.WindowSize(),
@@ -289,26 +289,37 @@ func (h *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		h.menu.SetState(ui.StateNewInstance)
 
 		return h, nil
+	case keys.KeyMode:
+		// Switch to orchestrator mode
+		h.mode = modeOrchestrate
+		h.modeStrategy = &orchestratorMode{}
+		return h, tea.Sequence(
+			tea.WindowSize(),
+			func() tea.Msg {
+				h.menu.SetState(ui.StateDefault)
+				return nil
+			},
+		)
 	case keys.KeyUp:
 		h.list.Up()
-		return h, h.instanceChanged()
+		return h, im.instanceChanged(h)
 	case keys.KeyDown:
 		h.list.Down()
-		return h, h.instanceChanged()
+		return h, im.instanceChanged(h)
 	case keys.KeyShiftUp:
 		if h.tabbedWindow.IsInDiffTab() {
 			h.tabbedWindow.ScrollUp()
 		}
-		return h, h.instanceChanged()
+		return h, im.instanceChanged(h)
 	case keys.KeyShiftDown:
 		if h.tabbedWindow.IsInDiffTab() {
 			h.tabbedWindow.ScrollDown()
 		}
-		return h, h.instanceChanged()
+		return h, im.instanceChanged(h)
 	case keys.KeyTab:
 		h.tabbedWindow.Toggle()
 		h.menu.SetInDiffTab(h.tabbedWindow.IsInDiffTab())
-		return h, h.instanceChanged()
+		return h, im.instanceChanged(h)
 	case keys.KeyKill:
 		selected := h.list.GetSelectedInstance()
 		if selected == nil {
@@ -336,7 +347,7 @@ func (h *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		// Then kill the instance
 		h.list.Kill()
-		return h, h.instanceChanged()
+		return h, im.instanceChanged(h)
 	case keys.KeySubmit:
 		selected := h.list.GetSelectedInstance()
 		if selected == nil {
@@ -365,7 +376,7 @@ func (h *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if err := selected.Pause(); err != nil {
 				h.handleError(err)
 			}
-			h.instanceChanged()
+			im.instanceChanged(h)
 		})
 		return h, nil
 	case keys.KeyResume:
@@ -396,14 +407,22 @@ func (h *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			h.state = stateDefault
 		})
 		return h, nil
-	case keys.KeyMode:
-		if h.mode == modeInstance {
-			h.mode = modeOrchestrate
-		} else {
-			h.mode = modeInstance
-		}
-		return h, nil
 	default:
 		return h, nil
 	}
+}
+
+func (im *instanceMode) instanceChanged(h *home) tea.Cmd {
+	// selected may be nil
+	selected := h.list.GetSelectedInstance()
+
+	h.tabbedWindow.UpdateDiff(selected)
+	// Update menu with current instance
+	h.menu.SetInstance(selected)
+
+	// If there's no selected instance, we don't need to update the preview.
+	if err := h.tabbedWindow.UpdatePreview(selected); err != nil {
+		return h.handleError(err)
+	}
+	return nil
 }
