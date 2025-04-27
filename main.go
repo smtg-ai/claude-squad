@@ -21,6 +21,7 @@ var (
 	programFlag string
 	autoYesFlag bool
 	daemonFlag  bool
+	promptFlag  string
 	rootCmd     = &cobra.Command{
 		Use:   "claude-squad",
 		Short: "Claude Squad - A terminal-based session manager",
@@ -137,6 +138,51 @@ var (
 			fmt.Printf("https://github.com/smtg-ai/claude-squad/releases/tag/v%s\n", version)
 		},
 	}
+
+	orchestrateCmd = &cobra.Command{
+		Use:   "orchestrate",
+		Short: "Run the orchestrator to split a complex task into subtasks",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if promptFlag == "" && len(args) == 0 {
+				return fmt.Errorf("error: no prompt provided. Use --prompt or provide it as an argument")
+			}
+
+			prompt := promptFlag
+			if prompt == "" && len(args) > 0 {
+				prompt = args[0]
+			}
+
+			ctx := context.Background()
+			log.Initialize(false)
+			defer log.Close()
+
+			// Check if we're in a git repository
+			currentDir, err := filepath.Abs(".")
+			if err != nil {
+				return fmt.Errorf("failed to get current directory: %w", err)
+			}
+
+			if !git.IsGitRepo(currentDir) {
+				return fmt.Errorf("error: claude-squad must be run from within a git repository")
+			}
+
+			cfg := config.LoadConfig()
+
+			// Program flag overrides config
+			program := cfg.DefaultProgram
+			if programFlag != "" {
+				program = programFlag
+			}
+
+			// AutoYes flag overrides config
+			autoYes := cfg.AutoYes
+			if autoYesFlag {
+				autoYes = true
+			}
+
+			return app.RunOrchestrator(ctx, program, autoYes, prompt, currentDir)
+		},
+	}
 )
 
 func init() {
@@ -153,9 +199,20 @@ func init() {
 		panic(err)
 	}
 
+	// Add prompt flag to the orchestrate command
+	orchestrateCmd.Flags().StringVarP(&promptFlag, "prompt", "m", "",
+		"The prompt to send to the orchestrator")
+
+	// Add common flags to orchestrate command
+	orchestrateCmd.Flags().StringVarP(&programFlag, "program", "p", "",
+		"Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')")
+	orchestrateCmd.Flags().BoolVarP(&autoYesFlag, "autoyes", "y", false,
+		"[experimental] If enabled, all instances will automatically accept prompts")
+
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
+	rootCmd.AddCommand(orchestrateCmd)
 }
 
 func main() {

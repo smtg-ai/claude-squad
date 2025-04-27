@@ -4,6 +4,7 @@ import (
 	"claude-squad/config"
 	"claude-squad/keys"
 	"claude-squad/log"
+	"claude-squad/orchestrator"
 	"claude-squad/session"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
@@ -42,8 +43,17 @@ const (
 	stateHelp
 )
 
+type mode int
+
+const (
+	modeInstance mode = iota
+	modeOrchestrate
+)
+
 type home struct {
 	ctx context.Context
+
+	mode mode
 
 	program string
 	autoYes bool
@@ -658,4 +668,79 @@ func (m *home) View() string {
 	}
 
 	return mainView
+}
+
+// RunOrchestrator runs the orchestrator with the given prompt
+func RunOrchestrator(ctx context.Context, program string, autoYes bool, prompt string, basePath string) error {
+	fmt.Printf("Starting orchestrator with prompt: %s\n", prompt)
+
+	// Create new orchestrator
+	orch := orchestrator.NewOrchestrator(prompt, autoYes)
+
+	// Set the program
+	orch.SetProgram(program)
+
+	// Format the orchestrator prompt
+	orchestratorPrompt := fmt.Sprintf(`You are a project orchestrator. Your goal is to implement: %s
+
+Break this goal down into manageable tasks that can be assigned to worker instances. I'll help you develop a plan, then you can create and manage worker instances to implement specific tasks.
+
+You have these capabilities:
+1. You can analyze the codebase to understand its structure.
+2. You can create worker instances to implement specific tasks.
+3. You can monitor worker progress and integrate their outputs.
+
+To create a worker instance, say: CREATE_WORKER: <task_name> | <initial_prompt>
+Example: CREATE_WORKER: implement-login | Implement a login form with email/password fields...
+
+Workers will send you notifications when they need help or complete tasks.
+
+Let's start by analyzing this goal and identifying the key components we need to build.`, prompt)
+
+	orch.Prompt = orchestratorPrompt
+
+	// Run the orchestrator
+	if autoYes {
+		// In auto mode, just run the orchestrator
+		result, err := orch.Run(basePath)
+		if err != nil {
+			return fmt.Errorf("orchestrator failed: %w", err)
+		}
+
+		fmt.Printf("\nOrchestration completed successfully\n")
+		fmt.Printf("Final merged changes:\n%s\n", result)
+		return nil
+	} else {
+		// If not in auto mode, first divide the prompt into tasks
+		tasks := orch.DividePrompt()
+
+		// Display the plan to the user and let them modify it
+		fmt.Printf("Orchestration plan:\n\n")
+		for i, task := range tasks {
+			fmt.Printf("Task %d: %s\n", i+1, task.Name)
+			fmt.Printf("Prompt: %s\n\n", task.Prompt)
+		}
+
+		// TODO: Add interactive editing of the plan
+		fmt.Printf("\nDo you want to proceed with this plan? (y/n): ")
+		var response string
+		fmt.Scanln(&response)
+
+		if response != "y" && response != "Y" {
+			return fmt.Errorf("orchestration cancelled by user")
+		}
+
+		// Set the plan
+		orch.Plan = tasks
+
+		// Run the orchestration
+		result, err := orch.Run(basePath)
+		if err != nil {
+			return fmt.Errorf("orchestrator failed: %w", err)
+		}
+
+		fmt.Printf("\nOrchestration completed successfully\n")
+		fmt.Printf("Final merged changes:\n%s\n", result)
+		return nil
+	}
 }
