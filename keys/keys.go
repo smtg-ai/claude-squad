@@ -54,6 +54,38 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"m":          KeyMode,
 }
 
+// Mode-specific keymaps
+var InstanceModeKeyMap = map[string]KeyName{
+	"up":         KeyUp,
+	"k":          KeyUp,
+	"down":       KeyDown,
+	"j":          KeyDown,
+	"shift+up":   KeyShiftUp,
+	"shift+down": KeyShiftDown,
+	"N":          KeyPrompt,
+	"enter":      KeyEnter,
+	"o":          KeyEnter,
+	"n":          KeyNew,
+	"D":          KeyKill,
+	"q":          KeyQuit,
+	"tab":        KeyTab,
+	"c":          KeyCheckout,
+	"r":          KeyResume,
+	"p":          KeySubmit,
+	"?":          KeyHelp,
+	"m":          KeyMode,
+}
+
+var OrchestratorModeKeyMap = map[string]KeyName{
+	"up":   KeyUp,
+	"k":    KeyUp,
+	"down": KeyDown,
+	"j":    KeyDown,
+	"q":    KeyQuit,
+	"?":    KeyHelp,
+	"m":    KeyMode,
+}
+
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
 var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyUp: key.NewBinding(

@@ -51,9 +51,10 @@ type Menu struct {
 
 	// keyDown is the key which is pressed. The default is -1.
 	keyDown keys.KeyName
+	KeyMap  map[string]keys.KeyName
 }
 
-var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyPrompt, keys.KeyHelp, keys.KeyQuit, keys.KeyMode}
+var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyPrompt, keys.KeyMode, keys.KeyHelp, keys.KeyQuit}
 var newInstanceMenuOptions = []keys.KeyName{keys.KeySubmitName}
 var promptMenuOptions = []keys.KeyName{keys.KeySubmitName}
 
@@ -63,6 +64,7 @@ func NewMenu() *Menu {
 		state:       StateEmpty,
 		isInDiffTab: false,
 		keyDown:     -1,
+		KeyMap:      keys.InstanceModeKeyMap,
 	}
 }
 
@@ -98,6 +100,11 @@ func (m *Menu) SetInstance(instance *session.Instance) {
 func (m *Menu) SetInDiffTab(inDiffTab bool) {
 	m.isInDiffTab = inDiffTab
 	m.updateOptions()
+}
+
+// SetKeyMap sets the current keymap
+func (m *Menu) SetKeyMap(km map[string]keys.KeyName) {
+	m.KeyMap = km
 }
 
 // updateOptions updates the menu options based on current state and instance
