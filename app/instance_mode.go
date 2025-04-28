@@ -15,11 +15,26 @@ import (
 )
 
 // instanceMode implements ModeStrategy for instance mode.
-type instanceMode struct{}
+type instanceMode struct {
+	list                 *ui.List
+	tabbedWindow         *ui.TabbedWindow
+	newInstanceFinalizer func()
+	promptAfterName      bool
+	textInputOverlay     *overlay.TextInputOverlay
+	textOverlay          *overlay.TextOverlay
+}
+
+func newInstanceMode(spinner *spinner.Model, autoYes bool) *instanceMode {
+	im := &instanceMode{
+		list:         ui.NewList(spinner, autoYes),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
+	}
+	return im
+}
 
 func (im *instanceMode) Render(h *home) string {
-	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(h.list.String())
-	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(h.tabbedWindow.String())
+	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(im.list.String())
+	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(im.tabbedWindow.String())
 	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, listWithPadding, previewWithPadding)
 
 	mainView := lipgloss.JoinVertical(
@@ -30,15 +45,15 @@ func (im *instanceMode) Render(h *home) string {
 	)
 
 	if h.state == statePrompt {
-		if h.textInputOverlay == nil {
+		if im.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
-		return overlay.PlaceOverlay(0, 0, h.textInputOverlay.Render(), mainView, true, true)
+		return overlay.PlaceOverlay(0, 0, im.textInputOverlay.Render(), mainView, true, true)
 	} else if h.state == stateHelp {
-		if h.textOverlay == nil {
+		if im.textOverlay == nil {
 			log.ErrorLog.Printf("text overlay is nil")
 		}
-		return overlay.PlaceOverlay(0, 0, h.textOverlay.Render(), mainView, true, true)
+		return overlay.PlaceOverlay(0, 0, im.textOverlay.Render(), mainView, true, true)
 	}
 
 	return mainView
@@ -61,7 +76,7 @@ func (im *instanceMode) Update(h *home, msg tea.Msg) (tea.Model, tea.Cmd) {
 		h.menu.ClearKeydown()
 		return h, nil
 	case tickUpdateMetadataMessage:
-		for _, instance := range h.list.GetInstances() {
+		for _, instance := range im.list.GetInstances() {
 			if !instance.Started() || instance.Paused() {
 				continue
 			}
@@ -82,14 +97,14 @@ func (im *instanceMode) Update(h *home, msg tea.Msg) (tea.Model, tea.Cmd) {
 		return h, tickUpdateMetadataCmd
 	case tea.MouseMsg:
 		// Handle mouse wheel scrolling in the diff view
-		if h.tabbedWindow.IsInDiffTab() {
+		if im.tabbedWindow.IsInDiffTab() {
 			if msg.Action == tea.MouseActionPress {
 				switch msg.Button {
 				case tea.MouseButtonWheelUp:
-					h.tabbedWindow.ScrollUp()
+					im.tabbedWindow.ScrollUp()
 					return h, im.instanceChanged(h)
 				case tea.MouseButtonWheelDown:
-					h.tabbedWindow.ScrollDown()
+					im.tabbedWindow.ScrollDown()
 					return h, im.instanceChanged(h)
 				}
 			}
@@ -115,15 +130,15 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 	}
 
 	if h.state == stateHelp {
-		return h.handleHelpState(msg)
+		return h.handleHelpState(msg, nil)
 	}
 
 	if h.state == stateNew {
 		// Handle quit commands first. Don't handle q because the user might want to type that.
 		if msg.String() == "ctrl+c" {
 			h.state = stateDefault
-			h.promptAfterName = false
-			h.list.Kill()
+			im.promptAfterName = false
+			im.list.Kill()
 			return h, tea.Sequence(
 				tea.WindowSize(),
 				func() tea.Msg {
@@ -133,7 +148,7 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 			)
 		}
 
-		instance := h.list.GetInstances()[h.list.NumInstances()-1]
+		instance := im.list.GetInstances()[im.list.NumInstances()-1]
 		switch msg.Type {
 		case tea.KeyEnter:
 			if len(instance.Title) == 0 {
@@ -141,31 +156,31 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 			}
 
 			if err := instance.Start(true); err != nil {
-				h.list.Kill()
+				im.list.Kill()
 				h.state = stateDefault
 				return h, h.handleError(err)
 			}
 			// Save after adding new instance
-			if err := h.storage.SaveInstances(h.list.GetInstances()); err != nil {
+			if err := h.storage.SaveInstances(im.list.GetInstances()); err != nil {
 				return h, h.handleError(err)
 			}
 			// Instance added successfully, call the finalizer.
-			h.newInstanceFinalizer()
+			im.newInstanceFinalizer()
 			if h.autoYes {
 				instance.AutoYes = true
 			}
 
-			h.newInstanceFinalizer()
+			im.newInstanceFinalizer()
 			h.state = stateDefault
-			if h.promptAfterName {
+			if im.promptAfterName {
 				h.state = statePrompt
 				h.menu.SetState(ui.StatePrompt)
 				// Initialize the text input overlay
-				h.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
-				h.promptAfterName = false
+				im.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+				im.promptAfterName = false
 			} else {
 				h.menu.SetState(ui.StateDefault)
-				h.showHelpScreen(helpTypeInstanceStart, nil)
+				h.showHelpScreen(helpTypeInstanceStart, instance, nil, nil)
 			}
 
 			return h, tea.Batch(tea.WindowSize(), im.instanceChanged(h))
@@ -188,7 +203,7 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 				return h, h.handleError(err)
 			}
 		case tea.KeyEsc:
-			h.list.Kill()
+			im.list.Kill()
 			h.state = stateDefault
 			im.instanceChanged(h)
 
@@ -204,29 +219,29 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 		return h, nil
 	} else if h.state == statePrompt {
 		// Use the new TextInputOverlay component to handle all key events
-		shouldClose := h.textInputOverlay.HandleKeyPress(msg)
+		shouldClose := im.textInputOverlay.HandleKeyPress(msg)
 
 		// Check if the form was submitted or canceled
 		if shouldClose {
-			if h.textInputOverlay.IsSubmitted() {
+			if im.textInputOverlay.IsSubmitted() {
 				// Form was submitted, process the input
-				selected := h.list.GetSelectedInstance()
+				selected := im.list.GetSelectedInstance()
 				if selected == nil {
 					return h, nil
 				}
-				if err := selected.SendPrompt(h.textInputOverlay.GetValue()); err != nil {
+				if err := selected.SendPrompt(im.textInputOverlay.GetValue()); err != nil {
 					return h, h.handleError(err)
 				}
 			}
 
 			// Close the overlay and reset state
-			h.textInputOverlay = nil
+			im.textInputOverlay = nil
 			h.state = stateDefault
 			return h, tea.Sequence(
 				tea.WindowSize(),
 				func() tea.Msg {
 					h.menu.SetState(ui.StateDefault)
-					h.showHelpScreen(helpTypeInstanceStart, nil)
+					h.showHelpScreen(helpTypeInstanceStart, nil, nil, nil)
 					return nil
 				},
 			)
@@ -247,9 +262,9 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 
 	switch name {
 	case keys.KeyHelp:
-		return h.showHelpScreen(helpTypeGeneral, nil)
+		return h.showHelpScreen(helpTypeGeneral, nil, nil, nil)
 	case keys.KeyPrompt:
-		if h.list.NumInstances() >= GlobalInstanceLimit {
+		if im.list.NumInstances() >= GlobalInstanceLimit {
 			return h, h.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
@@ -262,15 +277,15 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 			return h, h.handleError(err)
 		}
 
-		h.newInstanceFinalizer = h.list.AddInstance(instance)
-		h.list.SetSelectedInstance(h.list.NumInstances() - 1)
+		im.newInstanceFinalizer = im.list.AddInstance(instance)
+		im.list.SetSelectedInstance(im.list.NumInstances() - 1)
 		h.state = stateNew
 		h.menu.SetState(ui.StateNewInstance)
-		h.promptAfterName = true
+		im.promptAfterName = true
 
 		return h, nil
 	case keys.KeyNew:
-		if h.list.NumInstances() >= GlobalInstanceLimit {
+		if im.list.NumInstances() >= GlobalInstanceLimit {
 			return h, h.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
@@ -283,8 +298,8 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 			return h, h.handleError(err)
 		}
 
-		h.newInstanceFinalizer = h.list.AddInstance(instance)
-		h.list.SetSelectedInstance(h.list.NumInstances() - 1)
+		im.newInstanceFinalizer = im.list.AddInstance(instance)
+		im.list.SetSelectedInstance(im.list.NumInstances() - 1)
 		h.state = stateNew
 		h.menu.SetState(ui.StateNewInstance)
 
@@ -301,27 +316,27 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 			},
 		)
 	case keys.KeyUp:
-		h.list.Up()
+		im.list.Up()
 		return h, im.instanceChanged(h)
 	case keys.KeyDown:
-		h.list.Down()
+		im.list.Down()
 		return h, im.instanceChanged(h)
 	case keys.KeyShiftUp:
-		if h.tabbedWindow.IsInDiffTab() {
-			h.tabbedWindow.ScrollUp()
+		if im.tabbedWindow.IsInDiffTab() {
+			im.tabbedWindow.ScrollUp()
 		}
 		return h, im.instanceChanged(h)
 	case keys.KeyShiftDown:
-		if h.tabbedWindow.IsInDiffTab() {
-			h.tabbedWindow.ScrollDown()
+		if im.tabbedWindow.IsInDiffTab() {
+			im.tabbedWindow.ScrollDown()
 		}
 		return h, im.instanceChanged(h)
 	case keys.KeyTab:
-		h.tabbedWindow.Toggle()
-		h.menu.SetInDiffTab(h.tabbedWindow.IsInDiffTab())
+		im.tabbedWindow.Toggle()
+		h.menu.SetInDiffTab(im.tabbedWindow.IsInDiffTab())
 		return h, im.instanceChanged(h)
 	case keys.KeyKill:
-		selected := h.list.GetSelectedInstance()
+		selected := im.list.GetSelectedInstance()
 		if selected == nil {
 			return h, nil
 		}
@@ -346,10 +361,10 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 		}
 
 		// Then kill the instance
-		h.list.Kill()
+		im.list.Kill()
 		return h, im.instanceChanged(h)
 	case keys.KeySubmit:
-		selected := h.list.GetSelectedInstance()
+		selected := im.list.GetSelectedInstance()
 		if selected == nil {
 			return h, nil
 		}
@@ -366,13 +381,13 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 
 		return h, nil
 	case keys.KeyCheckout:
-		selected := h.list.GetSelectedInstance()
+		selected := im.list.GetSelectedInstance()
 		if selected == nil {
 			return h, nil
 		}
 
 		// Show help screen before pausing
-		h.showHelpScreen(helpTypeInstanceCheckout, func() {
+		h.showHelpScreen(helpTypeInstanceCheckout, selected, nil, func() {
 			if err := selected.Pause(); err != nil {
 				h.handleError(err)
 			}
@@ -380,7 +395,7 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 		})
 		return h, nil
 	case keys.KeyResume:
-		selected := h.list.GetSelectedInstance()
+		selected := im.list.GetSelectedInstance()
 		if selected == nil {
 			return h, nil
 		}
@@ -389,16 +404,16 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 		}
 		return h, tea.WindowSize()
 	case keys.KeyEnter:
-		if h.list.NumInstances() == 0 {
+		if im.list.NumInstances() == 0 {
 			return h, nil
 		}
-		selected := h.list.GetSelectedInstance()
+		selected := im.list.GetSelectedInstance()
 		if selected == nil || selected.Paused() || !selected.TmuxAlive() {
 			return h, nil
 		}
 		// Show help screen before attaching
-		h.showHelpScreen(helpTypeInstanceAttach, func() {
-			ch, err := h.list.Attach()
+		h.showHelpScreen(helpTypeInstanceAttach, selected, nil, func() {
+			ch, err := im.list.Attach()
 			if err != nil {
 				h.handleError(err)
 				return
@@ -414,15 +429,22 @@ func (im *instanceMode) handleKeyPress(h *home, msg tea.KeyMsg) (mod tea.Model, 
 
 func (im *instanceMode) instanceChanged(h *home) tea.Cmd {
 	// selected may be nil
-	selected := h.list.GetSelectedInstance()
+	selected := im.list.GetSelectedInstance()
 
-	h.tabbedWindow.UpdateDiff(selected)
+	im.tabbedWindow.UpdateDiff(selected)
 	// Update menu with current instance
 	h.menu.SetInstance(selected)
 
 	// If there's no selected instance, we don't need to update the preview.
-	if err := h.tabbedWindow.UpdatePreview(selected); err != nil {
+	if err := im.tabbedWindow.UpdatePreview(selected); err != nil {
 		return h.handleError(err)
 	}
 	return nil
+}
+
+func (im *instanceMode) HandleQuit(h *home) (tea.Model, tea.Cmd) {
+	if err := h.storage.SaveInstances(im.list.GetInstances()); err != nil {
+		return h, h.handleError(err)
+	}
+	return h, tea.Quit
 }

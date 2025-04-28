@@ -4,10 +4,8 @@ import (
 	"claude-squad/config"
 	"claude-squad/keys"
 	"claude-squad/log"
-	"claude-squad/orchestrator"
 	"claude-squad/session"
 	"claude-squad/ui"
-	"claude-squad/ui/overlay"
 	"context"
 	"fmt"
 	"os"
@@ -53,6 +51,7 @@ const (
 type ModeStrategy interface {
 	Render(*home) string
 	Update(*home, tea.Msg) (tea.Model, tea.Cmd)
+	HandleQuit(*home) (tea.Model, tea.Cmd)
 }
 
 type home struct {
@@ -65,10 +64,8 @@ type home struct {
 	autoYes bool
 
 	// ui components
-	list         *ui.List
-	menu         *ui.Menu
-	tabbedWindow *ui.TabbedWindow
-	errBox       *ui.ErrBox
+	menu   *ui.Menu
+	errBox *ui.ErrBox
 	// global spinner instance. we plumb this down to where it's needed
 	spinner spinner.Model
 
@@ -81,19 +78,6 @@ type home struct {
 
 	// state
 	state state
-	// newInstanceFinalizer is called when the state is stateNew and then you press enter.
-	// It registers the new instance in the list after the instance has been started.
-	newInstanceFinalizer func()
-
-	// promptAfterName tracks if we should enter prompt mode after naming
-	promptAfterName bool
-
-	// textInputOverlay is the component for handling text input with state
-	textInputOverlay *overlay.TextInputOverlay
-
-	// textOverlay is the component for displaying text information
-	textOverlay *overlay.TextOverlay
-
 	// keySent is used to manage underlining menu items
 	keySent bool
 }
@@ -113,17 +97,16 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	}
 
 	h := &home{
-		ctx:          ctx,
-		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
-		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
-		errBox:       ui.NewErrBox(),
-		storage:      storage,
-		appConfig:    appConfig,
-		program:      program,
-		autoYes:      autoYes,
-		state:        stateDefault,
-		appState:     appState,
+		ctx:       ctx,
+		spinner:   spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+		menu:      ui.NewMenu(),
+		errBox:    ui.NewErrBox(),
+		storage:   storage,
+		appConfig: appConfig,
+		program:   program,
+		autoYes:   autoYes,
+		state:     stateDefault,
+		appState:  appState,
 	}
 
 	switch h.mode {
@@ -132,25 +115,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	case modeInstance:
 		fallthrough
 	default:
-		h.modeStrategy = &instanceMode{}
-	}
-
-	h.list = ui.NewList(&h.spinner, autoYes)
-
-	// Load saved instances
-	instances, err := storage.LoadInstances()
-	if err != nil {
-		fmt.Printf("Failed to load instances: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Add loaded instances to the list
-	for _, instance := range instances {
-		// Call the finalizer immediately.
-		h.list.AddInstance(instance)()
-		if autoYes {
-			instance.AutoYes = true
-		}
+		h.modeStrategy = newInstanceMode(&h.spinner, h.autoYes)
 	}
 
 	return h
@@ -170,29 +135,11 @@ func (m *home) View() string {
 // updateHandleWindowSizeEvent sets the sizes of the components.
 // The components will try to render inside their bounds.
 func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
-	// List takes 30% of width, preview takes 70%
-	listWidth := int(float32(msg.Width) * 0.3)
-	tabsWidth := msg.Width - listWidth
-
 	// Menu takes 10% of height, list and window take 90%
 	contentHeight := int(float32(msg.Height) * 0.9)
 	menuHeight := msg.Height - contentHeight - 1     // minus 1 for error box
 	m.errBox.SetSize(int(float32(msg.Width)*0.9), 1) // error box takes 1 row
 
-	m.tabbedWindow.SetSize(tabsWidth, contentHeight)
-	m.list.SetSize(listWidth, contentHeight)
-
-	if m.textInputOverlay != nil {
-		m.textInputOverlay.SetSize(int(float32(msg.Width)*0.6), int(float32(msg.Height)*0.4))
-	}
-	if m.textOverlay != nil {
-		m.textOverlay.SetWidth(int(float32(msg.Width) * 0.6))
-	}
-
-	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
-	if err := m.list.SetSessionPreviewSize(previewWidth, previewHeight); err != nil {
-		log.ErrorLog.Print(err)
-	}
 	m.menu.SetSize(msg.Width, menuHeight)
 }
 
@@ -214,9 +161,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {
-	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-		return m, m.handleError(err)
-	}
+	m.modeStrategy.HandleQuit(m)
 	return m, tea.Quit
 }
 
@@ -236,18 +181,6 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		return nil, false
 	}
 
-	if m.list.GetSelectedInstance() != nil && m.list.GetSelectedInstance().Paused() && name == keys.KeyEnter {
-		return nil, false
-	}
-	if name == keys.KeyShiftDown || name == keys.KeyShiftUp {
-		return nil, false
-	}
-
-	// Skip the menu highlighting if the key is not in the map or we are using the shift up and down keys.
-	// TODO: cleanup: when you press enter on stateNew, we use keys.KeySubmitName. We should unify the keymap.
-	if name == keys.KeyEnter && m.state == stateNew {
-		name = keys.KeySubmitName
-	}
 	m.keySent = true
 	return tea.Batch(
 		func() tea.Msg { return msg },
@@ -308,79 +241,5 @@ func getKeyMapForMode(mode mode) map[string]keys.KeyName {
 		fallthrough
 	default:
 		return keys.InstanceModeKeyMap
-	}
-}
-
-func RunOrchestrator(ctx context.Context, program string, autoYes bool, prompt string, basePath string) error {
-	fmt.Printf("Starting orchestrator with prompt: %s\n", prompt)
-
-	// Create new orchestrator
-	orch := orchestrator.NewOrchestrator(prompt, autoYes)
-
-	// Set the program
-	orch.SetProgram(program)
-
-	// Format the orchestrator prompt
-	orchestratorPrompt := fmt.Sprintf(`You are a project orchestrator. Your goal is to implement: %s
-
-Break this goal down into manageable tasks that can be assigned to worker instances. I'll help you develop a plan, then you can create and manage worker instances to implement specific tasks.
-
-You have these capabilities:
-1. You can analyze the codebase to understand its structure.
-2. You can create worker instances to implement specific tasks.
-3. You can monitor worker progress and integrate their outputs.
-
-To create a worker instance, say: CREATE_WORKER: <task_name> | <initial_prompt>
-Example: CREATE_WORKER: implement-login | Implement a login form with email/password fields...
-
-Workers will send you notifications when they need help or complete tasks.
-
-Let's start by analyzing this goal and identifying the key components we need to build.`, prompt)
-
-	orch.Prompt = orchestratorPrompt
-
-	// Run the orchestrator
-	if autoYes {
-		// In auto mode, just run the orchestrator
-		result, err := orch.Run(basePath)
-		if err != nil {
-			return fmt.Errorf("orchestrator failed: %w", err)
-		}
-
-		fmt.Printf("\nOrchestration completed successfully\n")
-		fmt.Printf("Final merged changes:\n%s\n", result)
-		return nil
-	} else {
-		// If not in auto mode, first divide the prompt into tasks
-		tasks := orch.DividePrompt()
-
-		// Display the plan to the user and let them modify it
-		fmt.Printf("Orchestration plan:\n\n")
-		for i, task := range tasks {
-			fmt.Printf("Task %d: %s\n", i+1, task.Name)
-			fmt.Printf("Prompt: %s\n\n", task.Prompt)
-		}
-
-		// TODO: Add interactive editing of the plan
-		fmt.Printf("\nDo you want to proceed with this plan? (y/n): ")
-		var response string
-		fmt.Scanln(&response)
-
-		if response != "y" && response != "Y" {
-			return fmt.Errorf("orchestration cancelled by user")
-		}
-
-		// Set the plan
-		orch.Plan = tasks
-
-		// Run the orchestration
-		result, err := orch.Run(basePath)
-		if err != nil {
-			return fmt.Errorf("orchestrator failed: %w", err)
-		}
-
-		fmt.Printf("\nOrchestration completed successfully\n")
-		fmt.Printf("Final merged changes:\n%s\n", result)
-		return nil
 	}
 }
