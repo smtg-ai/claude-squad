@@ -24,10 +24,28 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
+          
+      - name: Set release version
+        id: set_version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+            echo "TAG=v${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          else
+            # Extract version from tag
+            TAG=${GITHUB_REF#refs/tags/}
+            echo "TAG=$TAG" >> $GITHUB_ENV
+            VERSION=${TAG#v}
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+          fi
+          echo "Using version: $VERSION, tag: $TAG"
 
       - name: Build binaries and create archives
         run: |
           PLATFORMS="darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64"
+          VERSION="${{ env.VERSION }}"
+          
+          echo "Building for version: $VERSION"
           
           # Create build directory
           mkdir -p build
@@ -48,31 +66,20 @@ jobs:
             # Create proper archive names following the format: orzbob_$VERSION_$GOOS_$GOARCH.tar.gz
             # This format must match what the install.sh script expects
             if [ "$GOOS" = "windows" ]; then
-              ARCHIVE_NAME="orzbob_${{ env.VERSION }}_${GOOS}_${GOARCH}.zip"
+              ARCHIVE_NAME="orzbob_${VERSION}_${GOOS}_${GOARCH}.zip"
               zip -q "${ARCHIVE_NAME}" "$BINARY_NAME$EXT"
             else
-              ARCHIVE_NAME="orzbob_${{ env.VERSION }}_${GOOS}_${GOARCH}.tar.gz"
+              ARCHIVE_NAME="orzbob_${VERSION}_${GOOS}_${GOARCH}.tar.gz"
               tar czf "${ARCHIVE_NAME}" "$BINARY_NAME$EXT"
             fi
             
+            echo "Created archive: ${ARCHIVE_NAME}"
             mv "${ARCHIVE_NAME}" "build/"
             rm -f "$BINARY_NAME$EXT"
           done
-
-      - name: Set release version
-        id: set_version
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
-            echo "TAG=v${{ github.event.inputs.version }}" >> $GITHUB_ENV
-          else
-            # Extract version from tag
-            TAG=${GITHUB_REF#refs/tags/}
-            echo "TAG=$TAG" >> $GITHUB_ENV
-            VERSION=${TAG#v}
-            echo "VERSION=$VERSION" >> $GITHUB_ENV
-          fi
-          echo "Using version: $VERSION, tag: $TAG"
+          
+          # List build directory to verify archive creation
+          ls -la build/
 
       - name: Create Release
         id: create_release
