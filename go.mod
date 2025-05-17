@@ -1,4 +1,4 @@
-module claude-squad
+module orzbob
 
 go 1.23.0
 

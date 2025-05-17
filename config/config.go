@@ -1,11 +1,12 @@
 package config
 
 import (
-	"claude-squad/log"
+	"orzbob/log"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const ConfigFileName = "config.json"
@@ -16,7 +17,7 @@ func GetConfigDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get config home directory: %w", err)
 	}
-	return filepath.Join(homeDir, ".claude-squad"), nil
+	return filepath.Join(homeDir, ".orzbob"), nil
 }
 
 // Config represents the application configuration
@@ -27,14 +28,23 @@ type Config struct {
 	AutoYes bool `json:"auto_yes"`
 	// DaemonPollInterval is the interval (ms) at which the daemon polls sessions for autoyes mode.
 	DaemonPollInterval int `json:"daemon_poll_interval"`
+	// EnableAutoUpdate determines whether to automatically check for updates on startup
+	EnableAutoUpdate bool `json:"enable_auto_update"`
+	// AutoInstallUpdates determines whether to automatically install updates without prompting
+	AutoInstallUpdates bool `json:"auto_install_updates"`
+	// LastUpdateCheck is the timestamp of the last update check
+	LastUpdateCheck int64 `json:"last_update_check"`
 }
 
 // DefaultConfig returns the default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		DefaultProgram:     "claude",
-		AutoYes:            false,
-		DaemonPollInterval: 1000,
+		DefaultProgram:      "claude",
+		AutoYes:             false,
+		DaemonPollInterval:  1000,
+		EnableAutoUpdate:    true,
+		AutoInstallUpdates:  false,
+		LastUpdateCheck:     0,
 	}
 }
 
@@ -94,4 +104,10 @@ func saveConfig(config *Config) error {
 // SaveConfig exports the saveConfig function for use by other packages
 func SaveConfig(config *Config) error {
 	return saveConfig(config)
+}
+
+// UpdateLastUpdateCheck updates the last update check timestamp and saves the config
+func UpdateLastUpdateCheck(config *Config) error {
+	config.LastUpdateCheck = time.Now().Unix()
+	return SaveConfig(config)
 }

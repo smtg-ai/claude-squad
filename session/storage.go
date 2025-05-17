@@ -1,7 +1,7 @@
 package session
 
 import (
-	"claude-squad/config"
+	"orzbob/config"
 	"encoding/json"
 	"fmt"
 	"time"

@@ -1,9 +1,9 @@
 package session
 
 import (
-	"claude-squad/log"
-	"claude-squad/session/git"
-	"claude-squad/session/tmux"
+	"orzbob/log"
+	"orzbob/session/git"
+	"orzbob/session/tmux"
 	"path/filepath"
 
 	"fmt"
@@ -382,7 +382,7 @@ func (i *Instance) Pause() error {
 		log.ErrorLog.Print(err)
 	} else if dirty {
 		// Commit changes with timestamp
-		commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s (paused)", i.Title, time.Now().Format(time.RFC822))
+		commitMsg := fmt.Sprintf("[orzbob] update from '%s' on %s (paused)", i.Title, time.Now().Format(time.RFC822))
 		if err := i.gitWorktree.PushChanges(commitMsg, false); err != nil {
 			errs = append(errs, fmt.Errorf("failed to commit changes: %w", err))
 			log.ErrorLog.Print(err)

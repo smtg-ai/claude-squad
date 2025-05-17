@@ -1,8 +1,8 @@
 package git
 
 import (
-	"claude-squad/config"
-	"claude-squad/log"
+	"orzbob/config"
+	"orzbob/log"
 	"fmt"
 	"path/filepath"
 	"time"

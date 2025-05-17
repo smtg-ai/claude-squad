@@ -1,17 +1,19 @@
 package main
 
 import (
-	"claude-squad/app"
-	"claude-squad/config"
-	"claude-squad/daemon"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/session/git"
-	"claude-squad/session/tmux"
+	"orzbob/app"
+	"orzbob/config"
+	"orzbob/daemon"
+	"orzbob/log"
+	"orzbob/session"
+	"orzbob/session/git"
+	"orzbob/session/tmux"
+	"orzbob/update"
 	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -22,8 +24,8 @@ var (
 	autoYesFlag bool
 	daemonFlag  bool
 	rootCmd     = &cobra.Command{
-		Use:   "claude-squad",
-		Short: "Claude Squad - A terminal-based session manager",
+		Use:   "orzbob",
+		Short: "Orzbob - A terminal-based session manager",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			log.Initialize(daemonFlag)
@@ -43,7 +45,7 @@ var (
 			}
 
 			if !git.IsGitRepo(currentDir) {
-				return fmt.Errorf("error: claude-squad must be run from within a git repository")
+				return fmt.Errorf("error: orzbob must be run from within a git repository")
 			}
 
 			cfg := config.LoadConfig()
@@ -124,6 +126,21 @@ var (
 			configJson, _ := json.MarshalIndent(cfg, "", "  ")
 
 			fmt.Printf("Config: %s\n%s\n", filepath.Join(configDir, config.ConfigFileName), configJson)
+			
+			// Print update information
+			fmt.Printf("\nUpdate information:\n")
+			fmt.Printf("Current version: v%s\n", version)
+			fmt.Printf("Auto-update enabled: %t\n", cfg.EnableAutoUpdate)
+			fmt.Printf("Auto-install updates: %t\n", cfg.AutoInstallUpdates)
+			
+			if cfg.LastUpdateCheck > 0 {
+				lastCheck := time.Unix(cfg.LastUpdateCheck, 0)
+				fmt.Printf("Last update check: %s (%s ago)\n", 
+					lastCheck.Format(time.RFC1123),
+					time.Since(lastCheck).Round(time.Second))
+			} else {
+				fmt.Printf("Last update check: Never\n")
+			}
 
 			return nil
 		},
@@ -131,15 +148,18 @@ var (
 
 	versionCmd = &cobra.Command{
 		Use:   "version",
-		Short: "Print the version number of claude-squad",
+		Short: "Print the version number of orzbob",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("claude-squad version %s\n", version)
-			fmt.Printf("https://github.com/smtg-ai/claude-squad/releases/tag/v%s\n", version)
+			fmt.Printf("orzbob version %s\n", version)
+			fmt.Printf("https://github.com/carnivoroustoad/orzbob/releases/tag/v%s\n", version)
 		},
 	}
 )
 
 func init() {
+	// Set the global version variable for the update package
+	update.CurrentVersion = version
+
 	rootCmd.Flags().StringVarP(&programFlag, "program", "p", "",
 		"Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')")
 	rootCmd.Flags().BoolVarP(&autoYesFlag, "autoyes", "y", false,
@@ -156,9 +176,16 @@ func init() {
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
+	rootCmd.AddCommand(update.UpdateCmd)
+	rootCmd.AddCommand(update.AutoUpdateCmd)
 }
 
 func main() {
+	// Run auto-update check before executing command
+	// This is done silently and only shows output if an update is available
+	// and auto-install is disabled
+	_ = update.AutoUpdateCmd.RunE(update.AutoUpdateCmd, []string{})
+	
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
