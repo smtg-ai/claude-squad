@@ -3,6 +3,7 @@ package git
 import (
 	"claude-squad/log"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,6 +45,11 @@ func (g *GitWorktree) SetupFromExistingBranch() error {
 	// Create a new worktree from the existing branch
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", g.worktreePath, g.branchName); err != nil {
 		return fmt.Errorf("failed to create worktree from branch %s: %w", g.branchName, err)
+	}
+
+	// Copy untracked files from main repo to worktree
+	if err := g.copyUntrackedFiles(); err != nil {
+		return fmt.Errorf("failed to copy untracked files: %w", err)
 	}
 
 	return nil
@@ -89,6 +95,11 @@ func (g *GitWorktree) SetupNewWorktree() error {
 	// TODO: we might want to give an option to use main/master instead of the current branch.
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, headCommit); err != nil {
 		return fmt.Errorf("failed to create worktree from commit %s: %w", headCommit, err)
+	}
+
+	// Copy untracked files from main repo to worktree
+	if err := g.copyUntrackedFiles(); err != nil {
+		return fmt.Errorf("failed to copy untracked files: %w", err)
 	}
 
 	return nil
@@ -155,6 +166,88 @@ func (g *GitWorktree) Prune() error {
 		return fmt.Errorf("failed to prune worktrees: %w", err)
 	}
 	return nil
+}
+
+// copyUntrackedFiles copies untracked files from the main repo to the worktree
+func (g *GitWorktree) copyUntrackedFiles() error {
+	// Get list of untracked files
+	output, err := g.runGitCommand(g.repoPath, "ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		return fmt.Errorf("failed to list untracked files: %w", err)
+	}
+
+	// Log debugging info
+	log.InfoLog.Printf("Copying untracked files to worktree %s", g.worktreePath)
+
+	if output == "" {
+		// No untracked files to copy
+		return nil
+	}
+
+	untrackedFiles := strings.Split(strings.TrimSpace(output), "\n")
+	for _, file := range untrackedFiles {
+		if file == "" {
+			continue
+		}
+
+		// Construct source and destination paths
+		sourcePath := filepath.Join(g.repoPath, file)
+		destPath := filepath.Join(g.worktreePath, file)
+
+		// Detailed logging would go here if needed (commented out to reduce log verbosity)
+		// log.InfoLog.Printf("Copying %s to %s", sourcePath, destPath)
+
+		// Ensure the destination directory exists
+		destDir := filepath.Dir(destPath)
+		if err := os.MkdirAll(destDir, 0755); err != nil {
+			return fmt.Errorf("failed to create destination directory for %s: %w", file, err)
+		}
+
+		// Check if it's a directory
+		fileInfo, err := os.Stat(sourcePath)
+		if err != nil {
+			return fmt.Errorf("failed to get file info for %s: %w", file, err)
+		}
+
+		if fileInfo.IsDir() {
+			// Skip directories as they'll be created when copying files
+			continue
+		}
+
+		// Copy the file
+		if err := copyFile(sourcePath, destPath); err != nil {
+			return fmt.Errorf("failed to copy file %s: %w", file, err)
+		}
+	}
+
+	return nil
+}
+
+// copyFile copies a file from src to dst
+func copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, sourceFile)
+	if err != nil {
+		return err
+	}
+
+	// Copy file permissions
+	srcInfo, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	return os.Chmod(dst, srcInfo.Mode())
 }
 
 // CleanupWorktrees removes all worktrees and their associated branches
