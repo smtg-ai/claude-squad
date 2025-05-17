@@ -1,6 +1,8 @@
 # Orzbob [![GitHub Release](https://img.shields.io/github/v/release/carnivoroustoad/orzbob)](https://github.com/carnivoroustoad/orzbob/releases/latest)
 
-Orzbob is a terminal app that manages multiple [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex) (and other local agents including [Aider](https://github.com/Aider-AI/aider)) in separate workspaces, allowing you to work on multiple tasks simultaneously.
+Orzbob is a terminal app that helps you become a 100x engineer by managing multiple [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex) (and other local agents including [Aider](https://github.com/Aider-AI/aider)) in separate workspaces, allowing you to work on multiple tasks simultaneously.
+
+🚀 [Visit our website](https://carnivoroustoad.github.io/orzbob/) for more information.
 
 ![Orzbob Screenshot](assets/screenshot.png)
 
@@ -49,6 +51,7 @@ Available Commands:
   debug       Print debug information like config paths
   help        Help about any command
   reset       Reset all stored instances
+  update      Check for and apply updates
   version     Print the version number of orzbob
 
 Flags:
@@ -101,6 +104,15 @@ The menu at the bottom of the screen shows available commands:
 1. **tmux** to create isolated terminal sessions for each agent
 2. **git worktrees** to isolate codebases so each session works on its own branch
 3. A simple TUI interface for easy navigation and management
+4. **Auto-updates** to keep your installation current with the latest features
+
+### Configuration
+
+You can customize Orzbob's behavior by editing the config file (find its location with `orz debug`). Some notable options:
+
+- `default_program`: Set your preferred AI assistant as default
+- `enable_auto_update`: Enable or disable checking for updates on startup
+- `auto_install_updates`: Automatically install updates without prompting
 
 ### License
 
