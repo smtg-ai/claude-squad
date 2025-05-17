@@ -40,7 +40,10 @@ type Asset struct {
 
 // CheckForUpdates checks if there is a newer version available
 func CheckForUpdates() (*ReleaseInfo, bool, error) {
-	log.InfoLog.Println("Checking for updates...")
+	// Don't log if InfoLog is nil (happens during initial check)
+	if log.InfoLog != nil {
+		log.InfoLog.Println("Checking for updates...")
+	}
 	
 	latestRelease, err := getLatestRelease()
 	if err != nil {
@@ -54,11 +57,15 @@ func CheckForUpdates() (*ReleaseInfo, bool, error) {
 	hasUpdate := isNewerVersion(CurrentVersion, latestVersion)
 	
 	if hasUpdate {
-		log.InfoLog.Printf("Found update: v%s -> v%s", CurrentVersion, latestVersion)
+		if log.InfoLog != nil {
+			log.InfoLog.Printf("Found update: v%s -> v%s", CurrentVersion, latestVersion)
+		}
 		return latestRelease, true, nil
 	}
 	
-	log.InfoLog.Printf("No updates found. Current version: v%s is latest.", CurrentVersion)
+	if log.InfoLog != nil {
+		log.InfoLog.Printf("No updates found. Current version: v%s is latest.", CurrentVersion)
+	}
 	return nil, false, nil
 }
 

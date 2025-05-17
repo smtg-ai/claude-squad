@@ -181,6 +181,9 @@ func init() {
 }
 
 func main() {
+	// Initialize log early for auto-update
+	log.Initialize(false)
+	
 	// Run auto-update check before executing command
 	// This is done silently and only shows output if an update is available
 	// and auto-install is disabled
@@ -189,4 +192,7 @@ func main() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
+	
+	// Clean up log
+	log.Close()
 }
