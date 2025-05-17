@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>orzbob - Become a 100x Engineer</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo-container">
+                <h1>orzbob</h1>
+                <div class="badge">Beta</div>
+            </div>
+            <div class="header-links">
+                <a href="https://github.com/carnivoroustoad/orzbob" target="_blank">GitHub</a>
+                <a href="https://github.com/carnivoroustoad/orzbob/releases" target="_blank">Releases</a>
+                <a href="https://github.com/carnivoroustoad/orzbob/issues" target="_blank">Issues</a>
+            </div>
+        </header>
+
+        <main>
+            <section class="hero">
+                <h1>Become a <span class="highlight">100x Engineer</span> with orzbob</h1>
+                <p class="subtitle">A terminal-based session manager that supercharges your development workflow</p>
+                <div class="buttons">
+                    <a href="#install" class="button primary">Get Started</a>
+                    <a href="https://github.com/carnivoroustoad/orzbob" class="button secondary" target="_blank">View on GitHub</a>
+                </div>
+            </section>
+
+            <section class="features">
+                <div class="feature-card">
+                    <div class="icon">🚀</div>
+                    <h3>Multiple Sessions</h3>
+                    <p>Effortlessly manage multiple development sessions with isolated environments</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🔄</div>
+                    <p>Automatic Updates</p>
+                    <p>Stay up-to-date with the latest features and improvements</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">🌱</div>
+                    <h3>Git Integration</h3>
+                    <p>Seamless git worktree management for parallel feature development</p>
+                </div>
+                <div class="feature-card">
+                    <div class="icon">⚡</div>
+                    <h3>Productivity Boost</h3>
+                    <p>Streamline your workflow and accomplish more in less time</p>
+                </div>
+            </section>
+
+            <section id="install" class="install-section">
+                <h2>Installation</h2>
+                <p>Install orzbob with a single command:</p>
+                <div class="code-block">
+                    <pre><code>curl -fsSL https://raw.githubusercontent.com/carnivoroustoad/orzbob/main/install.sh | bash</code></pre>
+                    <button class="copy-button" onclick="copyInstallCommand()">
+                        <span class="copy-text">Copy</span>
+                        <span class="copied-text">Copied!</span>
+                    </button>
+                </div>
+                <p class="install-note">This will install orzbob and its dependencies (tmux and GitHub CLI).</p>
+            </section>
+
+            <section class="usage">
+                <h2>How It Works</h2>
+                <div class="steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <h3>Initialize in your git repository</h3>
+                        <p>Run <code>orzbob</code> in your git repository to start managing sessions</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <h3>Create new sessions for features</h3>
+                        <p>Each session gets its own git worktree and isolated environment</p>
+                    </div>
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <h3>Switch between sessions seamlessly</h3>
+                        <p>No more context switching overhead between different tasks</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 orzbob. Open source under MIT License.</p>
+            <div class="footer-links">
+                <a href="https://github.com/carnivoroustoad/orzbob" target="_blank">GitHub</a>
+                <a href="https://github.com/carnivoroustoad/orzbob/releases" target="_blank">Releases</a>
+                <a href="https://github.com/carnivoroustoad/orzbob/issues" target="_blank">Issues</a>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        function copyInstallCommand() {
+            const command = "curl -fsSL https://raw.githubusercontent.com/carnivoroustoad/orzbob/main/install.sh | bash";
+            navigator.clipboard.writeText(command);
+            
+            const copyButton = document.querySelector('.copy-button');
+            copyButton.classList.add('copied');
+            
+            setTimeout(() => {
+                copyButton.classList.remove('copied');
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

@@ -8,10 +8,12 @@ import (
 	"orzbob/session"
 	"orzbob/session/git"
 	"orzbob/session/tmux"
+	"orzbob/update"
 	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -124,6 +126,21 @@ var (
 			configJson, _ := json.MarshalIndent(cfg, "", "  ")
 
 			fmt.Printf("Config: %s\n%s\n", filepath.Join(configDir, config.ConfigFileName), configJson)
+			
+			// Print update information
+			fmt.Printf("\nUpdate information:\n")
+			fmt.Printf("Current version: v%s\n", version)
+			fmt.Printf("Auto-update enabled: %t\n", cfg.EnableAutoUpdate)
+			fmt.Printf("Auto-install updates: %t\n", cfg.AutoInstallUpdates)
+			
+			if cfg.LastUpdateCheck > 0 {
+				lastCheck := time.Unix(cfg.LastUpdateCheck, 0)
+				fmt.Printf("Last update check: %s (%s ago)\n", 
+					lastCheck.Format(time.RFC1123),
+					time.Since(lastCheck).Round(time.Second))
+			} else {
+				fmt.Printf("Last update check: Never\n")
+			}
 
 			return nil
 		},
@@ -140,6 +157,9 @@ var (
 )
 
 func init() {
+	// Set the global version variable for the update package
+	update.CurrentVersion = version
+
 	rootCmd.Flags().StringVarP(&programFlag, "program", "p", "",
 		"Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')")
 	rootCmd.Flags().BoolVarP(&autoYesFlag, "autoyes", "y", false,
@@ -156,9 +176,16 @@ func init() {
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
+	rootCmd.AddCommand(update.UpdateCmd)
+	rootCmd.AddCommand(update.AutoUpdateCmd)
 }
 
 func main() {
+	// Run auto-update check before executing command
+	// This is done silently and only shows output if an update is available
+	// and auto-install is disabled
+	_ = update.AutoUpdateCmd.RunE(update.AutoUpdateCmd, []string{})
+	
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
