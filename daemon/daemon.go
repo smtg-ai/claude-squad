@@ -1,9 +1,9 @@
 package daemon
 
 import (
-	"claude-squad/config"
-	"claude-squad/log"
-	"claude-squad/session"
+	"orzbob/config"
+	"orzbob/log"
+	"orzbob/session"
 	"fmt"
 	"os"
 	"os/exec"

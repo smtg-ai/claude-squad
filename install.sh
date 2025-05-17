@@ -59,7 +59,7 @@ detect_platform_and_arch() {
 
 get_latest_version() {
     # Get latest version from GitHub API, including prereleases
-    API_RESPONSE=$(curl -sS "https://api.github.com/repos/smtg-ai/claude-squad/releases")
+    API_RESPONSE=$(curl -sS "https://api.github.com/repos/carnivoroustoad/orzbob/releases")
     if [ $? -ne 0 ]; then
         echo "Failed to connect to GitHub API"
         exit 1
@@ -137,7 +137,7 @@ extract_and_install() {
     fi
 
     # Install binary with desired name
-    mv "${tmp_dir}/claude-squad${extension}" "$bin_dir/$INSTALL_NAME${extension}"
+    mv "${tmp_dir}/orzbob${extension}" "$bin_dir/$INSTALL_NAME${extension}"
     rm -rf "$tmp_dir"
 
     if [ ! -f "$bin_dir/$INSTALL_NAME${extension}" ]; then
@@ -251,7 +251,7 @@ check_and_install_dependencies() {
 
 main() {
     # Parse command line arguments
-    INSTALL_NAME="cs"
+    INSTALL_NAME="orz"
     while [[ $# -gt 0 ]]; do
         case $1 in
             --name)
@@ -278,8 +278,8 @@ main() {
         VERSION=$(get_latest_version)
     fi
 
-    RELEASE_URL="https://github.com/smtg-ai/claude-squad/releases/download/v${VERSION}"
-    ARCHIVE_NAME="claude-squad_${VERSION}_${PLATFORM}_${ARCHITECTURE}${ARCHIVE_EXT}"
+    RELEASE_URL="https://github.com/carnivoroustoad/orzbob/releases/download/v${VERSION}"
+    ARCHIVE_NAME="orzbob_${VERSION}_${PLATFORM}_${ARCHITECTURE}${ARCHIVE_EXT}"
     BINARY_URL="${RELEASE_URL}/${ARCHIVE_NAME}"
     TMP_DIR=$(mktemp -d)
     

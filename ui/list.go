@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"claude-squad/log"
-	"claude-squad/session"
+	"orzbob/log"
+	"orzbob/session"
 	"errors"
 	"fmt"
 	"strings"

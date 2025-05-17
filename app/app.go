@@ -1,12 +1,12 @@
 package app
 
 import (
-	"claude-squad/config"
-	"claude-squad/keys"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/ui"
-	"claude-squad/ui/overlay"
+	"orzbob/config"
+	"orzbob/keys"
+	"orzbob/log"
+	"orzbob/session"
+	"orzbob/ui"
+	"orzbob/ui/overlay"
 	"context"
 	"fmt"
 	"os"
@@ -514,7 +514,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		// Default commit message with timestamp
-		commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
+		commitMsg := fmt.Sprintf("[orzbob] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
 		worktree, err := selected.GetGitWorktree()
 		if err != nil {
 			return m, m.handleError(err)

@@ -1,7 +1,7 @@
 package config
 
 import (
-	"claude-squad/log"
+	"orzbob/log"
 	"encoding/json"
 	"fmt"
 	"os"

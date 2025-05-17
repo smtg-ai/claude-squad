@@ -1,8 +1,8 @@
-# Claude Squad [![CI](https://github.com/smtg-ai/claude-squad/actions/workflows/build.yml/badge.svg)](https://github.com/smtg-ai/claude-squad/actions/workflows/build.yml) [![GitHub Release](https://img.shields.io/github/v/release/smtg-ai/claude-squad)](https://github.com/smtg-ai/claude-squad/releases/latest)
+# Orzbob [![GitHub Release](https://img.shields.io/github/v/release/carnivoroustoad/orzbob)](https://github.com/carnivoroustoad/orzbob/releases/latest)
 
-Claude Squad is a terminal app that manages multiple [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex) (and other local agents including [Aider](https://github.com/Aider-AI/aider)) in separate workspaces, allowing you to work on multiple tasks simultaneously.
+Orzbob is a terminal app that manages multiple [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex) (and other local agents including [Aider](https://github.com/Aider-AI/aider)) in separate workspaces, allowing you to work on multiple tasks simultaneously.
 
-![Claude Squad Screenshot](assets/screenshot.png)
+![Orzbob Screenshot](assets/screenshot.png)
 
 ### Highlights
 - Complete tasks in the background (including yolo / auto-accept mode!)
@@ -18,19 +18,19 @@ https://github.com/user-attachments/assets/aef18253-e58f-4525-9032-f5a3d66c975a
 
 ### Installation
 
-The easiest way to install `claude-squad` is by running the following command:
+The easiest way to install `orzbob` is by running the following command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/stmg-ai/claude-squad/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/carnivoroustoad/orzbob/main/install.sh | bash
 ```
 
-This will install the `cs` binary to `~/.local/bin` and add it to your PATH. To install with a different name, use the `--name` flag:
+This will install the `orz` binary to `~/.local/bin` and add it to your PATH. To install with a different name, use the `--name` flag:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/stmg-ai/claude-squad/main/install.sh | bash -s -- --name <name>
+curl -fsSL https://raw.githubusercontent.com/carnivoroustoad/orzbob/main/install.sh | bash -s -- --name <name>
 ```
 
-Alternatively, you can also install `claude-squad` by building from source or installing a [pre-built binary](https://github.com/smtg-ai/claude-squad/releases).
+Alternatively, you can also install `orzbob` by building from source or installing a [pre-built binary](https://github.com/carnivoroustoad/orzbob/releases).
 
 ### Prerequisites
 
@@ -41,36 +41,36 @@ Alternatively, you can also install `claude-squad` by building from source or in
 
 ```
 Usage:
-  cs [flags]
-  cs [command]
+  orz [flags]
+  orz [command]
 
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
   debug       Print debug information like config paths
   help        Help about any command
   reset       Reset all stored instances
-  version     Print the version number of claude-squad
+  version     Print the version number of orzbob
 
 Flags:
   -y, --autoyes          [experimental] If enabled, all instances will automatically accept prompts for claude code & aider
-  -h, --help             help for claude-squad
+  -h, --help             help for orzbob
   -p, --program string   Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')
 ```
 
 Run the application with:
 
 ```bash
-cs
+orz
 ```
 
 <br />
 
-<b>Using Claude Squad with other AI assistants:</b>
+<b>Using Orzbob with other AI assistants:</b>
 - For [Codex](https://github.com/openai/codex): Set your API key with `export OPENAI_API_KEY=<your_key>`
 - Launch with specific assistants:
-   - Codex: `cs -p "codex"`
-   - Aider: `cs -p "aider ..."`
-- Make this the default, by modifying the config file (locate with `cs debug`)
+   - Codex: `orz -p "codex"`
+   - Aider: `orz -p "aider ..."`
+- Make this the default, by modifying the config file (locate with `orz debug`)
 
 <br />
 

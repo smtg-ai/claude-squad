@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"claude-squad/session"
+	"orzbob/session"
 
 	"github.com/charmbracelet/lipgloss"
 )

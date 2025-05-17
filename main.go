@@ -1,13 +1,13 @@
 package main
 
 import (
-	"claude-squad/app"
-	"claude-squad/config"
-	"claude-squad/daemon"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/session/git"
-	"claude-squad/session/tmux"
+	"orzbob/app"
+	"orzbob/config"
+	"orzbob/daemon"
+	"orzbob/log"
+	"orzbob/session"
+	"orzbob/session/git"
+	"orzbob/session/tmux"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,8 +22,8 @@ var (
 	autoYesFlag bool
 	daemonFlag  bool
 	rootCmd     = &cobra.Command{
-		Use:   "claude-squad",
-		Short: "Claude Squad - A terminal-based session manager",
+		Use:   "orzbob",
+		Short: "Orzbob - A terminal-based session manager",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			log.Initialize(daemonFlag)
@@ -43,7 +43,7 @@ var (
 			}
 
 			if !git.IsGitRepo(currentDir) {
-				return fmt.Errorf("error: claude-squad must be run from within a git repository")
+				return fmt.Errorf("error: orzbob must be run from within a git repository")
 			}
 
 			cfg := config.LoadConfig()
@@ -131,10 +131,10 @@ var (
 
 	versionCmd = &cobra.Command{
 		Use:   "version",
-		Short: "Print the version number of claude-squad",
+		Short: "Print the version number of orzbob",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("claude-squad version %s\n", version)
-			fmt.Printf("https://github.com/smtg-ai/claude-squad/releases/tag/v%s\n", version)
+			fmt.Printf("orzbob version %s\n", version)
+			fmt.Printf("https://github.com/carnivoroustoad/orzbob/releases/tag/v%s\n", version)
 		},
 	}
 )
