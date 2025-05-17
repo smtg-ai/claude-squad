@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (without v prefix)'
+        required: true
+        type: string
 
 jobs:
   build:
@@ -38,6 +44,21 @@ jobs:
             GOOS=$GOOS GOARCH=$GOARCH go build -o "build/$OUTPUT_NAME" .
           done
 
+      - name: Set release version
+        id: set_version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+            echo "TAG=v${{ github.event.inputs.version }}" >> $GITHUB_ENV
+          else
+            # Extract version from tag
+            TAG=${GITHUB_REF#refs/tags/}
+            echo "TAG=$TAG" >> $GITHUB_ENV
+            VERSION=${TAG#v}
+            echo "VERSION=$VERSION" >> $GITHUB_ENV
+          fi
+          echo "Using version: $VERSION, tag: $TAG"
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1
@@ -51,5 +72,6 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          tag_name: ${{ env.TAG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
