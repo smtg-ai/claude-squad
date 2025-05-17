@@ -9,6 +9,12 @@ import (
 
 // runGitCommand executes a git command and returns any error
 func (g *GitWorktree) runGitCommand(path string, args ...string) (string, error) {
+	return RunGitCommand(path, args...)
+}
+
+// RunGitCommand executes a git command on the specified path and returns its output
+// This is an exported version of runGitCommand for use by other packages
+func RunGitCommand(path string, args ...string) (string, error) {
 	baseArgs := []string{"-C", path}
 	cmd := exec.Command("git", append(baseArgs, args...)...)
 
