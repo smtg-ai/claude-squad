@@ -25,7 +25,7 @@ jobs:
         with:
           go-version: '1.21'
 
-      - name: Build binaries
+      - name: Build binaries and create archives
         run: |
           PLATFORMS="darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64"
           
@@ -35,13 +35,28 @@ jobs:
           for PLATFORM in $PLATFORMS; do
             GOOS=${PLATFORM%/*}
             GOARCH=${PLATFORM#*/}
-            OUTPUT_NAME="orzbob-$GOOS-$GOARCH"
+            BINARY_NAME="orzbob"
+            EXT=""
+            
             if [ "$GOOS" = "windows" ]; then
-              OUTPUT_NAME="$OUTPUT_NAME.exe"
+              EXT=".exe"
             fi
             
             echo "Building for $GOOS/$GOARCH..."
-            GOOS=$GOOS GOARCH=$GOARCH go build -o "build/$OUTPUT_NAME" .
+            GOOS=$GOOS GOARCH=$GOARCH go build -o "$BINARY_NAME$EXT" .
+            
+            # Create proper archive names following the format: orzbob_$VERSION_$GOOS_$GOARCH.tar.gz
+            # This format must match what the install.sh script expects
+            if [ "$GOOS" = "windows" ]; then
+              ARCHIVE_NAME="orzbob_${{ env.VERSION }}_${GOOS}_${GOARCH}.zip"
+              zip -q "${ARCHIVE_NAME}" "$BINARY_NAME$EXT"
+            else
+              ARCHIVE_NAME="orzbob_${{ env.VERSION }}_${GOOS}_${GOARCH}.tar.gz"
+              tar czf "${ARCHIVE_NAME}" "$BINARY_NAME$EXT"
+            fi
+            
+            mv "${ARCHIVE_NAME}" "build/"
+            rm -f "$BINARY_NAME$EXT"
           done
 
       - name: Set release version
@@ -64,11 +79,11 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            build/orzbob-darwin-amd64
-            build/orzbob-darwin-arm64
-            build/orzbob-linux-amd64
-            build/orzbob-linux-arm64
-            build/orzbob-windows-amd64.exe
+            build/orzbob_${{ env.VERSION }}_darwin_amd64.tar.gz
+            build/orzbob_${{ env.VERSION }}_darwin_arm64.tar.gz
+            build/orzbob_${{ env.VERSION }}_linux_amd64.tar.gz
+            build/orzbob_${{ env.VERSION }}_linux_arm64.tar.gz
+            build/orzbob_${{ env.VERSION }}_windows_amd64.zip
           draft: false
           prerelease: false
           generate_release_notes: true
