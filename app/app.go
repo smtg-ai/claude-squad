@@ -198,7 +198,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				instance.SetStatus(session.Running)
 			} else {
 				if prompt {
-					instance.TapEnter()
+					if instance.AutoYes {
+						instance.TapEnter()
+					} else {
+						instance.SetStatus(session.WaitingForInput)
+					}
 				} else {
 					instance.SetStatus(session.Ready)
 				}

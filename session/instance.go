@@ -25,6 +25,8 @@ const (
 	Loading
 	// Paused is if the instance is paused (worktree removed but branch preserved).
 	Paused
+	// WaitingForInput is if Claude is requesting input from the user.
+	WaitingForInput
 )
 
 // Instance is a running instance of claude code.
