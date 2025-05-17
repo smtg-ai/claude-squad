@@ -1,4 +1,4 @@
-name: Release
+name: Automated Release
 
 on:
   push:
@@ -7,25 +7,49 @@ on:
 
 jobs:
   build:
-    permissions: write-all
-    name: Build Release
     runs-on: ubuntu-latest
-
     steps:
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: Set up Go 1.23
+      - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.23'
+          go-version: '1.21'
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v5
+      - name: Build binaries
+        run: |
+          PLATFORMS="darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64"
+          
+          # Create build directory
+          mkdir -p build
+          
+          for PLATFORM in $PLATFORMS; do
+            GOOS=${PLATFORM%/*}
+            GOARCH=${PLATFORM#*/}
+            OUTPUT_NAME="orzbob-$GOOS-$GOARCH"
+            if [ "$GOOS" = "windows" ]; then
+              OUTPUT_NAME="$OUTPUT_NAME.exe"
+            fi
+            
+            echo "Building for $GOOS/$GOARCH..."
+            GOOS=$GOOS GOARCH=$GOARCH go build -o "build/$OUTPUT_NAME" .
+          done
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
         with:
-          version: latest
-          args: release --clean
+          files: |
+            build/orzbob-darwin-amd64
+            build/orzbob-darwin-arm64
+            build/orzbob-linux-amd64
+            build/orzbob-linux-arm64
+            build/orzbob-windows-amd64.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
