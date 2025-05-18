@@ -68,9 +68,11 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 	}
 
 	// Open the branch in the browser
-	if err := g.OpenBranchURL(); err != nil {
-		// Just log the error but don't fail the push operation
-		log.ErrorLog.Printf("failed to open branch URL: %v", err)
+	if open {
+		if err := g.OpenBranchURL(); err != nil {
+			// Just log the error but don't fail the push operation
+			log.ErrorLog.Printf("failed to open branch URL: %v", err)
+		}
 	}
 
 	return nil
