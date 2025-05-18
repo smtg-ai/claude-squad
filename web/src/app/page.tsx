@@ -1,9 +1,11 @@
 import styles from "./page.module.css";
 import dynamic from "next/dynamic";
 
-// Import ThemeToggle dynamically to prevent hydration issues
+// Import ThemeToggle and CopyButton dynamically to prevent hydration issues
 const ThemeToggle = dynamic(() => import("./components/ThemeToggle"), {
-  // ssr: false,
+});
+
+const CopyButton = dynamic(() => import("./components/CopyButton"), {
 });
 
 export default function Home() {
@@ -52,9 +54,12 @@ export default function Home() {
 
         <div className={styles.installation}>
           <h2>Installation</h2>
-          <pre className={styles.codeBlock}>
-            <code>curl -fsSL https://raw.githubusercontent.com/stmg-ai/claude-squad/main/install.sh | bash</code>
-          </pre>
+          <div className={styles.codeBlockWrapper}>
+            <pre className={styles.codeBlock}>
+              <code>curl -fsSL https://raw.githubusercontent.com/stmg-ai/claude-squad/main/install.sh | bash</code>
+            </pre>
+            <CopyButton textToCopy="curl -fsSL https://raw.githubusercontent.com/stmg-ai/claude-squad/main/install.sh | bash" />
+          </div>
           <p className={styles.prerequisites}>
             Prerequisites: tmux, gh (GitHub CLI)
           </p>
