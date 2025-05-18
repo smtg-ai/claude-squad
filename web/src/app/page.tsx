@@ -1,94 +1,66 @@
-import Image from "next/image";
 import styles from "./page.module.css";
+import dynamic from "next/dynamic";
+
+// Import ThemeToggle dynamically to prevent hydration issues
+const ThemeToggle = dynamic(() => import("./components/ThemeToggle"), {
+  // ssr: false,
+});
 
 export default function Home() {
   return (
     <div className={styles.page}>
+      <header className={styles.header}>
+        <h1 className={styles.title}>claude squad</h1>
+        <div className={styles.headerActions}>
+          <a
+            className={styles.headerButton}
+            href="https://github.com/smtg-ai/claude-squad"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            GitHub
+          </a>
+          <a
+            href="https://github.com/smtg-ai/claude-squad#readme"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.headerButton}
+          >
+            Docs
+          </a>
+          <ThemeToggle />
+        </div>
+      </header>
       <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>src/app/page.tsx</code>.
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+        
+        
+        <p className={styles.tagline}>
+          Manage multiple AI agents like <span className={styles.highlight}>Claude Code</span>, <span className={styles.highlight}>Codex</span>, and <span className={styles.highlight}>Aider</span>. <br/><span className={styles.tenx}>10x</span> your productivity
+        </p>
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
-          >
-            Read our docs
-          </a>
+        <div className={styles.installation}>
+          <h2>Installation</h2>
+          <pre className={styles.codeBlock}>
+            <code>curl -fsSL https://raw.githubusercontent.com/stmg-ai/claude-squad/main/install.sh | bash</code>
+          </pre>
+          <p className={styles.prerequisites}>
+            Prerequisites: tmux, gh (GitHub CLI)
+          </p>
+        </div>
+        
+        <div className={styles.features}>
+          <h2>Why use Claude Squad?</h2>
+          <ul>
+            <li>Supervise multiple agents in one UI</li>
+            <li>Isolate tasks in git workspaces</li>
+            <li>Review work before shipping</li>
+          </ul>
         </div>
       </main>
       <footer className={styles.footer}>
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+        <p className={styles.copyright}>
+          &copy; {new Date().getFullYear()} Claude Squad. Licensed under <a href="https://github.com/smtg-ai/claude-squad/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer">GNU AGPL v3.0</a>
+        </p>
       </footer>
     </div>
   );
