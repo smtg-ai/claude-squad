@@ -108,6 +108,22 @@ html[data-theme="dark"] .page {
   text-decoration: underline;
 }
 
+.demoVideo {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.video {
+  max-width: 100%;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  aspect-ratio: 36 / 30;
+  background-color: var(--gray-alpha-100);
+}
+
 .features {
   margin-top: 20px;
 }

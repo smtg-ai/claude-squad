@@ -38,6 +38,18 @@ export default function Home() {
           Manage multiple AI agents like <span className={styles.highlight}>Claude Code</span>, <span className={styles.highlight}>Codex</span>, and <span className={styles.highlight}>Aider</span>. <br/><span className={styles.tenx}>10x</span> your productivity
         </p>
 
+        <div className={styles.demoVideo}>
+          <video 
+            controls
+            autoPlay
+            muted
+            loop
+            playsInline
+            className={styles.video}
+            src="https://github.com/user-attachments/assets/aef18253-e58f-4525-9032-f5a3d66c975a"
+          />
+        </div>
+
         <div className={styles.installation}>
           <h2>Installation</h2>
           <pre className={styles.codeBlock}>
