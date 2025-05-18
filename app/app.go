@@ -17,7 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const GlobalInstanceLimit = 10
+const GlobalInstanceLimit = 1000 // Modified to allow many more simultaneous squads
 
 // Run is the main entrypoint into the application.
 func Run(ctx context.Context, program string, autoYes bool) error {
