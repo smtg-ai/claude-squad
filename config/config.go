@@ -27,14 +27,35 @@ type Config struct {
 	AutoYes bool `json:"auto_yes"`
 	// DaemonPollInterval is the interval (ms) at which the daemon polls sessions for autoyes mode.
 	DaemonPollInterval int `json:"daemon_poll_interval"`
+	// AutoSyncEnabled determines if automatic git sync is enabled
+	AutoSyncEnabled bool `json:"auto_sync_enabled"`
+	// AutoSyncInterval is the interval (ms) between automatic sync operations
+	AutoSyncInterval int `json:"auto_sync_interval"`
+	// PullFromMain determines if sync should pull from main branch
+	PullFromMain bool `json:"pull_from_main"`
+	// UpdateSubmodules determines if sync should update submodules
+	UpdateSubmodules bool `json:"update_submodules"`
+	// AutoResolveConflicts determines if sync should try to auto-resolve conflicts
+	AutoResolveConflicts bool `json:"auto_resolve_conflicts"`
+	// EnableCrossAgentSync enables synchronization between different agents
+	EnableCrossAgentSync bool `json:"enable_cross_agent_sync"`
+	// AgentSyncInterval is the interval (ms) between cross-agent sync operations
+	AgentSyncInterval int `json:"agent_sync_interval"`
 }
 
 // DefaultConfig returns the default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		DefaultProgram:     "claude",
-		AutoYes:            false,
-		DaemonPollInterval: 1000,
+		DefaultProgram:       "claude",
+		AutoYes:              false,
+		DaemonPollInterval:   1000,
+		AutoSyncEnabled:      true,
+		AutoSyncInterval:     300000, // 5 minutes
+		PullFromMain:         true,
+		UpdateSubmodules:     true,
+		AutoResolveConflicts: false,
+		EnableCrossAgentSync: true,
+		AgentSyncInterval:    30000, // 30 seconds
 	}
 }
 
