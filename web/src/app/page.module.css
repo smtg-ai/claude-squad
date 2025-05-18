@@ -108,6 +108,22 @@ html[data-theme="dark"] .page {
   text-decoration: underline;
 }
 
+.demoVideo {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.video {
+  max-width: 100%;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  aspect-ratio: 36 / 30;
+  background-color: var(--gray-alpha-100);
+}
+
 .features {
   margin-top: 20px;
 }
@@ -142,16 +158,28 @@ html[data-theme="dark"] .page {
   margin-bottom: 16px;
 }
 
-.codeBlock {
+.codeBlockWrapper {
+  position: relative;
+  display: flex;
   background: var(--gray-alpha-200);
-  padding: 16px;
   border-radius: 8px;
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+}
+
+.codeBlock {
+  flex: 1;
+  padding: 16px;
+  padding-right: 40px;
   overflow-x: auto;
   font-family: var(--font-geist-mono);
   font-size: 14px;
   line-height: 1.4;
   white-space: pre-wrap;
-  word-break: break-word;
+  word-break: break-all;
+  margin: 0;
+  width: 100%;
 }
 
 .prerequisites {
@@ -310,10 +338,20 @@ a.secondary {
     padding: 16px;
   }
   
+  .codeBlockWrapper {
+    display: flex;
+    max-width: 100%;
+    width: 100%;
+    flex-direction: column;
+  }
+
   .codeBlock {
     font-size: 12px;
     padding: 12px;
-    overflow-x: auto;
+    width: 100%;
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow-wrap: break-word;
   }
   
   .ctas {
