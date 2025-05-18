@@ -27,8 +27,9 @@ var (
 	syncSubmodFlag   bool
 	autoResolveFlag  bool
 	rootCmd     = &cobra.Command{
-		Use:   "claude-squad",
+		Use:   "claude-squad [squad_name]",
 		Short: "Claude Squad - A terminal-based session manager",
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			log.Initialize(daemonFlag)
@@ -75,7 +76,14 @@ var (
 				log.ErrorLog.Printf("failed to stop daemon: %v", err)
 			}
 
-			return app.Run(ctx, program, autoYes)
+			// If a squad name is provided, store it for app.Run to use
+			var squadName string
+			if len(args) > 0 {
+				squadName = args[0]
+				log.InfoLog.Printf("Squad name provided: %s", squadName)
+			}
+
+			return app.Run(ctx, program, autoYes, squadName)
 		},
 	}
 

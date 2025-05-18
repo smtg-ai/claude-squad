@@ -20,9 +20,46 @@ import (
 const GlobalInstanceLimit = 1000 // Modified to allow many more simultaneous squads
 
 // Run is the main entrypoint into the application.
-func Run(ctx context.Context, program string, autoYes bool) error {
+func Run(ctx context.Context, program string, autoYes bool, squadName ...string) error {
+	// If a squad name is provided, automatically create an instance with that name
+	h := newHome(ctx, program, autoYes)
+	
+	// If a squad name was provided, pre-create an instance with that name
+	if len(squadName) > 0 && squadName[0] != "" {
+		// Create a new instance with the squad name
+		log.InfoLog.Printf("Creating instance with name: %s", squadName[0])
+		instance, err := session.NewInstance(session.InstanceOptions{
+			Title:   squadName[0],
+			Path:    ".",
+			Program: program,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create squad instance: %w", err)
+		}
+		
+		// Start the instance immediately
+		if err := instance.Start(true); err != nil {
+			return fmt.Errorf("failed to start squad instance: %w", err)
+		}
+		
+		// Set autoYes if required
+		if autoYes {
+			instance.AutoYes = true
+		}
+		
+		// Add instance to list and select it
+		finalizer := h.list.AddInstance(instance)
+		finalizer() // Immediately call the finalizer
+		h.list.SetSelectedInstance(h.list.NumInstances() - 1)
+		
+		// Save the instance
+		if err := h.storage.SaveInstances(h.list.GetInstances()); err != nil {
+			return fmt.Errorf("failed to save squad instance: %w", err)
+		}
+	}
+	
 	p := tea.NewProgram(
-		newHome(ctx, program, autoYes),
+		h,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(), // Mouse scroll
 	)
