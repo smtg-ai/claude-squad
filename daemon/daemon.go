@@ -4,6 +4,7 @@ import (
 	"claude-squad/config"
 	"claude-squad/log"
 	"claude-squad/session"
+	"claude-squad/session/git"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,6 +16,7 @@ import (
 )
 
 // RunDaemon runs the daemon process which iterates over all sessions and runs AutoYes mode on them.
+// It also handles automatic git synchronization if enabled.
 // It's expected that the main process kills the daemon when the main process starts.
 func RunDaemon(cfg *config.Config) error {
 	log.InfoLog.Printf("starting daemon")
@@ -26,7 +28,7 @@ func RunDaemon(cfg *config.Config) error {
 
 	instances, err := storage.LoadInstances()
 	if err != nil {
-		return fmt.Errorf("failed to load instacnes: %w", err)
+		return fmt.Errorf("failed to load instances: %w", err)
 	}
 	for _, instance := range instances {
 		// Assume AutoYes is true if the daemon is running.
@@ -34,11 +36,14 @@ func RunDaemon(cfg *config.Config) error {
 	}
 
 	pollInterval := time.Duration(cfg.DaemonPollInterval) * time.Millisecond
+	syncInterval := time.Duration(cfg.AutoSyncInterval) * time.Millisecond
 
-	// If we get an error for a session, it's likely that we'll keep getting the error. Log every 30 seconds.
+	// If we get an error for a session, it's likely that we'll keep getting the error. Log every 60 seconds.
 	everyN := log.NewEvery(60 * time.Second)
 
 	wg := &sync.WaitGroup{}
+	
+	// Launch auto-yes goroutine
 	wg.Add(1)
 	stopCh := make(chan struct{})
 	go func() {
@@ -70,6 +75,53 @@ func RunDaemon(cfg *config.Config) error {
 			ticker.Reset(pollInterval)
 		}
 	}()
+	
+	// Launch git sync goroutine if enabled
+	if cfg.AutoSyncEnabled {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			log.InfoLog.Printf("auto-sync enabled, will sync every %v", syncInterval)
+			syncTicker := time.NewTimer(syncInterval)
+			
+			// Create sync options from config
+			syncOptions := git.SyncOptions{
+				PullFromMain:         cfg.PullFromMain,
+				UpdateSubmodules:     cfg.UpdateSubmodules,
+				AutoResolveConflicts: cfg.AutoResolveConflicts,
+				CommitMessage:        fmt.Sprintf("Auto-sync update at %s", time.Now().Format(time.RFC3339)),
+			}
+			
+			for {
+				// Sync each active instance
+				for _, instance := range instances {
+					if instance.Started() && !instance.Paused() {
+						// Only sync if the instance has a git worktree
+						if instance.GitWorktree != nil {
+							log.InfoLog.Printf("auto-syncing instance %s", instance.Title)
+							syncStatus := instance.GitWorktree.Sync(syncOptions)
+							
+							if !syncStatus.Success {
+								log.WarningLog.Printf("auto-sync failed for %s: %v", instance.Title, syncStatus.Error)
+							} else if syncStatus.UpdatedFromMain || syncStatus.UpdatedSubmodule {
+								log.InfoLog.Printf("auto-sync updated %s: %s", instance.Title, syncStatus.Message)
+							}
+						}
+					}
+				}
+				
+				// Handle stop before ticker
+				select {
+				case <-stopCh:
+					return
+				default:
+				}
+				
+				<-syncTicker.C
+				syncTicker.Reset(syncInterval)
+			}
+		}()
+	}
 
 	// Notify on SIGINT (Ctrl+C) and SIGTERM. Save instances before
 	sigChan := make(chan os.Signal, 1)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"claude-squad/app"
+	"claude-squad/commands"
 	"claude-squad/config"
 	"claude-squad/daemon"
 	"claude-squad/log"
@@ -17,10 +18,14 @@ import (
 )
 
 var (
-	version     = "1.0.0"
-	programFlag string
-	autoYesFlag bool
-	daemonFlag  bool
+	version          = "1.0.0"
+	programFlag      string
+	autoYesFlag      bool
+	daemonFlag       bool
+	syncFlag         bool
+	pullMainFlag     bool
+	syncSubmodFlag   bool
+	autoResolveFlag  bool
 	rootCmd     = &cobra.Command{
 		Use:   "claude-squad",
 		Short: "Claude Squad - A terminal-based session manager",
@@ -156,6 +161,7 @@ func init() {
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
+	rootCmd.AddCommand(commands.SyncCmd)
 }
 
 func main() {

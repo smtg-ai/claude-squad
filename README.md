@@ -9,6 +9,9 @@ Claude Squad is a terminal app that manages multiple [Claude Code](https://githu
 - Manage instances and tasks in one terminal window
 - Review changes before applying them, checkout changes before pushing them
 - Each task gets its own isolated git workspace, so no conflicts
+- Automatic git synchronization keeps your branches up-to-date with main
+- Cross-agent synchronization for coordinated multi-agent workflows
+- Submodule support with automatic updates
 
 <br />
 
@@ -49,6 +52,7 @@ Available Commands:
   debug       Print debug information like config paths
   help        Help about any command
   reset       Reset all stored instances
+  sync        Sync git repositories with main and update submodules
   version     Print the version number of claude-squad
 
 Flags:
@@ -101,6 +105,38 @@ The menu at the bottom of the screen shows available commands:
 1. **tmux** to create isolated terminal sessions for each agent
 2. **git worktrees** to isolate codebases so each session works on its own branch
 3. A simple TUI interface for easy navigation and management
+4. **Automatic synchronization** to keep branches up-to-date with main branch
+5. **Submodule support** for working with complex repository structures
+6. **Cross-agent communication** for coordinated multi-agent workflows
+
+### Git Synchronization
+
+Claude Squad supports automatic git synchronization to keep your branches up-to-date with the main branch and update submodules. This can be configured in the settings or used on-demand:
+
+```bash
+# Sync a specific instance
+cs sync my-instance-name
+
+# Sync all instances
+cs sync --all
+
+# Sync with specific options
+cs sync --all --pull-main --update-submodules --auto-resolve
+
+# Check sync status
+cs debug
+```
+
+### Multi-Agent Coordination
+
+Claude Squad supports communication between different agent instances, allowing them to:
+
+1. Share context and state information
+2. Coordinate on complex tasks
+3. Avoid duplicating work
+4. Pass information between specialists
+
+This enables powerful workflows where multiple agents can work together on different aspects of the same project, with automatic synchronization between their workspaces.
 
 ### License
 
