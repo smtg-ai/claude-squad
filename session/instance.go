@@ -4,11 +4,40 @@ import (
 	"claude-squad/log"
 	"claude-squad/session/git"
 	"claude-squad/session/tmux"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
+
+// Status represents the current state of an instance
+type Status string
+
+const (
+	// Running indicates the instance is actively running and processing
+	Running Status = "running"
+	// Ready indicates the instance is waiting for input
+	Ready Status = "ready"
+	// Paused indicates the instance is temporarily stopped
+	Paused Status = "paused"
+	// Waiting indicates the instance is waiting for something
+	Waiting Status = "waiting"
+)
+
+// InstanceOptions contains options for creating a new instance
+type InstanceOptions struct {
+	// Title of the session
+	Title string
+	// Path to the working directory
+	Path string
+	// Program is the name of the program to run
+	Program string
+	// DisableGit disables git functionality
+	DisableGit bool
+	// AutoYes enables auto-yes mode
+	AutoYes bool
+}
 
 // Instance represents a session instance
 type Instance struct {
@@ -43,17 +72,25 @@ type Instance struct {
 	Tags []string
 	// CustomMetadata stores additional instance-specific metadata
 	CustomMetadata map[string]interface{}
+	// Status represents the current state of the instance
+	Status Status
+	// Branch is the git branch name
+	Branch string
 }
 
-// NewInstance creates a new instance
-func NewInstance(id, title, program string, autoYes bool) *Instance {
-	return &Instance{
+// NewInstance creates a new instance with the provided options
+func NewInstance(opts InstanceOptions) (*Instance, error) {
+	// Generate a unique ID based on the title and timestamp
+	timestamp := time.Now().UnixNano()
+	id := fmt.Sprintf("%s_%d", strings.ReplaceAll(opts.Title, " ", "_"), timestamp)
+	
+	instance := &Instance{
 		ID:             id,
-		Title:          title,
+		Title:          opts.Title,
 		CreatedAt:      time.Now(),
-		Program:        program,
-		AutoYes:        autoYes,
-		DisableGit:     false,
+		Program:        opts.Program,
+		AutoYes:        opts.AutoYes,
+		DisableGit:     opts.DisableGit,
 		TmuxSessionName: "",
 		TmuxWindow:     "",
 		TmuxPane:       "",
@@ -61,7 +98,117 @@ func NewInstance(id, title, program string, autoYes bool) *Instance {
 		GitWorktree:    nil,
 		Tags:           []string{},
 		CustomMetadata: make(map[string]interface{}),
+		Status:         Waiting,
+		Branch:         "session/" + id,
 	}
+	
+	return instance, nil
+}
+
+// Start starts the instance
+func (i *Instance) Start(createWorktree bool) error {
+	if i.Started() {
+		return nil
+	}
+	
+	// If git is enabled, create a worktree
+	if !i.DisableGit && createWorktree {
+		// Create git worktree
+		worktreePath, err := filepath.Abs(filepath.Join("worktrees", i.ID))
+		if err != nil {
+			return err
+		}
+		repoPath, err := git.FindGitRepo(".")
+		if err != nil {
+			return err
+		}
+		branchName := "session/" + i.ID
+		i.Branch = branchName
+
+		i.GitWorktree = git.NewGitWorktree(repoPath, worktreePath, branchName)
+		if err := i.GitWorktree.Setup(); err != nil {
+			return err
+		}
+	}
+	
+	// Create tmux session
+	tmuxSession, err := tmux.CreateSession("", i.Program)
+	if err != nil {
+		return err
+	}
+	
+	i.TmuxSessionName = tmuxSession.SessionName
+	i.TmuxWindow = tmuxSession.Window
+	i.TmuxPane = tmuxSession.Pane
+	i.Status = Running
+	
+	// Change to git worktree directory if available
+	if i.GitWorktree != nil && !i.DisableGit {
+		if err := tmux.SendCommand(i.TmuxSessionName, i.TmuxWindow, i.TmuxPane, "cd "+i.GitWorktree.WorktreePath()); err != nil {
+			return err
+		}
+	}
+	
+	return nil
+}
+
+// SetTitle sets the title of the instance
+func (i *Instance) SetTitle(title string) error {
+	i.Title = title
+	return nil
+}
+
+// SetPreviewSize sets the preview size for the tmux session
+func (i *Instance) SetPreviewSize(width, height int) error {
+	return tmux.SetPreviewSize(i.TmuxSessionName, i.TmuxWindow, i.TmuxPane, width, height)
+}
+
+// Preview returns the current content of the tmux pane
+func (i *Instance) Preview() (string, error) {
+	return i.Content, nil
+}
+
+// RepoName returns the name of the repository
+func (i *Instance) RepoName() (string, error) {
+	if i.GitWorktree == nil {
+		return "", fmt.Errorf("git worktree not initialized")
+	}
+	return i.GitWorktree.RepoName()
+}
+
+// GetGitWorktree returns the git worktree
+func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {
+	if i.GitWorktree == nil {
+		return nil, fmt.Errorf("git worktree not initialized")
+	}
+	return i.GitWorktree, nil
+}
+
+// Kill stops the instance and cleans up resources
+func (i *Instance) Kill() error {
+	return i.Stop()
+}
+
+// SendPrompt sends a prompt to the tmux pane
+func (i *Instance) SendPrompt(prompt string) error {
+	if !i.Started() {
+		return fmt.Errorf("instance not started")
+	}
+	return tmux.SendCommand(i.TmuxSessionName, i.TmuxWindow, i.TmuxPane, prompt)
+}
+
+// TmuxAlive checks if the tmux session is still alive
+func (i *Instance) TmuxAlive() bool {
+	return tmux.IsSessionAlive(i.TmuxSessionName)
+}
+
+// GetDiffStats returns the diff stats for this instance
+func (i *Instance) GetDiffStats() *git.DiffStats {
+	if i.GitWorktree == nil || i.DiffStats == "" {
+		return nil
+	}
+	
+	return i.GitWorktree.ParseDiffStats(i.DiffStats)
 }
 
 // Started returns whether this instance has been started
@@ -71,7 +218,15 @@ func (i *Instance) Started() bool {
 
 // Paused returns whether this instance has been paused
 func (i *Instance) Paused() bool {
-	return i.State == "paused"
+	return i.State == "paused" || i.Status == Paused
+}
+
+// SetStatus sets the instance status
+func (i *Instance) SetStatus(status Status) {
+	i.Status = status
+	if status == Paused {
+		i.State = "paused"
+	}
 }
 
 // HasUpdated returns whether this instance has updated content
@@ -159,6 +314,7 @@ func (i *Instance) Stop() error {
 	i.TmuxWindow = ""
 	i.TmuxPane = ""
 	i.Content = ""
+	i.Status = Waiting
 
 	if i.GitWorktree != nil && !i.DisableGit {
 		if err := i.GitWorktree.Cleanup(); err != nil {
@@ -181,6 +337,7 @@ func (i *Instance) Pause() error {
 	}
 
 	i.State = "paused"
+	i.Status = Paused
 	return nil
 }
 
@@ -219,6 +376,7 @@ func (i *Instance) Resume() error {
 	i.TmuxWindow = tmuxSession.Window
 	i.TmuxPane = tmuxSession.Pane
 	i.State = ""
+	i.Status = Running
 
 	// Change to git worktree directory
 	if i.GitWorktree != nil && !i.DisableGit {
@@ -301,4 +459,73 @@ func (i *Instance) WorktreeExists() bool {
 	
 	_, err := os.Stat(i.GitWorktree.WorktreePath())
 	return !os.IsNotExist(err)
+}
+
+// ToInstanceData converts an Instance to InstanceData for serialization
+func (i *Instance) ToInstanceData() InstanceData {
+	data := InstanceData{
+		Title:     i.Title,
+		Path:      ".",
+		Branch:    i.Branch,
+		Status:    i.Status,
+		CreatedAt: i.CreatedAt,
+		UpdatedAt: time.Now(),
+		AutoYes:   i.AutoYes,
+		Program:   i.Program,
+	}
+
+	// Include GitWorktree data if available
+	if i.GitWorktree != nil {
+		data.Worktree = GitWorktreeData{
+			RepoPath:      i.GitWorktree.RepoPath(),
+			WorktreePath:  i.GitWorktree.WorktreePath(),
+			BranchName:    i.GitWorktree.BranchName(),
+			BaseCommitSHA: i.GitWorktree.BaseCommitSHA(),
+		}
+	}
+
+	// Include DiffStats data if available
+	if stats := i.GetDiffStats(); stats != nil {
+		data.DiffStats = DiffStatsData{
+			Added:   stats.Added,
+			Removed: stats.Removed,
+			Content: i.DiffStats,
+		}
+	}
+
+	return data
+}
+
+// FromInstanceData creates an Instance from InstanceData
+func FromInstanceData(data InstanceData) (*Instance, error) {
+	instance := &Instance{
+		ID:        data.Title, // Use title as ID for restored instances
+		Title:     data.Title,
+		Program:   data.Program,
+		CreatedAt: data.CreatedAt,
+		AutoYes:   data.AutoYes,
+		Status:    data.Status,
+		Branch:    data.Branch,
+	}
+
+	// Create GitWorktree if worktree data is available
+	if data.Worktree.BranchName != "" {
+		instance.GitWorktree = git.NewGitWorktree(
+			data.Worktree.RepoPath,
+			data.Worktree.WorktreePath,
+			data.Worktree.BranchName,
+		)
+		instance.GitWorktree.SetBaseCommitSHA(data.Worktree.BaseCommitSHA)
+	}
+
+	// Set DiffStats if available
+	if data.DiffStats.Content != "" {
+		instance.DiffStats = data.DiffStats.Content
+	}
+
+	// Mark as paused since we're restoring
+	instance.Status = Paused
+	instance.State = "paused"
+
+	return instance, nil
 }

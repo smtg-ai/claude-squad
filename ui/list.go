@@ -11,11 +11,31 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Status icons
 const readyIcon = "● "
 const pausedIcon = "⏸ "
+const runningIcon = "⟳ "
+const waitingIcon = "⧗ "
 
+// Squad type icons
+const archIcon = "🏛️ "  // Architecture
+const uiuxIcon = "🎨 "  // UI/UX
+const perfIcon = "⚡ "  // Performance
+const secIcon = "🔒 "   // Security
+const testIcon = "🧪 "  // Testing
+const docsIcon = "📝 "  // Documentation
+const integIcon = "🔄 " // Integration
+const otherIcon = "✦ "  // Other
+
+// Styles
 var readyStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.AdaptiveColor{Light: "#51bd73", Dark: "#51bd73"})
+
+var runningStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.AdaptiveColor{Light: "#2E86C1", Dark: "#5DADE2"})
+
+var waitingStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.AdaptiveColor{Light: "#F39C12", Dark: "#F5B041"})
 
 var addedLinesStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.AdaptiveColor{Light: "#51bd73", Dark: "#51bd73"})
@@ -51,6 +71,18 @@ var mainTitle = lipgloss.NewStyle().
 var autoYesStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("#dde4f0")).
 	Foreground(lipgloss.Color("#1a1a1a"))
+
+var tagStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#888888")).
+	Italic(true)
+
+var previewWordStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#5758BB")).
+	Bold(true)
+
+var metadataStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.AdaptiveColor{Light: "#777777", Dark: "#999999"}).
+	Italic(true)
 
 type List struct {
 	items         []*session.Instance
@@ -111,7 +143,72 @@ func (r *InstanceRenderer) setWidth(width int) {
 }
 
 // ɹ and ɻ are other options.
-const branchIcon = "Ꮧ"
+const branchIcon = "↱"
+
+// getSquadIcon returns an appropriate icon based on the squad name
+func getSquadIcon(title string) string {
+	title = strings.ToLower(title)
+	
+	if strings.Contains(title, "arch") {
+		return archIcon
+	} else if strings.Contains(title, "ui") || strings.Contains(title, "ux") {
+		return uiuxIcon
+	} else if strings.Contains(title, "perf") {
+		return perfIcon
+	} else if strings.Contains(title, "sec") {
+		return secIcon
+	} else if strings.Contains(title, "test") {
+		return testIcon
+	} else if strings.Contains(title, "doc") {
+		return docsIcon
+	} else if strings.Contains(title, "integ") {
+		return integIcon
+	}
+	
+	return otherIcon
+}
+
+// getStatusIcon returns the appropriate icon and style for the instance status
+func getStatusIcon(i *session.Instance) (string, lipgloss.Style) {
+	switch i.Status {
+	case session.Running:
+		return runningIcon, runningStyle
+	case session.Ready:
+		return readyIcon, readyStyle
+	case session.Paused:
+		return pausedIcon, pausedStyle
+	case session.Waiting:
+		return waitingIcon, waitingStyle
+	default:
+		return "", lipgloss.NewStyle()
+	}
+}
+
+// extractPreviewWord tries to extract a meaningful word or task from the preview content
+func extractPreviewWord(content string) string {
+	if content == "" {
+		return ""
+	}
+	
+	// Check for specific patterns that indicate what the squad is working on
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		// Look for patterns like "Working on: X" or "Current task: X"
+		for _, pattern := range []string{"Working on:", "Current task:", "Task:", "Implementing:", "Fixing:", "Analyzing:"} {
+			if idx := strings.Index(line, pattern); idx >= 0 {
+				task := strings.TrimSpace(line[idx+len(pattern):])
+				if len(task) > 30 {
+					task = task[:27] + "..."
+				}
+				if task != "" {
+					return task
+				}
+			}
+		}
+	}
+	
+	return ""
+}
 
 func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, hasMultipleRepos bool) string {
 	prefix := fmt.Sprintf(" %d. ", idx)
@@ -125,37 +222,31 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		descS = listDescStyle
 	}
 
-	// add spinner next to title if it's running
-	var join string
-	switch i.Status {
-	case session.Running:
-		join = fmt.Sprintf("%s ", r.spinner.View())
-	case session.Ready:
-		join = readyStyle.Render(readyIcon)
-	case session.Paused:
-		join = pausedStyle.Render(pausedIcon)
-	default:
-	}
+	// Get squad icon and status icon
+	squadIcon := getSquadIcon(i.Title)
+	statusIcon, statusStyle := getStatusIcon(i)
 
 	// Cut the title if it's too long
 	titleText := i.Title
-	widthAvail := r.width - 3 - len(prefix) - 1
+	widthAvail := r.width - 3 - len(prefix) - 3 // Account for prefix and icons
 	if widthAvail > 0 && widthAvail < len(titleText) && len(titleText) >= widthAvail-3 {
 		titleText = titleText[:widthAvail-3] + "..."
 	}
+	
+	// Create title line with squad icon and status
 	title := titleS.Render(lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		lipgloss.Place(r.width-3, 1, lipgloss.Left, lipgloss.Center, fmt.Sprintf("%s %s", prefix, titleText)),
+		lipgloss.Place(r.width-3, 1, lipgloss.Left, lipgloss.Center, 
+			fmt.Sprintf("%s%s%s", prefix, squadIcon, titleText)),
 		" ",
-		join,
+		statusStyle.Render(statusIcon),
 	))
 
+	// Get diff stats
 	stat := i.GetDiffStats()
-
 	var diff string
 	var addedDiff, removedDiff string
 	if stat == nil || stat.Error != nil || stat.IsEmpty() {
-		// Don't show diff stats if there's an error or if they don't exist
 		addedDiff = ""
 		removedDiff = ""
 		diff = ""
@@ -170,6 +261,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		)
 	}
 
+	// Branch info line
 	remainingWidth := r.width
 	remainingWidth -= len(prefix)
 	remainingWidth -= len(branchIcon)
@@ -191,6 +283,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 			branch += fmt.Sprintf(" (%s)", repoName)
 		}
 	}
+	
 	// Don't show branch if there's no space for it. Or show ellipsis if it's too long.
 	if remainingWidth < 0 {
 		branch = ""
@@ -210,20 +303,58 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		spaces = strings.Repeat(" ", remainingWidth)
 	}
 
-	branchLine := fmt.Sprintf("%s %s-%s%s%s", strings.Repeat(" ", len(prefix)), branchIcon, branch, spaces, diff)
-
-	// join title and subtitle
+	branchLine := fmt.Sprintf("%s %s %s%s%s", strings.Repeat(" ", len(prefix)), branchIcon, branch, spaces, diff)
+	
+	// Add preview word/task line if we can extract it
+	var previewLine string
+	if i.Started() && !i.Paused() {
+		previewWord := extractPreviewWord(i.Content)
+		if previewWord != "" {
+			previewLine = fmt.Sprintf("%s %s", strings.Repeat(" ", len(prefix)), 
+				previewWordStyle.Render("⟿ "+previewWord))
+		}
+	}
+	
+	// Add tags line if there are any
+	var tagsLine string
+	if len(i.Tags) > 0 {
+		tagsText := "#" + strings.Join(i.Tags, " #")
+		if len(tagsText) > r.width-3 {
+			tagsText = tagsText[:r.width-6] + "..."
+		}
+		tagsLine = fmt.Sprintf("%s %s", strings.Repeat(" ", len(prefix)), 
+			tagStyle.Render(tagsText))
+	}
+	
+	// Add metadata line with creation time
+	metadataLine := fmt.Sprintf("%s %s", strings.Repeat(" ", len(prefix)),
+		metadataStyle.Render(fmt.Sprintf("Created: %s", i.CreatedAt.Format("Jan 2 15:04"))))
+	
+	// Build the final rendered view
+	renderedLines := []string{title, descS.Render(branchLine)}
+	
+	// Only add optional lines if they have content
+	if previewLine != "" {
+		renderedLines = append(renderedLines, descS.Render(previewLine))
+	}
+	
+	if tagsLine != "" {
+		renderedLines = append(renderedLines, descS.Render(tagsLine))
+	}
+	
+	renderedLines = append(renderedLines, descS.Render(metadataLine))
+	
+	// join all components
 	text := lipgloss.JoinVertical(
 		lipgloss.Left,
-		title,
-		descS.Render(branchLine),
+		renderedLines...,
 	)
 
 	return text
 }
 
 func (l *List) String() string {
-	const titleText = " Instances "
+	const titleText = " Squads "
 	const autoYesText = " auto-yes "
 
 	// Write the title.
