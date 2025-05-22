@@ -38,6 +38,8 @@ const (
 	stateNew
 	// statePrompt is the state when the user is entering a prompt.
 	statePrompt
+	// stateSelectAssistant is the state when the user is selecting an assistant.
+	stateSelectAssistant
 	// stateHelp is the state when a help screen is displayed.
 	stateHelp
 )
@@ -71,6 +73,8 @@ type home struct {
 
 	// promptAfterName tracks if we should enter prompt mode after naming
 	promptAfterName bool
+	// selectAssistantAfterName tracks if we should enter assistant selection mode after naming
+	selectAssistantAfterName bool
 
 	// textInputOverlay is the component for handling text input with state
 	textInputOverlay *overlay.TextInputOverlay
@@ -108,6 +112,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		autoYes:      autoYes,
 		state:        stateDefault,
 		appState:     appState,
+		selectAssistantAfterName: false,
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 
@@ -310,10 +315,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
-			if err := instance.Start(true); err != nil {
-				m.list.Kill()
-				m.state = stateDefault
-				return m, m.handleError(err)
+			// Only start the instance now if we're not going to select an assistant
+			if !m.selectAssistantAfterName {
+				if err := instance.Start(true); err != nil {
+					m.list.Kill()
+					m.state = stateDefault
+					return m, m.handleError(err)
+				}
 			}
 			// Save after adding new instance
 			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
@@ -333,6 +341,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				// Initialize the text input overlay
 				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
 				m.promptAfterName = false
+			} else if m.selectAssistantAfterName {
+				m.state = stateSelectAssistant
+				m.menu.SetState(ui.StateSelectAssistant)
+				// Initialize the text input overlay for selecting assistant
+				m.textInputOverlay = overlay.NewTextInputOverlay("Enter assistant (e.g. claude, aider, codex)", m.program)
+				m.selectAssistantAfterName = false
 			} else {
 				m.menu.SetState(ui.StateDefault)
 				m.showHelpScreen(helpTypeInstanceStart, nil)
@@ -403,6 +417,48 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		return m, nil
+	} else if m.state == stateSelectAssistant {
+		// Use the TextInputOverlay component to handle all key events
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+
+		// Check if the form was submitted or canceled
+		if shouldClose {
+			if m.textInputOverlay.IsSubmitted() {
+				// Form was submitted, process the input
+				selected := m.list.GetSelectedInstance()
+				if selected == nil {
+					return m, nil
+				}
+				// Update the program for this instance only
+				selected.Program = m.textInputOverlay.GetValue()
+				
+				// Now start the instance with the selected assistant
+				if err := selected.Start(true); err != nil {
+					m.list.Kill()
+					m.state = stateDefault
+					return m, m.handleError(err)
+				}
+				
+				// Save after adding new instance
+				if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+					return m, m.handleError(err)
+				}
+			}
+
+			// Close the overlay and reset state
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			return m, tea.Sequence(
+				tea.WindowSize(),
+				func() tea.Msg {
+					m.menu.SetState(ui.StateDefault)
+					m.showHelpScreen(helpTypeInstanceStart, nil)
+					return nil
+				},
+			)
+		}
+
+		return m, nil
 	}
 
 	// Handle quit commands first
@@ -437,6 +493,27 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.state = stateNew
 		m.menu.SetState(ui.StateNewInstance)
 		m.promptAfterName = true
+
+		return m, nil
+	case keys.KeyNewWithAI:
+		if m.list.NumInstances() >= GlobalInstanceLimit {
+			return m, m.handleError(
+				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
+		}
+		instance, err := session.NewInstance(session.InstanceOptions{
+			Title:   "",
+			Path:    ".",
+			Program: m.program,
+		})
+		if err != nil {
+			return m, m.handleError(err)
+		}
+
+		m.newInstanceFinalizer = m.list.AddInstance(instance)
+		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+		m.state = stateNew
+		m.menu.SetState(ui.StateNewInstance)
+		m.selectAssistantAfterName = true
 
 		return m, nil
 	case keys.KeyNew:
@@ -645,7 +722,7 @@ func (m *home) View() string {
 		m.errBox.String(),
 	)
 
-	if m.state == statePrompt {
+	if m.state == statePrompt || m.state == stateSelectAssistant {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}

@@ -22,8 +22,9 @@ const (
 
 	KeyCheckout
 	KeyResume
-	KeyPrompt // New key for entering a prompt
-	KeyHelp   // Key for showing help screen
+	KeyPrompt     // New key for entering a prompt
+	KeyNewWithAI  // New key for creating a new instance with custom AI
+	KeyHelp       // Key for showing help screen
 
 	// Diff keybindings
 	KeyShiftUp
@@ -39,6 +40,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"shift+up":   KeyShiftUp,
 	"shift+down": KeyShiftDown,
 	"N":          KeyPrompt,
+	"A":          KeyNewWithAI,
 	"enter":      KeyEnter,
 	"o":          KeyEnter,
 	"n":          KeyNew,
@@ -96,6 +98,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyPrompt: key.NewBinding(
 		key.WithKeys("N"),
 		key.WithHelp("N", "new with prompt"),
+	),
+	KeyNewWithAI: key.NewBinding(
+		key.WithKeys("A"),
+		key.WithHelp("A", "new with custom AI"),
 	),
 	KeyCheckout: key.NewBinding(
 		key.WithKeys("c"),

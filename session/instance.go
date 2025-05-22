@@ -195,7 +195,13 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	i.tmuxSession = tmuxSession
 
 	if firstTimeSetup {
-		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
+		// Use the Program field (assistant type) to create a unique worktree and branch
+		assistantType := i.Program
+		if assistantType == "" {
+			assistantType = "claude" // Default to claude if not specified
+		}
+		
+		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title, assistantType)
 		if err != nil {
 			return fmt.Errorf("failed to create git worktree: %w", err)
 		}

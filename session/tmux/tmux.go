@@ -78,7 +78,7 @@ func (t *TmuxSession) Start(program string, workDir string) error {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
 	}
 
-	// Create a new detached tmux session and start claude in it
+	// Create a new detached tmux session and start the specified program in it
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, program)
 
 	ptmx, err := pty.Start(cmd)
@@ -110,6 +110,10 @@ func (t *TmuxSession) Start(program string, workDir string) error {
 	}
 	ptmx.Close()
 
+	// Store the program name before restoring the session
+	// This ensures HasUpdated will correctly check for the right prompt pattern
+	t.program = program
+	
 	err = t.Restore()
 	if err != nil {
 		if cleanupErr := t.Close(); cleanupErr != nil {
@@ -118,25 +122,40 @@ func (t *TmuxSession) Start(program string, workDir string) error {
 		return fmt.Errorf("error restoring tmux session: %w", err)
 	}
 
-	if program == ProgramClaude || strings.HasPrefix(program, ProgramAider) {
-		searchString := "Do you trust the files in this folder?"
-		tapFunc := t.TapEnter
-		iterations := 5
-		if program != ProgramClaude {
-			searchString = "Open documentation url for more info"
-			tapFunc = t.TapDAndEnter
-			iterations = 10 // Aider takes longer to start :/
-		}
-		// Deal with "do you trust the files" screen by sending an enter keystroke.
+	// Handle startup prompts for different AI assistants
+	searchString := ""
+	tapFunc := t.TapEnter
+	iterations := 5
+	
+	// Configure according to the AI assistant type
+	switch {
+	case program == ProgramClaude:
+		searchString = "Do you trust the files in this folder?"
+	case strings.HasPrefix(program, ProgramAider):
+		searchString = "Open documentation url for more info"
+		tapFunc = t.TapDAndEnter
+		iterations = 10 // Aider takes longer to start
+	case program == "codex":
+		searchString = "Codex is ready"
+		iterations = 10
+	default:
+		// For unknown programs, we'll look for common prompt patterns
+		searchString = "Press Enter to continue"
+	}
+	
+	// Only proceed if we have a search string defined
+	if searchString != "" {
+		// Deal with startup screens by sending appropriate keystrokes
 		for i := 0; i < iterations; i++ {
 			time.Sleep(200 * time.Millisecond)
 			content, err := t.CapturePaneContent()
 			if err != nil {
-				log.ErrorLog.Printf("could not check 'do you trust the files screen': %v", err)
+				log.ErrorLog.Printf("could not check startup screen: %v", err)
+				continue
 			}
 			if strings.Contains(content, searchString) {
 				if err := tapFunc(); err != nil {
-					log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
+					log.ErrorLog.Printf("could not tap keys on startup screen: %v", err)
 				}
 				break
 			}
@@ -205,11 +224,24 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 		return false, false
 	}
 
-	// Only set hasPrompt for claude and aider. Use these strings to check for a prompt.
-	if t.program == ProgramClaude {
+	// Check for prompts specific to different AI assistants
+	switch {
+	case t.program == ProgramClaude:
 		hasPrompt = strings.Contains(content, "No, and tell Claude what to do differently")
-	} else if strings.HasPrefix(t.program, ProgramAider) {
+	case strings.HasPrefix(t.program, ProgramAider):
 		hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
+	case t.program == "codex":
+		hasPrompt = strings.Contains(content, "Codex>") || 
+		            strings.Contains(content, "Please confirm") ||
+		            strings.Contains(content, "[y/n]")
+	default:
+		// For unknown assistants, look for common prompt patterns
+		hasPrompt = (strings.Contains(content, "?") && 
+		            (strings.Contains(content, "Y/n") || 
+		             strings.Contains(content, "y/N") || 
+		             strings.Contains(content, "Y/N") ||
+		             strings.Contains(content, "y/n"))) ||
+		             strings.Contains(content, ">") // Common prompt character
 	}
 
 	if !bytes.Equal(t.monitor.hash(content), t.monitor.prevOutputHash) {

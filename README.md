@@ -72,6 +72,8 @@ cs
    - Codex: `cs -p "codex"`
    - Aider: `cs -p "aider ..."`
 - Make this the default, by modifying the config file (locate with `cs debug`)
+- You can also choose a different assistant for each session by pressing `A` when creating a new session
+- Each session with a different assistant gets its own isolated git worktree
 
 <br />
 
@@ -81,6 +83,7 @@ The menu at the bottom of the screen shows available commands:
 ##### Instance/Session Management
 - `n` - Create a new session
 - `N` - Create a new session with a prompt
+- `A` - Create a new session with a custom AI assistant
 - `D` - Kill (delete) the selected session
 - `↑/j`, `↓/k` - Navigate between sessions
 
