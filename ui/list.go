@@ -135,6 +135,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	case session.Paused:
 		join = pausedStyle.Render(pausedIcon)
 	default:
+		join = "  "
 	}
 
 	// Cut the title if it's too long
@@ -212,14 +213,8 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 
 	branchLine := fmt.Sprintf("%s %s-%s%s%s", strings.Repeat(" ", len(prefix)), branchIcon, branch, spaces, diff)
 
-	// join title and subtitle
-	text := lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		descS.Render(branchLine),
-	)
-
-	return text
+	// join title and subtitle without extra newlines
+	return lipgloss.JoinVertical(lipgloss.Left, title, descS.Render(branchLine))
 }
 
 func (l *List) String() string {

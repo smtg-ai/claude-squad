@@ -45,6 +45,8 @@ func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName
 func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, branchname string, err error) {
 	cfg := config.LoadConfig()
 	sanitizedName := sanitizeBranchName(sessionName)
+
+	// Include assistant type in branch name to ensure uniqueness
 	branchName := fmt.Sprintf("%s%s", cfg.BranchPrefix, sanitizedName)
 
 	// Convert repoPath to absolute path
@@ -65,7 +67,8 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 		return nil, "", err
 	}
 
-	worktreePath := filepath.Join(worktreeDir, sanitizedName)
+	// Include assistant type in worktree path to ensure uniqueness
+	worktreePath := filepath.Join(worktreeDir, fmt.Sprintf("%s", sanitizedName))
 	worktreePath = worktreePath + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
 
 	return &GitWorktree{
