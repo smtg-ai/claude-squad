@@ -377,18 +377,7 @@ func (i *Instance) Attach() (chan struct{}, error) {
 		return nil, fmt.Errorf("no tmux session available")
 	}
 	
-	// Create a channel that will be closed when the session detaches
-	done := make(chan struct{})
-	
-	// This is a simplified implementation - in a real scenario,
-	// you'd want to handle tmux attach/detach events properly
-	go func() {
-		defer close(done)
-		// Wait for session to be detached or closed
-		// This is a placeholder implementation
-	}()
-	
-	return done, nil
+	return i.tmuxSession.Attach()
 }
 
 // Preview returns a preview of the instance content
@@ -406,8 +395,41 @@ func (i *Instance) Start(resume bool) error {
 	if resume {
 		return i.Resume()
 	} else {
-		// Start new instance logic
-		return i.Resume() // For now, use Resume logic
+		// Start new instance logic - create git worktree and tmux session
+		if i.Started() {
+			return fmt.Errorf("instance already started")
+		}
+
+		// Create git worktree if not disabled
+		if !i.DisableGit {
+			repoPath, err := git.FindGitRepo(".")
+			if err != nil {
+				return fmt.Errorf("failed to find git repo: %w", err)
+			}
+
+			i.GitWorktree, _, err = git.NewGitWorktree(repoPath, i.ID)
+			if err != nil {
+				return fmt.Errorf("failed to create git worktree: %w", err)
+			}
+			i.Branch = i.GitWorktree.GetBranchName()
+		}
+
+		// Create and start tmux session
+		i.tmuxSession = tmux.NewTmuxSession(i.ID, i.Program)
+		workDir := "."
+		if i.GitWorktree != nil {
+			workDir = i.GitWorktree.GetWorktreePath()
+		}
+		
+		if err := i.tmuxSession.Start(i.Program, workDir); err != nil {
+			return fmt.Errorf("failed to start tmux session: %w", err)
+		}
+
+		i.TmuxSessionName = i.tmuxSession.Name
+		i.Status = StatusActive
+		i.State = ""
+
+		return nil
 	}
 }
 
