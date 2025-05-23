@@ -166,24 +166,24 @@ func (sc *SynchronizationCoordinator) recordSyncSuccess() {
 // Git Operations Implementation
 
 // Fetch fetches the latest changes from remote
-func (go *GitOperations) Fetch() error {
+func (g *GitOperations) Fetch() error {
 	cmd := exec.Command("git", "fetch", "--all")
-	cmd.Dir = go.repoPath
+	cmd.Dir = g.repoPath
 	return cmd.Run()
 }
 
 // Pull pulls changes from the main branch
-func (go *GitOperations) Pull() error {
+func (g *GitOperations) Pull() error {
 	cmd := exec.Command("git", "pull", "origin", "main")
-	cmd.Dir = go.repoPath
+	cmd.Dir = g.repoPath
 	return cmd.Run()
 }
 
 // Push pushes changes with squad-specific commit message
-func (go *GitOperations) Push(squadID string) error {
+func (g *GitOperations) Push(squadID string) error {
 	// Check if there are changes to commit
 	cmd := exec.Command("git", "status", "--porcelain")
-	cmd.Dir = go.repoPath
+	cmd.Dir = g.repoPath
 	output, err := cmd.Output()
 	if err != nil {
 		return err
@@ -193,7 +193,7 @@ func (go *GitOperations) Push(squadID string) error {
 	if len(output) > 0 {
 		// Add all changes
 		addCmd := exec.Command("git", "add", ".")
-		addCmd.Dir = go.repoPath
+		addCmd.Dir = g.repoPath
 		if err := addCmd.Run(); err != nil {
 			return err
 		}
@@ -202,7 +202,7 @@ func (go *GitOperations) Push(squadID string) error {
 		commitMsg := fmt.Sprintf("[claude-squad] Auto-sync from %s squad at %s", 
 			squadID, time.Now().Format(time.RFC3339))
 		commitCmd := exec.Command("git", "commit", "-m", commitMsg)
-		commitCmd.Dir = go.repoPath
+		commitCmd.Dir = g.repoPath
 		if err := commitCmd.Run(); err != nil {
 			return err
 		}
@@ -210,15 +210,15 @@ func (go *GitOperations) Push(squadID string) error {
 	
 	// Push to remote
 	pushCmd := exec.Command("git", "push", "origin", "main")
-	pushCmd.Dir = go.repoPath
+	pushCmd.Dir = g.repoPath
 	return pushCmd.Run()
 }
 
 // CheckConflicts checks for merge conflicts
-func (go *GitOperations) CheckConflicts() ([]string, error) {
+func (g *GitOperations) CheckConflicts() ([]string, error) {
 	// Check git status for conflict markers
 	cmd := exec.Command("git", "status", "--porcelain")
-	cmd.Dir = go.repoPath
+	cmd.Dir = g.repoPath
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, err

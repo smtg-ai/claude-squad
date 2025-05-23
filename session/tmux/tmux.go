@@ -159,18 +159,48 @@ func (t *TmuxSession) Restore() error {
 type statusMonitor struct {
 	// Store hashes to save memory.
 	prevOutputHash []byte
+	// Content cache with size limit
+	lastContent string
+	lastSize    int
+	maxSize     int
 }
 
 func newStatusMonitor() *statusMonitor {
-	return &statusMonitor{}
+	return &statusMonitor{
+		maxSize: 64 * 1024, // 64KB limit for content caching
+	}
 }
 
-// hash hashes the string.
+// hash hashes the string efficiently with size limits
 func (m *statusMonitor) hash(s string) []byte {
+	// If content is too large, only hash the last portion
+	if len(s) > m.maxSize {
+		s = s[len(s)-m.maxSize:]
+	}
+	
+	// Use faster hash for large content
+	if len(s) > 8192 {
+		return m.fastHash(s)
+	}
+	
 	h := sha256.New()
-	// TODO: this allocation sucks since the string is probably large. Ideally, we hash the string directly.
 	h.Write([]byte(s))
 	return h.Sum(nil)
+}
+
+// fastHash provides faster hashing for large content
+func (m *statusMonitor) fastHash(s string) []byte {
+	// Simple but fast hash for change detection
+	var hash uint64 = 14695981039346656037 // FNV offset basis
+	for i := 0; i < len(s); i++ {
+		hash ^= uint64(s[i])
+		hash *= 1099511628211 // FNV prime
+	}
+	result := make([]byte, 8)
+	for i := 0; i < 8; i++ {
+		result[i] = byte(hash >> (i * 8))
+	}
+	return result
 }
 
 // TapEnter sends an enter keystroke to the tmux pane.

@@ -224,7 +224,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(
 			cmd,
 			func() tea.Msg {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(200 * time.Millisecond)
 				return previewTickMsg{}
 			},
 		)
@@ -581,9 +581,25 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		selected := m.list.GetSelectedInstance()
-		if selected == nil || selected.Paused() || !selected.TmuxAlive() {
+		if selected == nil {
 			return m, nil
 		}
+		
+		// If instance is paused, try to resume it first
+		if selected.Paused() {
+			if err := selected.Resume(); err != nil {
+				return m, m.handleError(fmt.Errorf("failed to resume instance: %w", err))
+			}
+		}
+		
+		// If tmux session isn't alive, try to start it
+		if !selected.TmuxAlive() {
+			if err := selected.Start(true); err != nil {
+				return m, m.handleError(fmt.Errorf("failed to start instance: %w", err))
+			}
+		}
+		
+		// Now try to attach
 		// Show help screen before attaching
 		m.showHelpScreen(helpTypeInstanceAttach, func() {
 			ch, err := m.list.Attach()
@@ -640,10 +656,10 @@ type previewTickMsg struct{}
 
 type tickUpdateMetadataMessage struct{}
 
-// tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
-// overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.
+// tickUpdateMetadataCmd is the callback to update the metadata of the instances every 1000ms. Note that we iterate
+// overall the instances and capture their output. It's a pretty expensive operation. Let's do it 1x a second only.
 var tickUpdateMetadataCmd = func() tea.Msg {
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 	return tickUpdateMetadataMessage{}
 }
 

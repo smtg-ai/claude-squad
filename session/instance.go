@@ -41,7 +41,7 @@ type Instance struct {
 	DiffStats string
 	// Tags are used to categorize instances
 	Tags []string
-	// CustomMetadata stores additional instance-specific metadata
+	// CustomMetadata stores additional instance-specific metadata (lazy loaded)
 	CustomMetadata map[string]interface{}
 	// tmuxSession is the managed tmux session
 	tmuxSession *tmux.TmuxSession
@@ -68,7 +68,7 @@ func NewInstance(id, title, program string, autoYes bool) *Instance {
 		Content:        "",
 		GitWorktree:    nil,
 		Tags:           []string{},
-		CustomMetadata: make(map[string]interface{}),
+		CustomMetadata: nil, // Lazy loaded
 		Status:         StatusStopped,
 	}
 }
@@ -262,11 +262,9 @@ func (i *Instance) HasTag(tag string) bool {
 	return false
 }
 
-// SetMetadata sets a custom metadata value
+// SetMetadata sets a custom metadata value (lazy initialization)
 func (i *Instance) SetMetadata(key string, value interface{}) {
-	if i.CustomMetadata == nil {
-		i.CustomMetadata = make(map[string]interface{})
-	}
+	i.ensureMetadataInitialized()
 	i.CustomMetadata[key] = value
 }
 
@@ -277,6 +275,13 @@ func (i *Instance) GetMetadata(key string) (interface{}, bool) {
 	}
 	value, ok := i.CustomMetadata[key]
 	return value, ok
+}
+
+// ensureMetadataInitialized lazily initializes the metadata map
+func (i *Instance) ensureMetadataInitialized() {
+	if i.CustomMetadata == nil {
+		i.CustomMetadata = make(map[string]interface{})
+	}
 }
 
 // GetUpdatedFiles returns a list of files that have been modified in this session
@@ -351,10 +356,12 @@ func (i *Instance) GetDiffStats() *git.DiffStats {
 	return stats
 }
 
-// SetPreviewSize sets the preview size (stub method for UI compatibility)
-func (i *Instance) SetPreviewSize(width, height int) *Instance {
-	// This is a UI-specific method, implementation depends on requirements
-	return i
+// SetPreviewSize sets the preview size for the tmux session
+func (i *Instance) SetPreviewSize(width, height int) error {
+	if i.tmuxSession == nil {
+		return nil
+	}
+	return i.tmuxSession.SetDetachedSize(width, height)
 }
 
 
@@ -454,7 +461,16 @@ func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {
 
 // TmuxAlive returns whether the tmux session is alive
 func (i *Instance) TmuxAlive() bool {
-	return i.tmuxSession != nil && i.Started()
+	if i.tmuxSession == nil {
+		return false
+	}
+	
+	// Check if tmux session actually exists
+	if !i.tmuxSession.DoesSessionExist() {
+		return false
+	}
+	
+	return i.Started()
 }
 
 // LoadSystemPrompt loads a system prompt file for this squad
@@ -468,9 +484,7 @@ func (i *Instance) LoadSystemPrompt(promptPath string) error {
 	i.SystemPrompt = promptPath
 	
 	// Add system prompt metadata
-	if i.CustomMetadata == nil {
-		i.CustomMetadata = make(map[string]interface{})
-	}
+	i.ensureMetadataInitialized()
 	i.CustomMetadata["system_prompt"] = promptPath
 	i.CustomMetadata["prompt_loaded_at"] = time.Now()
 	
