@@ -25,6 +25,8 @@ const (
 	KeyPrompt // New key for entering a prompt
 	KeyHelp   // Key for showing help screen
 
+	KeyMode
+
 	// Diff keybindings
 	KeyShiftUp
 	KeyShiftDown
@@ -49,6 +51,39 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"r":          KeyResume,
 	"p":          KeySubmit,
 	"?":          KeyHelp,
+	"m":          KeyMode,
+}
+
+// Mode-specific keymaps
+var InstanceModeKeyMap = map[string]KeyName{
+	"up":         KeyUp,
+	"k":          KeyUp,
+	"down":       KeyDown,
+	"j":          KeyDown,
+	"shift+up":   KeyShiftUp,
+	"shift+down": KeyShiftDown,
+	"N":          KeyPrompt,
+	"enter":      KeyEnter,
+	"o":          KeyEnter,
+	"n":          KeyNew,
+	"D":          KeyKill,
+	"q":          KeyQuit,
+	"tab":        KeyTab,
+	"c":          KeyCheckout,
+	"r":          KeyResume,
+	"p":          KeySubmit,
+	"?":          KeyHelp,
+	"m":          KeyMode,
+}
+
+var OrchestratorModeKeyMap = map[string]KeyName{
+	"up":   KeyUp,
+	"k":    KeyUp,
+	"down": KeyDown,
+	"j":    KeyDown,
+	"q":    KeyQuit,
+	"?":    KeyHelp,
+	"m":    KeyMode,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -115,5 +150,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeySubmitName: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "submit name"),
+	),
+
+	KeyMode: key.NewBinding(
+		key.WithKeys("m"),
+		key.WithHelp("m", "mode"),
 	),
 }

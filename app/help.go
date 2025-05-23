@@ -109,7 +109,7 @@ func (h helpType) ToContent(instance *session.Instance) string {
 }
 
 // showHelpScreen displays the help screen overlay if it hasn't been shown before
-func (m *home) showHelpScreen(helpType helpType, onDismiss func()) (tea.Model, tea.Cmd) {
+func (m *home) showHelpScreen(helpType helpType, instance *session.Instance, textOverlay *overlay.TextOverlay, onDismiss func()) (tea.Model, tea.Cmd) {
 	// Get the flag for this help type
 	var helpFlag uint32
 	switch helpType {
@@ -131,10 +131,10 @@ func (m *home) showHelpScreen(helpType helpType, onDismiss func()) (tea.Model, t
 			log.WarningLog.Printf("Failed to save help screen state: %v", err)
 		}
 
-		content := helpType.ToContent(m.list.GetSelectedInstance())
+		content := helpType.ToContent(instance)
 
-		m.textOverlay = overlay.NewTextOverlay(content)
-		m.textOverlay.OnDismiss = onDismiss
+		textOverlay.Content = content
+		textOverlay.OnDismiss = onDismiss
 		m.state = stateHelp
 		return m, nil
 	}
@@ -147,9 +147,9 @@ func (m *home) showHelpScreen(helpType helpType, onDismiss func()) (tea.Model, t
 }
 
 // handleHelpState handles key events when in help state
-func (m *home) handleHelpState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *home) handleHelpState(msg tea.KeyMsg, textOverlay *overlay.TextOverlay) (tea.Model, tea.Cmd) {
 	// Any key press will close the help overlay
-	shouldClose := m.textOverlay.HandleKeyPress(msg)
+	shouldClose := textOverlay.HandleKeyPress(msg)
 	if shouldClose {
 		m.state = stateDefault
 		return m, tea.Sequence(

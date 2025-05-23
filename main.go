@@ -21,6 +21,7 @@ var (
 	programFlag string
 	autoYesFlag bool
 	daemonFlag  bool
+	promptFlag  string
 	rootCmd     = &cobra.Command{
 		Use:   "claude-squad",
 		Short: "Claude Squad - A terminal-based session manager",
