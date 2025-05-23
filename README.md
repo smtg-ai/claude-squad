@@ -116,7 +116,6 @@ The menu at the bottom of the screen shows available commands:
 - `n` - Create a new session
 - `N` - Create a new session with a prompt
 - `ctrl+n` - Create a new session with assistant profile selection
-- `ctrl+N` - Create a new session with assistant profile selection and a prompt
 - `D` - Kill (delete) the selected session
 - `↑/j`, `↓/k` - Navigate between sessions
 
