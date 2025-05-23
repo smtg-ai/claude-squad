@@ -64,11 +64,37 @@ func DefaultConfig() *Config {
 	}
 }
 
+// safeLogf logs a message safely, handling the case where loggers might not be initialized
+func safeLogf(level string, format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	// Try to use the logger if it's initialized
+	switch level {
+	case "error":
+		if log.ErrorLog != nil {
+			log.ErrorLog.Print(message)
+			return
+		}
+	case "warning":
+		if log.WarningLog != nil {
+			log.WarningLog.Print(message)
+			return
+		}
+	case "info":
+		if log.InfoLog != nil {
+			log.InfoLog.Print(message)
+			return
+		}
+	}
+
+	// Fallback to fmt if logger is not initialized
+	fmt.Printf("%s: %s\n", level, message)
+}
+
 // LoadConfig loads the configuration from disk. If it cannot be done, we return the default configuration.
 func LoadConfig() *Config {
 	configDir, err := GetConfigDir()
 	if err != nil {
-		log.ErrorLog.Printf("failed to get config directory: %v", err)
+		safeLogf("error", "failed to get config directory: %v", err)
 		return DefaultConfig()
 	}
 
@@ -79,18 +105,18 @@ func LoadConfig() *Config {
 			// Create and save default config if file doesn't exist
 			defaultCfg := DefaultConfig()
 			if saveErr := saveConfig(defaultCfg); saveErr != nil {
-				log.WarningLog.Printf("failed to save default config: %v", saveErr)
+				safeLogf("warning", "failed to save default config: %v", saveErr)
 			}
 			return defaultCfg
 		}
 
-		log.WarningLog.Printf("failed to get config file: %v", err)
+		safeLogf("warning", "failed to get config file: %v", err)
 		return DefaultConfig()
 	}
 
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
-		log.ErrorLog.Printf("failed to parse config file: %v", err)
+		safeLogf("error", "failed to parse config file: %v", err)
 		return DefaultConfig()
 	}
 
