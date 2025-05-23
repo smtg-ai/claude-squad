@@ -114,6 +114,9 @@ type home struct {
 
 	// promptAfterName tracks if we should enter prompt mode after naming
 	promptAfterName bool
+	
+	// window dimensions
+	width, height int
 
 	// textInputOverlay is the component for handling text input with state
 	textInputOverlay *overlay.TextInputOverlay
@@ -176,6 +179,10 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 // updateHandleWindowSizeEvent sets the sizes of the components.
 // The components will try to render inside their bounds.
 func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
+	// Store window dimensions
+	m.width = msg.Width
+	m.height = msg.Height
+	
 	// List takes 30% of width, preview takes 70%
 	listWidth := int(float32(msg.Width) * 0.3)
 	tabsWidth := msg.Width - listWidth
@@ -375,6 +382,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.menu.SetState(ui.StatePrompt)
 				// Initialize the text input overlay
 				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+				m.textInputOverlay.SetSize(m.width, m.height)
 				m.promptAfterName = false
 			} else {
 				m.menu.SetState(ui.StateDefault)
@@ -462,6 +470,16 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyHelp:
 		return m.showHelpScreen(helpTypeGeneral, nil)
 	case keys.KeyPrompt:
+		// If there's a selected instance, enter prompt mode for it
+		if selected := m.list.GetSelectedInstance(); selected != nil {
+			m.state = statePrompt
+			m.menu.SetState(ui.StatePrompt)
+			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+			m.textInputOverlay.SetSize(m.width, m.height)
+			return m, nil
+		}
+		
+		// Otherwise, create a new instance with prompt
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
@@ -692,7 +710,9 @@ func (m *home) View() string {
 
 	if m.state == statePrompt {
 		if m.textInputOverlay == nil {
-			log.ErrorLog.Printf("text input overlay is nil")
+			log.ErrorLog.Printf("text input overlay is nil, initializing...")
+			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+			m.textInputOverlay.SetSize(m.width, m.height)
 		}
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	} else if m.state == stateHelp {
