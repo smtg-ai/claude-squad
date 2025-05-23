@@ -81,8 +81,8 @@ func newTmuxSession(name string, program string, ptyFactory PtyFactory, cmdExec 
 }
 
 // Start creates and starts a new tmux session, then attaches to it. Program is the command to run in
-// the session (ex. claude). workdir is the git worktree directory.
-func (t *TmuxSession) Start(workDir string) error {
+// the session (ex. claude). workdir is the git worktree directory. env is a map of environment variables to set.
+func (t *TmuxSession) Start(program string, workDir string, env map[string]string) error {
 	// Check if the session already exists
 	if t.DoesSessionExist() {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
@@ -92,6 +92,15 @@ func (t *TmuxSession) Start(workDir string) error {
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
 
 	ptmx, err := t.ptyFactory.Start(cmd)
+	if env != nil && len(env) > 0 {
+		cmdEnv := os.Environ()
+		for key, value := range env {
+			cmdEnv = append(cmdEnv, fmt.Sprintf("%s=%s", key, value))
+		}
+		cmd.Env = cmdEnv
+	}
+
+	ptmx, err := pty.Start(cmd)
 	if err != nil {
 		// Cleanup any partially created session if any exists.
 		if t.DoesSessionExist() {
@@ -123,7 +132,7 @@ func (t *TmuxSession) Start(workDir string) error {
 	// Store the program name before restoring the session
 	// This ensures HasUpdated will correctly check for the right prompt pattern
 	t.program = program
-	
+
 	err = t.Restore()
 	if err != nil {
 		if cleanupErr := t.Close(); cleanupErr != nil {
@@ -137,7 +146,7 @@ func (t *TmuxSession) Start(workDir string) error {
 	searchString := ""
 	tapFunc := t.TapEnter
 	iterations := 5
-	
+
 	// Configure according to the AI assistant type
 	switch {
 	case t.program == ProgramClaude:
@@ -153,7 +162,7 @@ func (t *TmuxSession) Start(workDir string) error {
 		// For unknown programs, we'll look for common prompt patterns
 		searchString = "Press Enter to continue"
 	}
-	
+
 	// Only proceed if we have a search string defined
 	if searchString != "" {
 		for i := 0; i < iterations; i++ {
@@ -241,17 +250,17 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 	case strings.HasPrefix(t.program, ProgramAider):
 		hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
 	case t.program == "codex":
-		hasPrompt = strings.Contains(content, "Codex>") || 
-		            strings.Contains(content, "Please confirm") ||
-		            strings.Contains(content, "[y/n]")
+		hasPrompt = strings.Contains(content, "Codex>") ||
+			strings.Contains(content, "Please confirm") ||
+			strings.Contains(content, "[y/n]")
 	default:
 		// For unknown assistants, look for common prompt patterns
-		hasPrompt = (strings.Contains(content, "?") && 
-		            (strings.Contains(content, "Y/n") || 
-		             strings.Contains(content, "y/N") || 
-		             strings.Contains(content, "Y/N") ||
-		             strings.Contains(content, "y/n"))) ||
-		             strings.Contains(content, ">") // Common prompt character
+		hasPrompt = (strings.Contains(content, "?") &&
+			(strings.Contains(content, "Y/n") ||
+				strings.Contains(content, "y/N") ||
+				strings.Contains(content, "Y/N") ||
+				strings.Contains(content, "y/n"))) ||
+			strings.Contains(content, ">") // Common prompt character
 	}
 
 	if !bytes.Equal(t.monitor.hash(content), t.monitor.prevOutputHash) {

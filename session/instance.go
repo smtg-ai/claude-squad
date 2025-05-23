@@ -51,6 +51,8 @@ type Instance struct {
 	AutoYes bool
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
+	// Env is a map of environment variables to set for the instance
+	Env map[string]string
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
@@ -150,10 +152,16 @@ type InstanceOptions struct {
 	Program string
 	// If AutoYes is true, then
 	AutoYes bool
+	// Env is a map of environment variables to set for the instance
+	Env map[string]string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
 	t := time.Now()
+
+	if opts.Env == nil {
+		opts.Env = make(map[string]string)
+	}
 
 	// Convert path to absolute
 	absPath, err := filepath.Abs(opts.Path)
@@ -163,14 +171,15 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 
 	return &Instance{
 		Title:     opts.Title,
-		Status:    Ready,
+		Status:    Loading,
 		Path:      absPath,
 		Program:   opts.Program,
 		Height:    0,
 		Width:     0,
 		CreatedAt: t,
 		UpdatedAt: t,
-		AutoYes:   false,
+		AutoYes:   opts.AutoYes,
+		Env:       opts.Env,
 	}, nil
 }
 
@@ -200,7 +209,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		if assistantType == "" {
 			assistantType = "claude" // Default to claude if not specified
 		}
-		
+
 		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title, assistantType)
 		if err != nil {
 			return fmt.Errorf("failed to create git worktree: %w", err)
@@ -235,7 +244,8 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 
 		// Create new session
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+        // if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+		if err := i.tmuxSession.Start(i.Program, i.gitWorktree.GetWorktreePath(), i.Env); err != nil {
 			// Cleanup git worktree if tmux session creation fails
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
@@ -245,6 +255,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 	}
 
+	i.started = true
 	i.SetStatus(Running)
 
 	return nil
@@ -456,7 +467,8 @@ func (i *Instance) Resume() error {
 	}
 
 	// Create new tmux session
-	if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+	// if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+	if err := i.tmuxSession.Start(i.Program, i.gitWorktree.GetWorktreePath(), i.Env); err != nil {
 		log.ErrorLog.Print(err)
 		// Cleanup git worktree if tmux session creation fails
 		if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {

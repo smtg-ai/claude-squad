@@ -77,14 +77,34 @@ cs
 
 <br />
 
-<b>Using Claude Squad with other AI assistants:</b>
+#### Using Claude Squad with Other AI Assistants
+
 - For [Codex](https://github.com/openai/codex): Set your API key with `export OPENAI_API_KEY=<your_key>`
 - Launch with specific assistants:
-   - Codex: `cs -p "codex"`
-   - Aider: `cs -p "aider ..."`
-- Make this the default, by modifying the config file (locate with `cs debug`)
-- You can also choose a different assistant for each session by pressing `A` when creating a new session
-- Each session with a different assistant gets its own isolated git worktree
+  - Codex: `cs -p "codex"`
+  - Aider: `cs -p "aider ..."`
+- Set a default assistant by modifying the config file (locate with `cs debug`)
+
+##### Profiles
+
+Profiles allow you to select an AI assistant for each session. Create profiles in the config file (locate with `cs debug`).
+
+Example profile configuration:
+
+```json
+{
+  "profiles": {
+    "codex": {
+      "program": "codex",
+      "env": {
+        "OPENAI_API_KEY": "<your_key>"
+      },
+      "default": true
+    },
+    // other profiles...
+  }
+}
+```
 
 <br />
 
@@ -94,7 +114,8 @@ The menu at the bottom of the screen shows available commands:
 ##### Instance/Session Management
 - `n` - Create a new session
 - `N` - Create a new session with a prompt
-- `A` - Create a new session with a custom AI assistant
+- `ctrl+n` - Create a new session with assistant profile selection
+- `ctrl+N` - Create a new session with assistant profile selection and a prompt
 - `D` - Kill (delete) the selected session
 - `↑/j`, `↓/k` - Navigate between sessions
 

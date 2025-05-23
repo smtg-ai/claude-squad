@@ -40,6 +40,8 @@ const (
 	statePrompt
 	// stateSelectAssistant is the state when the user is selecting an assistant.
 	stateSelectAssistant
+	// stateSelectProfile is the state when the user is selecting a profile.
+	stateSelectProfile
 	// stateHelp is the state when a help screen is displayed.
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
@@ -71,8 +73,8 @@ type home struct {
 
 	// promptAfterName tracks if we should enter prompt mode after naming
 	promptAfterName bool
-	// selectAssistantAfterName tracks if we should enter assistant selection mode after naming
-	selectAssistantAfterName bool
+	// selectProfileAfterName tracks if we should enter profile selection mode after naming
+	selectProfileAfterName bool
 
 	// keySent is used to manage underlining menu items
 	keySent bool
@@ -95,6 +97,8 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// profileSelector is the component for selecting AI assistant profiles
+	profileSelector *ProfileSelector
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -112,18 +116,18 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	}
 
 	h := &home{
-		ctx:          ctx,
-		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
-		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
-		errBox:       ui.NewErrBox(),
-		storage:      storage,
-		appConfig:    appConfig,
-		program:      program,
-		autoYes:      autoYes,
-		state:        stateDefault,
-		appState:     appState,
-		selectAssistantAfterName: false,
+		ctx:                    ctx,
+		spinner:                spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+		menu:                   ui.NewMenu(),
+		tabbedWindow:           ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
+		errBox:                 ui.NewErrBox(),
+		storage:                storage,
+		appConfig:              appConfig,
+		program:                program,
+		autoYes:                autoYes,
+		state:                  stateDefault,
+		appState:               appState,
+		selectProfileAfterName: false,
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 
@@ -166,6 +170,9 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	}
 	if m.textOverlay != nil {
 		m.textOverlay.SetWidth(int(float32(msg.Width) * 0.6))
+	}
+	if m.profileSelector != nil {
+		m.profileSelector.SetSize(int(float32(msg.Width)*0.6), int(float32(msg.Height)*0.4))
 	}
 
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
@@ -332,8 +339,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
-			// Only start the instance now if we're not going to select an assistant
-			if !m.selectAssistantAfterName {
+			// Only start the instance now if we're not going to select an assistant or profile
+			if !m.selectProfileAfterName {
 				if err := instance.Start(true); err != nil {
 					m.list.Kill()
 					m.state = stateDefault
@@ -358,12 +365,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				// Initialize the text input overlay
 				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
 				m.promptAfterName = false
-			} else if m.selectAssistantAfterName {
-				m.state = stateSelectAssistant
-				m.menu.SetState(ui.StateSelectAssistant)
-				// Initialize the text input overlay for selecting assistant
-				m.textInputOverlay = overlay.NewTextInputOverlay("Enter assistant (e.g. claude, aider, codex)", m.program)
-				m.selectAssistantAfterName = false
+			} else if m.selectProfileAfterName {
+				m.state = stateSelectProfile
+				m.menu.SetState(ui.StateSelectProfile)
+				// Initialize the profile selector
+				m.profileSelector = NewProfileSelector(m.appConfig.Profiles)
+				m.selectProfileAfterName = false
 			} else {
 				m.menu.SetState(ui.StateDefault)
 				m.showHelpScreen(helpTypeInstanceStart, nil)
@@ -448,14 +455,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				}
 				// Update the program for this instance only
 				selected.Program = m.textInputOverlay.GetValue()
-				
+
 				// Now start the instance with the selected assistant
 				if err := selected.Start(true); err != nil {
 					m.list.Kill()
 					m.state = stateDefault
 					return m, m.handleError(err)
 				}
-				
+
 				// Save after adding new instance
 				if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
 					return m, m.handleError(err)
@@ -476,6 +483,52 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		return m, nil
+	} else if m.state == stateSelectProfile {
+		// Use the ProfileSelector component to handle all key events
+		var cmd tea.Cmd
+		m.profileSelector, cmd = m.profileSelector.Update(msg)
+
+		// Check if a profile was selected or selection was cancelled
+		if m.profileSelector.IsSubmitted() || m.profileSelector.IsQuitting() {
+			if m.profileSelector.IsSubmitted() {
+				// Profile was selected, process the selection
+				selected := m.list.GetSelectedInstance()
+				if selected == nil {
+					return m, nil
+				}
+
+				// Update the program and environment variables for this instance only
+				selectedProfile := m.profileSelector.GetSelectedProfile()
+				selected.Program = selectedProfile.Command
+				selected.Env = selectedProfile.Env
+
+				// Now start the instance with the selected profile
+				if err := selected.Start(true); err != nil {
+					m.list.Kill()
+					m.state = stateDefault
+					return m, m.handleError(err)
+				}
+
+				// Save after adding new instance
+				if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+					return m, m.handleError(err)
+				}
+			}
+
+			// Close the selector and reset state
+			m.profileSelector = nil
+			m.state = stateDefault
+			return m, tea.Sequence(
+				tea.WindowSize(),
+				func() tea.Msg {
+					m.menu.SetState(ui.StateDefault)
+					m.showHelpScreen(helpTypeInstanceStart, nil)
+					return nil
+				},
+			)
+		}
+
+		return m, cmd
 	}
 
 	// Handle confirmation state
@@ -507,11 +560,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
+
+		program := m.program
+		if defaultProfile := m.appConfig.GetDefaultProfile(); defaultProfile.Command != "" {
+			program = defaultProfile.Command
+		}
+
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:   "",
 			Path:    ".",
-			Program: m.program,
+			Program: program,
 		})
+
 		if err != nil {
 			return m, m.handleError(err)
 		}
@@ -523,11 +583,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.promptAfterName = true
 
 		return m, nil
-	case keys.KeyNewWithAI:
+	case keys.KeyNewWithProfileLow, keys.KeyNewWithProfileHigh:
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
+
+		if len(m.appConfig.Profiles) == 0 {
+			return m, m.handleError(
+				fmt.Errorf("no AI assistant profiles configured. Please add profiles to your config file first"))
+		}
+
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:   "",
 			Path:    ".",
@@ -541,7 +607,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
 		m.state = stateNew
 		m.menu.SetState(ui.StateNewInstance)
-		m.selectAssistantAfterName = true
+		m.selectProfileAfterName = true
 
 		return m, nil
 	case keys.KeyNew:
@@ -796,6 +862,11 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	} else if m.state == stateSelectProfile {
+		if m.profileSelector == nil {
+			log.ErrorLog.Printf("profile selector is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.profileSelector.Render(), mainView, true, true)
 	} else if m.state == stateHelp {
 		if m.textOverlay == nil {
 			log.ErrorLog.Printf("text overlay is nil")
