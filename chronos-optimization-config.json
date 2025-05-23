@@ -4,8 +4,19 @@
   "current_size": "5.8GB",
   "target_size": "2.3GB",
   "platform": "apple_m3_ultra",
+  "cpu_cores": 32,
+  "memory_gb": 512,
   "memory_system": "unified_memory_coordinator",
   "database_engine": "libmdbx",
+  "claude_squad_optimization": {
+    "build_flags": "-ldflags=\"-s -w\" -gcflags=\"-l=4\" -trimpath",
+    "gomaxprocs": 32,
+    "cgo_enabled": false,
+    "static_build": true,
+    "daemon_workers": 16,
+    "sync_interval_ms": 100,
+    "memory_limit_mb": 8192
+  },
   "optimization_phases": [
     {
       "phase": 1,
