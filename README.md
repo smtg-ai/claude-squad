@@ -77,6 +77,7 @@ cs
 ##### Profiles
 
 Profiles allow you to select an AI assistant for each session. Create profiles in the config file (locate with `cs debug`).
+If no profile is provided, the `"program"` field from the config will be used.
 
 Example profile configuration:
 

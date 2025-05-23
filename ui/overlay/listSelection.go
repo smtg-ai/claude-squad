@@ -10,6 +10,7 @@ import (
 type ListItem interface {
 	list.Item
 	GetValue() interface{}
+	GetWidth() int
 }
 
 // ListSelection is a generic list selection component that can be used to select items from a list
@@ -57,14 +58,36 @@ func NewListSelection(items []ListItem, title string, listHeight int) *ListSelec
 		listItems[i] = item
 	}
 
-	const defaultWidth = 40
+	// Calculate an appropriate width based on the list items
+	itemWidth := 30 // Minimum default width
+	for _, item := range items {
+		itemWidth = max(itemWidth, item.GetWidth())
+	}
+
+	// Add some padding to the calculated width
+	listWidth := itemWidth + 10 // Add padding for better readability
+
+	// Cap the width at a reasonable maximum if needed
+	maxWidth := 80
+	if listWidth > maxWidth {
+		listWidth = maxWidth
+	}
 
 	styles := DefaultListSelectionStyles()
 
 	// Create a custom delegate with our styling
 	delegate := list.NewDefaultDelegate()
 
-	l := list.New(listItems, delegate, defaultWidth, listHeight)
+	// Calculate appropriate height based on number of items
+	calculatedHeight := len(listItems) + 2 // Add 2 for padding/margins
+	if calculatedHeight > 100 {
+		calculatedHeight = 100
+	}
+	if calculatedHeight < listHeight {
+		calculatedHeight = listHeight
+	}
+
+	l := list.New(listItems, delegate, listWidth, calculatedHeight)
 	// Don't set the title here, we'll render it manually with our custom style
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
@@ -85,8 +108,16 @@ func NewListSelection(items []ListItem, title string, listHeight int) *ListSelec
 func (ls *ListSelection) SetSize(width, height int) {
 	ls.width = width
 	ls.height = height
-	ls.list.SetWidth(width)
-	ls.list.SetHeight(height)
+	// Only use the provided width if it's smaller than the list's natural width
+	// This preserves the calculated width for narrow lists
+	if width < ls.list.Width() {
+		ls.list.SetWidth(width)
+	}
+	// Only use the provided height if it's smaller than the list's natural height
+	// This preserves the calculated height for short lists
+	if height < ls.list.Height() {
+		ls.list.SetHeight(height)
+	}
 }
 
 // Init initializes the list selection component
@@ -142,21 +173,8 @@ func (ls *ListSelection) View() string {
 
 // Render renders the list selection component
 func (ls *ListSelection) Render() string {
-	// Get the true width of the list
-	trueWidth := ls.list.Width()
-
-	// Ensure minimum width and don't exceed maximum width
-	if trueWidth < 30 {
-		trueWidth = 30
-	}
-	if trueWidth > ls.width {
-		trueWidth = ls.width
-	}
-
-	// Set the list width to match our calculated true width
-	ls.list.SetWidth(trueWidth)
-
-	borderStyle := ls.styles.BorderStyle.Width(trueWidth)
+	// Use the actual list width for the border, not the forced width
+	borderStyle := ls.styles.BorderStyle.Width(ls.list.Width())
 
 	var content string
 	if !ls.hasItems {
