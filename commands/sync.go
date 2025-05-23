@@ -7,8 +7,6 @@ import (
 	"claude-squad/session/git"
 	"claude-squad/ui"
 	"fmt"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -34,7 +32,6 @@ By default, it will sync from main branch and update submodules.`,
 		defer log.Close()
 
 		// Load config and state
-		cfg := config.LoadConfig()
 		state := config.LoadState()
 		storage, err := session.NewStorage(state)
 		if err != nil {

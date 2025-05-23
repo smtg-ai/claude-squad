@@ -4,8 +4,8 @@ import (
 	"claude-squad/log"
 	"claude-squad/session/git"
 	"claude-squad/session/tmux"
+	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -43,6 +43,14 @@ type Instance struct {
 	Tags []string
 	// CustomMetadata stores additional instance-specific metadata
 	CustomMetadata map[string]interface{}
+	// tmuxSession is the managed tmux session
+	tmuxSession *tmux.TmuxSession
+	// Status represents the current status
+	Status Status
+	// Branch represents the current branch
+	Branch string
+	// SystemPrompt is the path to the system prompt file for this squad
+	SystemPrompt string
 }
 
 // NewInstance creates a new instance
@@ -61,6 +69,7 @@ func NewInstance(id, title, program string, autoYes bool) *Instance {
 		GitWorktree:    nil,
 		Tags:           []string{},
 		CustomMetadata: make(map[string]interface{}),
+		Status:         StatusStopped,
 	}
 }
 
@@ -77,7 +86,7 @@ func (i *Instance) Paused() bool {
 // HasUpdated returns whether this instance has updated content
 // If hasPrompt is true, there might be a prompt waiting for input
 func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
-	content, err := tmux.CapturePane(i.TmuxSessionName, i.TmuxWindow, i.TmuxPane)
+	content, err := i.tmuxSession.CapturePaneContent()
 	if err != nil {
 		log.WarningLog.Printf("could not capture pane: %v", err)
 		return false, false
@@ -110,7 +119,7 @@ func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
 
 // TapEnter sends an enter key to the pane
 func (i *Instance) TapEnter() error {
-	return tmux.SendKey(i.TmuxSessionName, i.TmuxWindow, i.TmuxPane, "Enter")
+	return i.tmuxSession.TapEnter()
 }
 
 // UpdateDiffStats updates the diff stats for this instance
@@ -123,7 +132,7 @@ func (i *Instance) UpdateDiffStats() error {
 	if err != nil {
 		return err
 	}
-	i.DiffStats = diff
+	i.DiffStats = diff.Content
 	return nil
 }
 
@@ -151,7 +160,7 @@ func (i *Instance) Stop() error {
 		return nil
 	}
 
-	if err := tmux.KillSession(i.TmuxSessionName); err != nil {
+	if err := i.tmuxSession.Close(); err != nil {
 		return err
 	}
 
@@ -159,6 +168,7 @@ func (i *Instance) Stop() error {
 	i.TmuxWindow = ""
 	i.TmuxPane = ""
 	i.Content = ""
+	i.Status = StatusStopped
 
 	if i.GitWorktree != nil && !i.DisableGit {
 		if err := i.GitWorktree.Cleanup(); err != nil {
@@ -176,11 +186,12 @@ func (i *Instance) Pause() error {
 		return nil
 	}
 
-	if err := tmux.KillSession(i.TmuxSessionName); err != nil {
+	if err := i.tmuxSession.Close(); err != nil {
 		return err
 	}
 
 	i.State = "paused"
+	i.Status = StatusPaused
 	return nil
 }
 
@@ -191,41 +202,30 @@ func (i *Instance) Resume() error {
 	}
 
 	// Make sure we have a valid git worktree
-	var err error
 	if i.GitWorktree == nil && !i.DisableGit {
 		// Create git worktree
-		worktreePath, err := filepath.Abs(filepath.Join("worktrees", i.ID))
-		if err != nil {
-			return err
-		}
 		repoPath, err := git.FindGitRepo(".")
 		if err != nil {
 			return err
 		}
-		branchName := "session/" + i.ID
 
-		i.GitWorktree = git.NewGitWorktree(repoPath, worktreePath, branchName)
-		if err := i.GitWorktree.Setup(); err != nil {
+		i.GitWorktree, _, err = git.NewGitWorktree(repoPath, i.ID)
+		if err != nil {
 			return err
 		}
+		i.Branch = i.GitWorktree.GetBranchName()
 	}
 
-	tmuxSession, err := tmux.CreateSession(i.TmuxSessionName, i.Program)
-	if err != nil {
+	i.tmuxSession = tmux.NewTmuxSession(i.TmuxSessionName, i.Program)
+	if err := i.tmuxSession.Start(i.Program, i.GitWorktree.GetWorktreePath()); err != nil {
 		return err
 	}
 
-	i.TmuxSessionName = tmuxSession.SessionName
-	i.TmuxWindow = tmuxSession.Window
-	i.TmuxPane = tmuxSession.Pane
+	i.TmuxSessionName = i.tmuxSession.Name
 	i.State = ""
+	i.Status = StatusActive
 
-	// Change to git worktree directory
-	if i.GitWorktree != nil && !i.DisableGit {
-		if err := tmux.SendCommand(i.TmuxSessionName, i.TmuxWindow, i.TmuxPane, "cd "+i.GitWorktree.WorktreePath()); err != nil {
-			return err
-		}
-	}
+	// Directory change is handled by tmux session start with workdir parameter
 
 	return nil
 }
@@ -299,6 +299,159 @@ func (i *Instance) WorktreeExists() bool {
 		return false
 	}
 	
-	_, err := os.Stat(i.GitWorktree.WorktreePath())
+	_, err := os.Stat(i.GitWorktree.GetWorktreePath())
 	return !os.IsNotExist(err)
+}
+
+// ToInstanceData converts an Instance to InstanceData for serialization
+func (i *Instance) ToInstanceData() InstanceData {
+	data := InstanceData{
+		Title:        i.Title,
+		CreatedAt:    i.CreatedAt,
+		AutoYes:      i.AutoYes,
+		Program:      i.Program,
+		SystemPrompt: i.SystemPrompt,
+	}
+
+	// Convert GitWorktree if available
+	if i.GitWorktree != nil {
+		data.Worktree = GitWorktreeData{
+			RepoPath:      i.GitWorktree.GetRepoPath(),
+			WorktreePath:  i.GitWorktree.GetWorktreePath(),
+			BranchName:    i.GitWorktree.GetBranchName(),
+			BaseCommitSHA: i.GitWorktree.GetBaseCommitSHA(),
+		}
+		data.Path = i.GitWorktree.GetWorktreePath()
+		data.Branch = i.GitWorktree.GetBranchName()
+	}
+
+	// Set status based on state
+	switch i.State {
+	case "paused":
+		data.Status = StatusPaused
+	case "":
+		if i.Started() {
+			data.Status = StatusActive
+		} else {
+			data.Status = StatusStopped
+		}
+	default:
+		data.Status = StatusStopped
+	}
+
+	return data
+}
+
+// GetDiffStats returns the diff stats for this instance
+func (i *Instance) GetDiffStats() *git.DiffStats {
+	if i.GitWorktree == nil {
+		return nil
+	}
+	stats, _ := i.GitWorktree.GetDiffStats()
+	return stats
+}
+
+// SetPreviewSize sets the preview size (stub method for UI compatibility)
+func (i *Instance) SetPreviewSize(width, height int) *Instance {
+	// This is a UI-specific method, implementation depends on requirements
+	return i
+}
+
+
+// RepoName returns the repository name if GitWorktree is available
+func (i *Instance) RepoName() (string, error) {
+	if i.GitWorktree != nil {
+		return i.GitWorktree.GetRepoName(), nil
+	}
+	return "", nil
+}
+
+// Kill terminates the instance
+func (i *Instance) Kill() error {
+	return i.Stop()
+}
+
+// Attach attaches to the tmux session (returns a channel that closes when detached)
+func (i *Instance) Attach() (chan struct{}, error) {
+	if i.tmuxSession == nil {
+		return nil, fmt.Errorf("no tmux session available")
+	}
+	
+	// Create a channel that will be closed when the session detaches
+	done := make(chan struct{})
+	
+	// This is a simplified implementation - in a real scenario,
+	// you'd want to handle tmux attach/detach events properly
+	go func() {
+		defer close(done)
+		// Wait for session to be detached or closed
+		// This is a placeholder implementation
+	}()
+	
+	return done, nil
+}
+
+// Preview returns a preview of the instance content
+func (i *Instance) Preview() (string, error) {
+	return i.Content, nil
+}
+
+// SetStatus sets the status of the instance
+func (i *Instance) SetStatus(status Status) {
+	i.Status = status
+}
+
+// Start starts the instance with the given resume flag
+func (i *Instance) Start(resume bool) error {
+	if resume {
+		return i.Resume()
+	} else {
+		// Start new instance logic
+		return i.Resume() // For now, use Resume logic
+	}
+}
+
+// SetTitle sets the title of the instance
+func (i *Instance) SetTitle(title string) error {
+	i.Title = title
+	return nil
+}
+
+// SendPrompt sends a prompt to the instance
+func (i *Instance) SendPrompt(prompt string) error {
+	if i.tmuxSession == nil {
+		return fmt.Errorf("no tmux session available")
+	}
+	return i.tmuxSession.SendKeys(prompt + "\n")
+}
+
+// GetGitWorktree returns the git worktree for this instance
+func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {
+	return i.GitWorktree, nil
+}
+
+// TmuxAlive returns whether the tmux session is alive
+func (i *Instance) TmuxAlive() bool {
+	return i.tmuxSession != nil && i.Started()
+}
+
+// LoadSystemPrompt loads a system prompt file for this squad
+func (i *Instance) LoadSystemPrompt(promptPath string) error {
+	// Check if the prompt file exists
+	if _, err := os.Stat(promptPath); os.IsNotExist(err) {
+		return fmt.Errorf("system prompt file not found: %s", promptPath)
+	}
+	
+	// Store the prompt path
+	i.SystemPrompt = promptPath
+	
+	// Add system prompt metadata
+	if i.CustomMetadata == nil {
+		i.CustomMetadata = make(map[string]interface{})
+	}
+	i.CustomMetadata["system_prompt"] = promptPath
+	i.CustomMetadata["prompt_loaded_at"] = time.Now()
+	
+	log.InfoLog.Printf("Loaded system prompt for squad %s: %s", i.Title, promptPath)
+	return nil
 }

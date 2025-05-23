@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -379,8 +380,8 @@ func (g *GitWorktree) GetSubmoduleStatus() (map[string]string, error) {
 	return status, nil
 }
 
-// checkGHCLI checks if GitHub CLI is available
-func checkGHCLI() error {
+// checkGHCLIForSync checks if GitHub CLI is available for sync operations
+func checkGHCLIForSync() error {
 	cmd := exec.Command("gh", "--version")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("GitHub CLI (gh) is not installed or not in PATH: %w", err)

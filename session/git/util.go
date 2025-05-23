@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -49,6 +50,25 @@ func checkGHCLI() error {
 	}
 
 	return nil
+}
+
+// FindGitRepo finds the git repository root from the current directory
+func FindGitRepo(startPath string) (string, error) {
+	dir := startPath
+	for {
+		gitDir := filepath.Join(dir, ".git")
+		if _, err := os.Stat(gitDir); err == nil {
+			return dir, nil
+		}
+		
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	
+	return "", fmt.Errorf("no git repository found starting from %s", startPath)
 }
 
 // IsGitRepo checks if the given path is within a git repository

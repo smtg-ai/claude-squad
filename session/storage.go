@@ -2,9 +2,23 @@ package session
 
 import (
 	"claude-squad/config"
+	"claude-squad/session/git"
 	"encoding/json"
 	"fmt"
 	"time"
+)
+
+// Status represents the status of a session instance
+type Status string
+
+const (
+	StatusActive Status = "active"
+	StatusPaused Status = "paused"
+	StatusStopped Status = "stopped"
+	// Legacy status constants for UI compatibility
+	Running = StatusActive
+	Ready   = StatusStopped
+	Paused  = StatusPaused
 )
 
 // InstanceData represents the serializable data of an Instance
@@ -19,9 +33,10 @@ type InstanceData struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	AutoYes   bool      `json:"auto_yes"`
 
-	Program   string          `json:"program"`
-	Worktree  GitWorktreeData `json:"worktree"`
-	DiffStats DiffStatsData   `json:"diff_stats"`
+	Program      string          `json:"program"`
+	SystemPrompt string          `json:"system_prompt"`
+	Worktree     GitWorktreeData `json:"worktree"`
+	DiffStats    DiffStatsData   `json:"diff_stats"`
 }
 
 // GitWorktreeData represents the serializable data of a GitWorktree
@@ -38,6 +53,41 @@ type DiffStatsData struct {
 	Added   int    `json:"added"`
 	Removed int    `json:"removed"`
 	Content string `json:"content"`
+}
+
+// FromInstanceData converts InstanceData back to an Instance
+func FromInstanceData(data InstanceData, id string) *Instance {
+	instance := &Instance{
+		ID:           id,
+		Title:        data.Title,
+		CreatedAt:    data.CreatedAt,
+		AutoYes:      data.AutoYes,
+		Program:      data.Program,
+		SystemPrompt: data.SystemPrompt,
+	}
+
+	// Set state based on status
+	switch data.Status {
+	case StatusPaused:
+		instance.State = "paused"
+	case StatusActive:
+		instance.State = ""
+	case StatusStopped:
+		instance.State = ""
+	}
+
+	// Restore GitWorktree if available
+	if data.Worktree.RepoPath != "" {
+		instance.GitWorktree = git.NewGitWorktreeFromStorage(
+			data.Worktree.RepoPath,
+			data.Worktree.WorktreePath,
+			data.Worktree.SessionName,
+			data.Worktree.BranchName,
+			data.Worktree.BaseCommitSHA,
+		)
+	}
+
+	return instance
 }
 
 // Storage handles saving and loading instances using the state interface
@@ -82,10 +132,8 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 
 	instances := make([]*Instance, len(instancesData))
 	for i, data := range instancesData {
-		instance, err := FromInstanceData(data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create instance %s: %w", data.Title, err)
-		}
+		// Use title as ID for restored instances
+		instance := FromInstanceData(data, data.Title)
 		instances[i] = instance
 	}
 

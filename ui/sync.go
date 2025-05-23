@@ -36,7 +36,6 @@ func NewSyncPane() *SyncPane {
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(40),
-		progress.WithDefaultSpinner(),
 	)
 	s := spinner.New()
 	s.Style = lipgloss.NewStyle().Foreground(highlightColor)

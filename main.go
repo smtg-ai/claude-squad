@@ -81,6 +81,10 @@ var (
 			if len(args) > 0 {
 				squadName = args[0]
 				log.InfoLog.Printf("Squad name provided: %s", squadName)
+			} else if autoYes {
+				// If autoYes is enabled but no squad specified, boot the default environment
+				squadName = "CoreAgent"
+				log.InfoLog.Printf("AutoYes mode enabled, booting default environment: %s", squadName)
 			}
 
 			return app.Run(ctx, program, autoYes, squadName)

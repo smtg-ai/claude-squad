@@ -49,3 +49,35 @@ func (g *GitWorktree) Diff() *DiffStats {
 
 	return stats
 }
+
+// GetDiffStats returns diff statistics for the worktree
+func (g *GitWorktree) GetDiffStats() (*DiffStats, error) {
+	stats := g.Diff()
+	if stats.Error != nil {
+		return stats, stats.Error
+	}
+	return stats, nil
+}
+
+// GetChangedFiles returns a list of changed files in the worktree
+func (g *GitWorktree) GetChangedFiles() ([]string, error) {
+	// Get the status of all files
+	output, err := g.runGitCommand(g.worktreePath, "status", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+
+	var changedFiles []string
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if line != "" {
+			// Status format: "XY filename" where XY are status codes
+			if len(line) > 3 {
+				filename := strings.TrimSpace(line[3:])
+				changedFiles = append(changedFiles, filename)
+			}
+		}
+	}
+	
+	return changedFiles, nil
+}

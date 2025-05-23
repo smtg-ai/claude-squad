@@ -26,15 +26,21 @@ func Run(ctx context.Context, program string, autoYes bool, squadName ...string)
 	
 	// If a squad name was provided, pre-create an instance with that name
 	if len(squadName) > 0 && squadName[0] != "" {
-		// Create a new instance with the squad name
+		// Handle special case for CoreAgent - boot the full environment
+		if squadName[0] == "CoreAgent" && autoYes {
+			return h.bootFullEnvironment(program)
+		}
+		
+		// Create a new instance with the squad name and appropriate system prompt
 		log.InfoLog.Printf("Creating instance with name: %s", squadName[0])
-		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   squadName[0],
-			Path:    ".",
-			Program: program,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create squad instance: %w", err)
+		promptPath := h.getSystemPromptForSquad(squadName[0])
+		instance := session.NewInstance(squadName[0], squadName[0], program, false)
+		
+		// Load the appropriate system prompt if available
+		if promptPath != "" {
+			if err := instance.LoadSystemPrompt(promptPath); err != nil {
+				log.WarningLog.Printf("Failed to load system prompt for squad %s: %v", squadName[0], err)
+			}
 		}
 		
 		// Start the instance immediately
@@ -460,14 +466,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
-		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
-		})
-		if err != nil {
-			return m, m.handleError(err)
-		}
+		instance := session.NewInstance("", "", m.program, false)
 
 		m.newInstanceFinalizer = m.list.AddInstance(instance)
 		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
@@ -481,14 +480,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
-		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
-		})
-		if err != nil {
-			return m, m.handleError(err)
-		}
+		instance := session.NewInstance("", "", m.program, false)
 
 		m.newInstanceFinalizer = m.list.AddInstance(instance)
 		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
@@ -695,4 +687,93 @@ func (m *home) View() string {
 	}
 
 	return mainView
+}
+
+// getSystemPromptForSquad returns the appropriate system prompt file path for a given squad
+func (h *home) getSystemPromptForSquad(squadName string) string {
+	squadPrompts := map[string]string{
+		"CoreAgent":           "prompts/squads/fbal-squad-prompt.md",
+		"architecture":        "prompts/squads/architecture-squad-prompt.md",
+		"integration":         "prompts/squads/integration-squad-prompt.md", 
+		"performance":         "prompts/squads/performance-squad-prompt.md",
+		"testing":             "prompts/squads/testing-squad-prompt.md",
+		"ui-ux":              "prompts/squads/ui-ux-squad-prompt.md",
+		"security":           "prompts/squads/security-squad-prompt.md",
+		"documentation":      "prompts/squads/documentation-squad-prompt.md",
+		"github-migration":   "prompts/squads/github-migration-squad-prompt.md",
+		"mirror-squad":       "prompts/squads/mirror-squad-prompt-enhanced.md",
+		"code-review":        "prompts/squads/code-review-squad-prompt.md",
+		"code-review-fbal":   "prompts/squads/code-review-fbal-squad-prompt.md",
+		"synchronization":    "prompts/squads/mirror-squad-vector-clocks.md",
+		"time-lord-engineering": "prompts/squads/time-lord-engineering-squad-prompt.md",
+		"starfleet-engineering": "prompts/squads/starfleet-engineering-squad-prompt.md",
+	}
+	
+	if prompt, exists := squadPrompts[squadName]; exists {
+		return prompt
+	}
+	return ""
+}
+
+// bootFullEnvironment boots the complete chronOS environment with all essential squads
+func (h *home) bootFullEnvironment(program string) error {
+	log.InfoLog.Printf("🚀 BOOTING FULL chronOS ENVIRONMENT")
+	
+	// Essential squads for full environment boot
+	essentialSquads := []struct {
+		name   string
+		title  string
+		prompt string
+	}{
+		{"CoreAgent", "🤖 CoreAgent", "prompts/squads/fbal-squad-prompt.md"},
+		{"architecture", "🏗️ Architecture", "prompts/squads/architecture-squad-prompt.md"},
+		{"performance", "⚡ Performance", "prompts/squads/performance-squad-prompt.md"},
+		{"testing", "🧪 Testing", "prompts/squads/testing-squad-prompt.md"},
+		{"security", "🔒 Security", "prompts/squads/security-squad-prompt.md"},
+		{"integration", "🔗 Integration", "prompts/squads/integration-squad-prompt.md"},
+		{"mirror-squad", "🪞 Mirror Squad", "prompts/squads/mirror-squad-prompt-enhanced.md"},
+	}
+	
+	log.InfoLog.Printf("Creating %d essential squads for full environment", len(essentialSquads))
+	
+	for i, squad := range essentialSquads {
+		log.InfoLog.Printf("Creating squad %d/%d: %s", i+1, len(essentialSquads), squad.title)
+		
+		instance := session.NewInstance(squad.name, squad.title, program, false)
+		
+		// Load the system prompt
+		if squad.prompt != "" {
+			if err := instance.LoadSystemPrompt(squad.prompt); err != nil {
+				log.WarningLog.Printf("Failed to load system prompt for squad %s: %v", squad.name, err)
+			}
+		}
+		
+		// Start the instance
+		if err := instance.Start(true); err != nil {
+			log.ErrorLog.Printf("Failed to start squad %s: %v", squad.name, err)
+			continue
+		}
+		
+		// Enable autoYes mode
+		instance.AutoYes = true
+		
+		// Add to list
+		finalizer := h.list.AddInstance(instance)
+		finalizer()
+		
+		log.InfoLog.Printf("✅ Squad %s started successfully", squad.title)
+	}
+	
+	// Select the first squad (CoreAgent)
+	if h.list.NumInstances() > 0 {
+		h.list.SetSelectedInstance(0)
+	}
+	
+	// Save all instances
+	if err := h.storage.SaveInstances(h.list.GetInstances()); err != nil {
+		return fmt.Errorf("failed to save squad instances: %w", err)
+	}
+	
+	log.InfoLog.Printf("🎯 Full chronOS environment booted successfully with %d squads", h.list.NumInstances())
+	return nil
 }
