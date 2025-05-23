@@ -64,13 +64,7 @@ var (
 			if autoYesFlag {
 				autoYes = true
 			}
-			if autoYes {
-				defer func() {
-					if err := daemon.LaunchDaemon(); err != nil {
-						log.ErrorLog.Printf("failed to launch daemon: %v", err)
-					}
-				}()
-			}
+			// Remove automatic daemon launch - always start in interactive mode
 			// Kill any daemon that's running.
 			if err := daemon.StopDaemon(); err != nil {
 				log.ErrorLog.Printf("failed to stop daemon: %v", err)
@@ -154,6 +148,45 @@ var (
 			fmt.Printf("https://github.com/smtg-ai/claude-squad/releases/tag/v%s\n", version)
 		},
 	}
+
+	daemonCmd = &cobra.Command{
+		Use:   "daemon",
+		Short: "Start claude-squad in daemon mode",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log.Initialize(true)
+			defer log.Close()
+			
+			cfg := config.LoadConfig()
+			err := daemon.RunDaemon(cfg)
+			log.ErrorLog.Printf("failed to start daemon %v", err)
+			return err
+		},
+	}
+
+	connectCmd = &cobra.Command{
+		Use:   "connect",
+		Short: "Connect to a running claude-squad daemon",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			log.Initialize(false)
+			defer log.Close()
+
+			cfg := config.LoadConfig()
+			
+			// Program flag overrides config
+			program := cfg.DefaultProgram
+			if programFlag != "" {
+				program = programFlag
+			}
+			// AutoYes flag overrides config  
+			autoYes := cfg.AutoYes
+			if autoYesFlag {
+				autoYes = true
+			}
+
+			return app.Run(ctx, program, autoYes)
+		},
+	}
 )
 
 func init() {
@@ -173,6 +206,8 @@ func init() {
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
+	rootCmd.AddCommand(daemonCmd)
+	rootCmd.AddCommand(connectCmd)
 	rootCmd.AddCommand(commands.SyncCmd)
 }
 

@@ -240,7 +240,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if updated {
 				instance.SetStatus(session.Running)
 			} else {
-				if prompt {
+				if prompt && instance.AutoYes {
 					instance.TapEnter()
 				} else {
 					instance.SetStatus(session.Ready)
