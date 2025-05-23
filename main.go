@@ -1,14 +1,14 @@
 package main
 
 import (
-	"claude-squad/app"
-	"claude-squad/commands"
-	"claude-squad/config"
-	"claude-squad/daemon"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/session/git"
-	"claude-squad/session/tmux"
+	"chronos/app"
+	"chronos/commands"
+	"chronos/config"
+	"chronos/daemon"
+	"chronos/log"
+	"chronos/session"
+	"chronos/session/git"
+	"chronos/session/tmux"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,8 +27,8 @@ var (
 	syncSubmodFlag   bool
 	autoResolveFlag  bool
 	rootCmd     = &cobra.Command{
-		Use:   "claude-squad [squad_name]",
-		Short: "Claude Squad - A terminal-based session manager",
+		Use:   "chronos [session_name]",
+		Short: "Chronos - A terminal-based session manager",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
@@ -49,7 +49,7 @@ var (
 			}
 
 			if !git.IsGitRepo(currentDir) {
-				return fmt.Errorf("error: claude-squad must be run from within a git repository")
+				return fmt.Errorf("error: chronos must be run from within a git repository")
 			}
 
 			cfg := config.LoadConfig()
@@ -142,16 +142,16 @@ var (
 
 	versionCmd = &cobra.Command{
 		Use:   "version",
-		Short: "Print the version number of claude-squad",
+		Short: "Print the version number of chronos",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("claude-squad version %s\n", version)
-			fmt.Printf("https://github.com/smtg-ai/claude-squad/releases/tag/v%s\n", version)
+			fmt.Printf("chronos version %s\n", version)
+			fmt.Printf("https://github.com/awkronos/chronos/releases/tag/v%s\n", version)
 		},
 	}
 
 	daemonCmd = &cobra.Command{
 		Use:   "daemon",
-		Short: "Start claude-squad in daemon mode",
+		Short: "Start chronos in daemon mode",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			log.Initialize(true)
 			defer log.Close()
@@ -165,7 +165,7 @@ var (
 
 	connectCmd = &cobra.Command{
 		Use:   "connect",
-		Short: "Connect to a running claude-squad daemon",
+		Short: "Connect to a running chronos daemon",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			log.Initialize(false)

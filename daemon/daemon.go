@@ -1,10 +1,10 @@
 package daemon
 
 import (
-	"claude-squad/config"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/session/git"
+	"chronos/config"
+	"chronos/log"
+	"chronos/session"
+	"chronos/session/git"
 	"fmt"
 	"os"
 	"os/exec"

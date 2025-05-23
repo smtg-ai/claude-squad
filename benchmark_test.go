@@ -1,9 +1,9 @@
 package main
 
 import (
-	"claude-squad/session"
-	"claude-squad/session/tmux"
-	"claude-squad/ui"
+	"chronos/session"
+	"chronos/session/tmux"
+	"chronos/ui"
 	"runtime"
 	"testing"
 	"time"

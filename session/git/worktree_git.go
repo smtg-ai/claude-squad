@@ -1,7 +1,7 @@
 package git
 
 import (
-	"claude-squad/log"
+	"chronos/log"
 	"fmt"
 	"os/exec"
 	"strings"

@@ -1,4 +1,4 @@
-module claude-squad
+module chronos
 
 go 1.23.0
 

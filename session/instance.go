@@ -1,9 +1,9 @@
 package session
 
 import (
-	"claude-squad/log"
-	"claude-squad/session/git"
-	"claude-squad/session/tmux"
+	"chronos/log"
+	"chronos/session/git"
+	"chronos/session/tmux"
 	"fmt"
 	"os"
 	"strings"

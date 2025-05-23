@@ -1,8 +1,8 @@
 package session
 
 import (
-	"claude-squad/config"
-	"claude-squad/session/git"
+	"chronos/config"
+	"chronos/session/git"
 	"encoding/json"
 	"fmt"
 	"time"

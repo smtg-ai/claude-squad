@@ -199,7 +199,7 @@ func (g *GitOperations) Push(squadID string) error {
 		}
 		
 		// Commit with squad message
-		commitMsg := fmt.Sprintf("[claude-squad] Auto-sync from %s squad at %s", 
+		commitMsg := fmt.Sprintf("[chronos] Auto-sync from %s squad at %s", 
 			squadID, time.Now().Format(time.RFC3339))
 		commitCmd := exec.Command("git", "commit", "-m", commitMsg)
 		commitCmd.Dir = g.repoPath

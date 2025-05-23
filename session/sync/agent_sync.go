@@ -1,8 +1,8 @@
 package sync
 
 import (
-	"claude-squad/config"
-	"claude-squad/log"
+	"chronos/config"
+	"chronos/log"
 	"encoding/json"
 	"fmt"
 	"os"

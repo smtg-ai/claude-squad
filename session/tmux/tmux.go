@@ -2,7 +2,7 @@ package tmux
 
 import (
 	"bytes"
-	"claude-squad/log"
+	"chronos/log"
 	"context"
 	"crypto/sha256"
 	"errors"

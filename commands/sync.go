@@ -1,11 +1,11 @@
 package commands
 
 import (
-	"claude-squad/config"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/session/git"
-	"claude-squad/ui"
+	"chronos/config"
+	"chronos/log"
+	"chronos/session"
+	"chronos/session/git"
+	"chronos/ui"
 	"fmt"
 	"time"
 

@@ -1,8 +1,8 @@
 package git
 
 import (
-	"claude-squad/config"
-	"claude-squad/log"
+	"chronos/config"
+	"chronos/log"
 	"fmt"
 	"path/filepath"
 	"time"

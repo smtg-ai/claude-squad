@@ -66,7 +66,7 @@ export default function Home() {
         </div>
         
         <div className={styles.features}>
-          <h2>Why use Claude Squad?</h2>
+          <h2>Why use Chronos?</h2>
           <ul>
             <li>Supervise multiple agents in one UI</li>
             <li>Isolate tasks in git workspaces</li>
@@ -76,7 +76,7 @@ export default function Home() {
       </main>
       <footer className={styles.footer}>
         <p className={styles.copyright}>
-          &copy; {new Date().getFullYear()} Claude Squad. Licensed under <a href="https://github.com/smtg-ai/claude-squad/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer">GNU AGPL v3.0</a>
+          &copy; {new Date().getFullYear()} Chronos. Licensed under <a href="https://github.com/awkronos/chronos/blob/main/LICENSE.md" target="_blank" rel="noopener noreferrer">GNU AGPL v3.0</a>
         </p>
       </footer>
     </div>

@@ -1,9 +1,9 @@
 package ui
 
 import (
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/session/git"
+	"chronos/log"
+	"chronos/session"
+	"chronos/session/git"
 	"fmt"
 	"strings"
 	"time"

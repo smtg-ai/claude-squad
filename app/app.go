@@ -1,12 +1,12 @@
 package app
 
 import (
-	"claude-squad/config"
-	"claude-squad/keys"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/ui"
-	"claude-squad/ui/overlay"
+	"chronos/config"
+	"chronos/keys"
+	"chronos/log"
+	"chronos/session"
+	"chronos/ui"
+	"chronos/ui/overlay"
 	"context"
 	"fmt"
 	"os"
@@ -15,12 +15,23 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"golang.org/x/term"
 )
 
 const GlobalInstanceLimit = 1000 // Modified to allow many more simultaneous squads
 
+// isatty checks if we have a TTY available
+func isatty() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
+}
+
 // Run is the main entrypoint into the application.
 func Run(ctx context.Context, program string, autoYes bool, squadName ...string) error {
+	// Check if we have a TTY before trying to start the UI
+	if !isatty() {
+		return fmt.Errorf("chronos requires an interactive terminal (TTY)")
+	}
+	
 	// If a squad name is provided, automatically create an instance with that name
 	h := newHome(ctx, program, autoYes)
 	
@@ -561,7 +572,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		// Default commit message with timestamp
-		commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
+		commitMsg := fmt.Sprintf("[chronos] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
 		worktree, err := selected.GetGitWorktree()
 		if err != nil {
 			return m, m.handleError(err)
