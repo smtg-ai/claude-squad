@@ -205,12 +205,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 
 	if firstTimeSetup {
 		// Use the Program field (assistant type) to create a unique worktree and branch
-		assistantType := i.Program
-		if assistantType == "" {
-			assistantType = "claude" // Default to claude if not specified
-		}
-
-		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title, assistantType)
+		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
 		if err != nil {
 			return fmt.Errorf("failed to create git worktree: %w", err)
 		}

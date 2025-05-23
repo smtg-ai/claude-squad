@@ -27,6 +27,9 @@ func (i ProfileItem) FilterValue() string { return i.name }
 // GetValue returns the underlying value of the profile item
 func (i ProfileItem) GetValue() interface{} { return i.profile }
 
+// GetWidth returns the width of the profile item
+func (i ProfileItem) GetWidth() int { return max(len(i.name), len(i.profile.Command)) }
+
 // ProfileSelector is a component for selecting profiles
 type ProfileSelector struct {
 	listSelection *overlay.ListSelection

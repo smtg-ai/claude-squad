@@ -88,6 +88,7 @@ cs
 ##### Profiles
 
 Profiles allow you to select an AI assistant for each session. Create profiles in the config file (locate with `cs debug`).
+If no profile is provided, the `"program"` field from the config will be used.
 
 Example profile configuration:
 
@@ -145,3 +146,4 @@ The menu at the bottom of the screen shows available commands:
 ### Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=smtg-ai/claude-squad&type=Date)](https://www.star-history.com/#smtg-ai/claude-squad&Date)
+
