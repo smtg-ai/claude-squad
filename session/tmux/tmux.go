@@ -27,7 +27,6 @@ type TmuxSession struct {
 	// Initialized by NewTmuxSession
 	//
 	// The name of the tmux session and the sanitized name used for tmux commands.
-	Name          string
 	sanitizedName string
 	program       string
 
@@ -64,7 +63,6 @@ func toClaudeSquadTmuxName(str string) string {
 
 func NewTmuxSession(name string, program string) *TmuxSession {
 	return &TmuxSession{
-		Name:          name,
 		sanitizedName: toClaudeSquadTmuxName(name),
 		program:       program,
 	}
