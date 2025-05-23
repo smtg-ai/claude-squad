@@ -19,6 +19,17 @@ func GetConfigDir() (string, error) {
 	return filepath.Join(homeDir, ".claude-squad"), nil
 }
 
+// Profile represents an AI assistant profile
+type Profile struct {
+	// Command is the command to run for this profile
+	Command string `json:"command"`
+	// Env is a map of environment variables to set for this profile
+	Env map[string]string `json:"env"`
+	// Default is true if this profile should be used as the default.
+	// If multiple profiles are set as default, the first one will be used.
+	Default bool `json:"default"`
+}
+
 // Config represents the application configuration
 type Config struct {
 	// DefaultProgram is the default program to run in new instances
@@ -29,6 +40,17 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// Profiles is a map of profile name to profile configuration
+	Profiles map[string]Profile `json:"profiles"`
+}
+
+func (c *Config) GetDefaultProfile() Profile {
+	for _, profile := range c.Profiles {
+		if profile.Default {
+			return profile
+		}
+	}
+	return Profile{}
 }
 
 // DefaultConfig returns the default configuration
@@ -38,6 +60,7 @@ func DefaultConfig() *Config {
 		AutoYes:            false,
 		DaemonPollInterval: 1000,
 		BranchPrefix:       "session/",
+		Profiles:           map[string]Profile{},
 	}
 }
 

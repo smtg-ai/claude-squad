@@ -46,7 +46,7 @@ func NewGitWorktree(repoPath string, sessionName string, assistantType string) (
 	cfg := config.LoadConfig()
 	sanitizedName := sanitizeBranchName(sessionName)
 	sanitizedAssistant := sanitizeBranchName(assistantType)
-	
+
 	// Include assistant type in branch name to ensure uniqueness
 	branchName := fmt.Sprintf("%s%s-%s", cfg.BranchPrefix, sanitizedName, sanitizedAssistant)
 
