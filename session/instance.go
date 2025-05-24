@@ -229,7 +229,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 
 		// Create new session
-		if err := i.tmuxSession.Start(i.Program, i.gitWorktree.GetWorktreePath()); err != nil {
+		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 			// Cleanup git worktree if tmux session creation fails
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
@@ -450,7 +450,7 @@ func (i *Instance) Resume() error {
 	}
 
 	// Create new tmux session
-	if err := i.tmuxSession.Start(i.Program, i.gitWorktree.GetWorktreePath()); err != nil {
+	if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 		log.ErrorLog.Print(err)
 		// Cleanup git worktree if tmux session creation fails
 		if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {

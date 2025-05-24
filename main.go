@@ -2,6 +2,7 @@ package main
 
 import (
 	"claude-squad/app"
+	cmd2 "claude-squad/cmd"
 	"claude-squad/config"
 	"claude-squad/daemon"
 	"claude-squad/log"
@@ -91,7 +92,7 @@ var (
 			}
 			fmt.Println("Storage has been reset successfully")
 
-			if err := tmux.CleanupSessions(); err != nil {
+			if err := tmux.CleanupSessions(cmd2.MakeExecutor()); err != nil {
 				return fmt.Errorf("failed to cleanup tmux sessions: %w", err)
 			}
 			fmt.Println("Tmux sessions have been cleaned up")

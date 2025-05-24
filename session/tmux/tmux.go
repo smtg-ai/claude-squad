@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"bytes"
+	"claude-squad/cmd"
 	"claude-squad/log"
 	"context"
 	"crypto/sha256"
@@ -29,6 +30,10 @@ type TmuxSession struct {
 	// The name of the tmux session and the sanitized name used for tmux commands.
 	sanitizedName string
 	program       string
+	// ptyFactory is used to create a PTY for the tmux session.
+	ptyFactory PtyFactory
+	// cmdExec is used to execute commands in the tmux session.
+	cmdExec cmd.Executor
 
 	// Initialized by Start or Restore
 	//
@@ -61,30 +66,37 @@ func toClaudeSquadTmuxName(str string) string {
 	return fmt.Sprintf("%s%s", TmuxPrefix, str)
 }
 
+// NewTmuxSession creates a new TmuxSession with the given name and program.
 func NewTmuxSession(name string, program string) *TmuxSession {
+	return newTmuxSession(name, program, MakePtyFactory(), cmd.MakeExecutor())
+}
+
+func newTmuxSession(name string, program string, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
 	return &TmuxSession{
 		sanitizedName: toClaudeSquadTmuxName(name),
 		program:       program,
+		ptyFactory:    ptyFactory,
+		cmdExec:       cmdExec,
 	}
 }
 
 // Start creates and starts a new tmux session, then attaches to it. Program is the command to run in
 // the session (ex. claude). workdir is the git worktree directory.
-func (t *TmuxSession) Start(program string, workDir string) error {
+func (t *TmuxSession) Start(workDir string) error {
 	// Check if the session already exists
-	if DoesSessionExist(t.sanitizedName) {
+	if t.DoesSessionExist() {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
 	}
 
 	// Create a new detached tmux session and start claude in it
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, program)
+	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
 
-	ptmx, err := pty.Start(cmd)
+	ptmx, err := t.ptyFactory.Start(cmd)
 	if err != nil {
 		// Cleanup any partially created session if any exists.
-		if DoesSessionExist(t.sanitizedName) {
+		if t.DoesSessionExist() {
 			cleanupCmd := exec.Command("tmux", "kill-session", "-t", t.sanitizedName)
-			if cleanupErr := cleanupCmd.Run(); cleanupErr != nil {
+			if cleanupErr := t.cmdExec.Run(cleanupCmd); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
 			}
 		}
@@ -94,7 +106,7 @@ func (t *TmuxSession) Start(program string, workDir string) error {
 	// We need to close the ptmx, but we shouldn't close it before the command above finishes.
 	// So, we poll for completion before closing.
 	timeout := time.After(2 * time.Second)
-	for !DoesSessionExist(t.sanitizedName) {
+	for !t.DoesSessionExist() {
 		select {
 		case <-timeout:
 			// Cleanup on window size update failure
@@ -116,11 +128,11 @@ func (t *TmuxSession) Start(program string, workDir string) error {
 		return fmt.Errorf("error restoring tmux session: %w", err)
 	}
 
-	if program == ProgramClaude || strings.HasPrefix(program, ProgramAider) {
+	if t.program == ProgramClaude || strings.HasPrefix(t.program, ProgramAider) {
 		searchString := "Do you trust the files in this folder?"
 		tapFunc := t.TapEnter
 		iterations := 5
-		if program != ProgramClaude {
+		if t.program != ProgramClaude {
 			searchString = "Open documentation url for more info"
 			tapFunc = t.TapDAndEnter
 			iterations = 10 // Aider takes longer to start :/
@@ -145,7 +157,7 @@ func (t *TmuxSession) Start(program string, workDir string) error {
 
 // Restore attaches to an existing session and restores the window size
 func (t *TmuxSession) Restore() error {
-	ptmx, err := pty.Start(exec.Command("tmux", "attach-session", "-t", t.sanitizedName))
+	ptmx, err := t.ptyFactory.Start(exec.Command("tmux", "attach-session", "-t", t.sanitizedName))
 	if err != nil {
 		return fmt.Errorf("error opening PTY: %w", err)
 	}
@@ -331,7 +343,7 @@ func (t *TmuxSession) Close() error {
 	}
 
 	cmd := exec.Command("tmux", "kill-session", "-t", t.sanitizedName)
-	if err := cmd.Run(); err != nil {
+	if err := t.cmdExec.Run(cmd); err != nil {
 		errs = append(errs, fmt.Errorf("error killing tmux session: %w", err))
 	}
 
@@ -365,22 +377,17 @@ func (t *TmuxSession) updateWindowSize(cols, rows int) error {
 	})
 }
 
-// DoesSessionExist checks if a tmux session exists
-func DoesSessionExist(name string) bool {
-	// Using "-t name" does a prefix match, which is wrong. `-t=` does an exact match.
-	existsCmd := exec.Command("tmux", "has-session", fmt.Sprintf("-t=%s", name))
-	return existsCmd.Run() == nil
-}
-
 func (t *TmuxSession) DoesSessionExist() bool {
-	return DoesSessionExist(t.sanitizedName)
+	// Using "-t name" does a prefix match, which is wrong. `-t=` does an exact match.
+	existsCmd := exec.Command("tmux", "has-session", fmt.Sprintf("-t=%s", t.sanitizedName))
+	return t.cmdExec.Run(existsCmd) == nil
 }
 
 // CapturePaneContent captures the content of the tmux pane
 func (t *TmuxSession) CapturePaneContent() (string, error) {
 	// Add -e flag to preserve escape sequences (ANSI color codes)
 	cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-t", t.sanitizedName)
-	output, err := cmd.Output()
+	output, err := t.cmdExec.Output(cmd)
 	if err != nil {
 		return "", fmt.Errorf("error capturing pane content: %v", err)
 	}
@@ -392,7 +399,7 @@ func (t *TmuxSession) CapturePaneContent() (string, error) {
 func (t *TmuxSession) CapturePaneContentWithOptions(start, end string) (string, error) {
 	// Add -e flag to preserve escape sequences (ANSI color codes)
 	cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-S", start, "-E", end, "-t", t.sanitizedName)
-	output, err := cmd.Output()
+	output, err := t.cmdExec.Output(cmd)
 	if err != nil {
 		return "", fmt.Errorf("failed to capture tmux pane content with options: %v", err)
 	}
@@ -400,10 +407,10 @@ func (t *TmuxSession) CapturePaneContentWithOptions(start, end string) (string, 
 }
 
 // CleanupSessions kills all tmux sessions that start with "session-"
-func CleanupSessions() error {
+func CleanupSessions(cmdExec cmd.Executor) error {
 	// First try to list sessions
 	cmd := exec.Command("tmux", "ls")
-	output, err := cmd.Output()
+	output, err := cmdExec.Output(cmd)
 
 	// If there's an error and it's because no server is running, that's fine
 	// Exit code 1 typically means no sessions exist
@@ -422,8 +429,7 @@ func CleanupSessions() error {
 
 	for _, match := range matches {
 		log.InfoLog.Printf("cleaning up session: %s", match)
-		cmd := exec.Command("tmux", "kill-session", "-t", match)
-		if err := cmd.Run(); err != nil {
+		if err := cmdExec.Run(exec.Command("tmux", "kill-session", "-t", match)); err != nil {
 			return fmt.Errorf("failed to kill tmux session %s: %v", match, err)
 		}
 	}
