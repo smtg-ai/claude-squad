@@ -14,6 +14,7 @@ import (
 
 // monitorWindowSize monitors and handles window resize events while attached.
 func (t *TmuxSession) monitorWindowSize() {
+	log.InfoLog.Printf("Starting window resize monitoring for tmux session")
 	winchChan := make(chan os.Signal, 1)
 	signal.Notify(winchChan, syscall.SIGWINCH)
 	// Send initial SIGWINCH to trigger the first resize
