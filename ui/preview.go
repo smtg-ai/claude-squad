@@ -70,8 +70,8 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		return err
 	}
 
-	if len(content) == 0 {
-		p.setFallbackState("No agents running yet. Spin up a new instance with 'n' to get started!")
+	if len(content) == 0 && !instance.Started() {
+		p.setFallbackState("Please enter a name for the instance.")
 		return nil
 	}
 
