@@ -70,11 +70,9 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		return err
 	}
 
-	if len(content) == 0 {
-		p.setFallbackState("No agents running yet. Spin up a new instance with 'n' to get started!")
-		return nil
-	}
-
+	// We already know the instance exists and is not paused,
+	// so even if the content is empty, we should still display it
+	// rather than showing the "No agents running" message
 	p.previewState = previewState{
 		fallback: false,
 		text:     content,
