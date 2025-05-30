@@ -1,3 +1,5 @@
+version: 2.9
+
 builds:
   - binary: claude-squad
     goos:
@@ -35,3 +37,104 @@ changelog:
       - typo
       - "^refactor"
       - "^chore"
+
+brews:
+  -
+    # Name of the recipe
+    #
+    # Default: the project name.
+    # Templates: allowed.
+    name: claude-squad
+
+    # NOTE: make sure the url_template, the token and given repo (github or
+    # gitlab) owner and name are from the same kind.
+    # We will probably unify this in the next major version like it is
+    # done with scoop.
+
+    # URL which is determined by the given Token (github, gitlab or gitea).
+    #
+    # Default depends on the client.
+    # Templates: allowed.
+    url_template: "https://github.com/smtg-ai/claude-squad/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+
+    # Git author used to commit to the repository.
+    # Templates: allowed.
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+
+    # The project name and current git tag are used in the format string.
+    #
+    # Templates: allowed.
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+
+    # Directory inside the repository to put the formula.
+    directory: Formula
+
+    # Your app's homepage.
+    #
+    # Default: inferred from global metadata.
+    homepage: "https://smtg-ai.github.io/claude-squad/"
+
+    # Your app's description.
+    #
+    # Templates: allowed.
+    # Default: inferred from global metadata.
+    description: "Manage multiple AI agents like Claude Code, Aider, and more. 10x your productivity."
+
+    # SPDX identifier of your app's license.
+    #
+    # Default: inferred from global metadata.
+    license: "AGPL-3.0"
+
+    # Setting this will prevent goreleaser to actually try to commit the updated
+    # formula - instead, the formula file will be stored on the dist directory
+    # only, leaving the responsibility of publishing it to the user.
+    # If set to auto, the release will not be uploaded to the homebrew tap
+    # in case there is an indicator for prerelease in the tag e.g. v1.0.0-rc1
+    #
+    # Templates: allowed.
+    skip_upload: true
+
+    # Packages your package depends on.
+    dependencies:
+      - name: tmux
+      - name: gh
+        type: optional
+
+    # So you can `brew test` your formula.
+    #
+    # Template: allowed
+    test: |
+      system "#{bin}/cs version"
+      # ...
+
+    # Repository to push the generated files to.
+    repository:
+      # Repository owner.
+      #
+      # Templates: allowed.
+      owner: smtg-ai
+
+      # Repository name.
+      #
+      # Templates: allowed.
+      name: homebrew-tap
+
+      # Optionally a branch can be provided.
+      #
+      # Default: default repository branch.
+      # Templates: allowed.
+      branch: main
+
+      # Sets up pull request creation instead of just pushing to the given branch.
+      # Make sure the 'branch' property is different from base before enabling
+      # it.
+      #
+      # This might require a personal access token.
+      pull_request:
+        # Whether to enable it or not.
+        enabled: true
+
+        # Whether to open the PR as a draft or not.
+        draft: true
