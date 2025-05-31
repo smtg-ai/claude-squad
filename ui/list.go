@@ -114,7 +114,13 @@ func (r *InstanceRenderer) setWidth(width int) {
 const branchIcon = "Ꮧ"
 
 func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, hasMultipleRepos bool) string {
-	prefix := fmt.Sprintf(" %d. ", idx)
+	// Add indentation for worker instances
+	indentation := ""
+	if i.IsWorker {
+		indentation = "  " // Two spaces for indentation
+	}
+
+	prefix := fmt.Sprintf("%s %d. ", indentation, idx)
 	if idx >= 10 {
 		prefix = prefix[:len(prefix)-1]
 	}
@@ -139,6 +145,10 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 
 	// Cut the title if it's too long
 	titleText := i.Title
+	// Add visual indicator for worker instances
+	if i.IsWorker {
+		titleText = "↳ " + titleText
+	}
 	widthAvail := r.width - 3 - len(prefix) - 1
 	if widthAvail > 0 && widthAvail < len(titleText) && len(titleText) >= widthAvail-3 {
 		titleText = titleText[:widthAvail-3] + "..."
