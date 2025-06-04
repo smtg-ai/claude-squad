@@ -47,16 +47,10 @@ const (
 type home struct {
 	ctx context.Context
 
+	// -- Storage and Configuration --
+
 	program string
 	autoYes bool
-
-	// ui components
-	list         *ui.List
-	menu         *ui.Menu
-	tabbedWindow *ui.TabbedWindow
-	errBox       *ui.ErrBox
-	// global spinner instance. we plumb this down to where it's needed
-	spinner spinner.Model
 
 	// storage is the interface for saving/loading data to/from the app's state
 	storage *session.Storage
@@ -65,7 +59,9 @@ type home struct {
 	// appState stores persistent application state like seen help screens
 	appState config.AppState
 
-	// state
+	// -- State --
+
+	// state is the current discrete state of the application
 	state state
 	// newInstanceFinalizer is called when the state is stateNew and then you press enter.
 	// It registers the new instance in the list after the instance has been started.
@@ -74,21 +70,27 @@ type home struct {
 	// promptAfterName tracks if we should enter prompt mode after naming
 	promptAfterName bool
 
-	// textInputOverlay is the component for handling text input with state
-	textInputOverlay *overlay.TextInputOverlay
-
-	// textOverlay is the component for displaying text information
-	textOverlay *overlay.TextOverlay
-
 	// keySent is used to manage underlining menu items
 	keySent bool
 
-	// confirmation state for destructive actions
-	confirmation struct {
-		pendingAction tea.Cmd // Function to execute on confirm
-		message       string  // Message to display
-		active        bool    // Whether confirmation is active
-	}
+	// -- UI Components --
+
+	// list displays the list of instances
+	list *ui.List
+	// menu displays the bottom menu
+	menu *ui.Menu
+	// tabbedWindow displays the tabbed window with preview and diff panes
+	tabbedWindow *ui.TabbedWindow
+	// errBox displays error messages
+	errBox *ui.ErrBox
+	// global spinner instance. we plumb this down to where it's needed
+	spinner spinner.Model
+	// textInputOverlay handles text input with state
+	textInputOverlay *overlay.TextInputOverlay
+	// textOverlay displays text information
+	textOverlay *overlay.TextOverlay
+	// confirmationOverlay displays confirmation modals
+	confirmationOverlay *overlay.ConfirmationOverlay
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -422,41 +424,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle confirmation state
 	if m.state == stateConfirm {
-		switch msg.String() {
-		case "y":
-			// Execute the pending action
-			if m.confirmation.pendingAction != nil {
-				// Reset state first
-				m.state = stateDefault
-				m.textOverlay = nil
-				action := m.confirmation.pendingAction
-				m.confirmation.active = false
-				m.confirmation.pendingAction = nil
-
-				// Execute the action
-				return m, action
-			}
-			// No pending action, just reset state
+		shouldClose := m.confirmationOverlay.HandleKeyPress(msg)
+		if shouldClose {
 			m.state = stateDefault
-			m.textOverlay = nil
-			m.confirmation.active = false
-			return m, nil
-		case "n":
-			// Cancel confirmation
-			m.state = stateDefault
-			m.textOverlay = nil
-			m.confirmation.active = false
-			return m, nil
-		case "esc":
-			// Cancel confirmation
-			m.state = stateDefault
-			m.textOverlay = nil
-			m.confirmation.active = false
-			return m, nil
-		default:
-			// Ignore other keys in confirmation state
+			m.confirmationOverlay = nil
 			return m, nil
 		}
+		return m, nil
 	}
 
 	// Handle quit commands first
@@ -567,7 +541,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		// Show confirmation modal
-		message := fmt.Sprintf("[!] Kill session '%s'? (y/n)", selected.Title)
+		message := fmt.Sprintf("[!] Kill session '%s'?", selected.Title)
 		return m, m.confirmAction(message, killAction)
 	case keys.KeySubmit:
 		selected := m.list.GetSelectedInstance()
@@ -590,7 +564,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		// Show confirmation modal
-		message := fmt.Sprintf("[!] Push changes from session '%s'? (y/n)", selected.Title)
+		message := fmt.Sprintf("[!] Push changes from session '%s'?", selected.Title)
 		return m, m.confirmAction(message, pushAction)
 	case keys.KeyCheckout:
 		selected := m.list.GetSelectedInstance()
@@ -705,16 +679,25 @@ func (m *home) handleError(err error) tea.Cmd {
 
 // confirmAction shows a confirmation modal and stores the action to execute on confirm
 func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
-	m.confirmation.active = true
-	m.confirmation.message = message
-	m.confirmation.pendingAction = action
 	m.state = stateConfirm
 
-	// Create and show the confirmation overlay
-	m.textOverlay = overlay.NewTextOverlay(m.confirmation.message)
+	// Create and show the confirmation overlay using ConfirmationOverlay
+	m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
 	// Set a fixed width for consistent appearance
-	m.textOverlay.SetWidth(50)
-	m.textOverlay.SetIsConfirmation(true)
+	m.confirmationOverlay.SetWidth(50)
+
+	// Set callbacks for confirmation and cancellation
+	m.confirmationOverlay.OnConfirm = func() {
+		m.state = stateDefault
+		// Execute the action if it exists
+		if action != nil {
+			_ = action()
+		}
+	}
+
+	m.confirmationOverlay.OnCancel = func() {
+		m.state = stateDefault
+	}
 
 	return nil
 }
@@ -742,10 +725,10 @@ func (m *home) View() string {
 		}
 		return overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
 	} else if m.state == stateConfirm {
-		if m.textOverlay == nil {
-			log.ErrorLog.Printf("text overlay is nil")
+		if m.confirmationOverlay == nil {
+			log.ErrorLog.Printf("confirmation overlay is nil")
 		}
-		return overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
+		return overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
 	}
 
 	return mainView
