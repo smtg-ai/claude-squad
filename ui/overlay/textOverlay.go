@@ -13,6 +13,8 @@ type TextOverlay struct {
 	OnDismiss func()
 	// Content to display in the overlay
 	content string
+	// Whether this is a confirmation modal
+	isConfirmation bool
 
 	width int
 }
@@ -40,9 +42,14 @@ func (t *TextOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 // Render renders the text overlay
 func (t *TextOverlay) Render(opts ...WhitespaceOption) string {
 	// Create styles
+	borderColor := lipgloss.Color("62") // Default color
+	if t.isConfirmation {
+		borderColor = lipgloss.Color("#de613e") // Red color for confirmations
+	}
+
 	style := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("62")).
+		BorderForeground(borderColor).
 		Padding(1, 2).
 		Width(t.width)
 
@@ -52,4 +59,9 @@ func (t *TextOverlay) Render(opts ...WhitespaceOption) string {
 
 func (t *TextOverlay) SetWidth(width int) {
 	t.width = width
+}
+
+// SetIsConfirmation sets whether this is a confirmation modal
+func (t *TextOverlay) SetIsConfirmation(isConfirmation bool) {
+	t.isConfirmation = isConfirmation
 }

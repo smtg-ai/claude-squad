@@ -40,6 +40,8 @@ const (
 	statePrompt
 	// stateHelp is the state when a help screen is displayed.
 	stateHelp
+	// stateConfirm is the state when a confirmation modal is displayed.
+	stateConfirm
 )
 
 type home struct {
@@ -80,6 +82,13 @@ type home struct {
 
 	// keySent is used to manage underlining menu items
 	keySent bool
+
+	// confirmation state for destructive actions
+	confirmation struct {
+		pendingAction tea.Cmd // Function to execute on confirm
+		message       string  // Message to display
+		active        bool    // Whether confirmation is active
+	}
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -228,6 +237,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.updateHandleWindowSizeEvent(msg)
 		return m, nil
+	case error:
+		// Handle errors from confirmation actions
+		return m, m.handleError(msg)
+	case instanceChangedMsg:
+		// Handle instance changed after confirmation action
+		return m, m.instanceChanged()
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -250,7 +265,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -405,6 +420,45 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle confirmation state
+	if m.state == stateConfirm {
+		switch msg.String() {
+		case "y":
+			// Execute the pending action
+			if m.confirmation.pendingAction != nil {
+				// Reset state first
+				m.state = stateDefault
+				m.textOverlay = nil
+				action := m.confirmation.pendingAction
+				m.confirmation.active = false
+				m.confirmation.pendingAction = nil
+
+				// Execute the action
+				return m, action
+			}
+			// No pending action, just reset state
+			m.state = stateDefault
+			m.textOverlay = nil
+			m.confirmation.active = false
+			return m, nil
+		case "n":
+			// Cancel confirmation
+			m.state = stateDefault
+			m.textOverlay = nil
+			m.confirmation.active = false
+			return m, nil
+		case "esc":
+			// Cancel confirmation
+			m.state = stateDefault
+			m.textOverlay = nil
+			m.confirmation.active = false
+			return m, nil
+		default:
+			// Ignore other keys in confirmation state
+			return m, nil
+		}
+	}
+
 	// Handle quit commands first
 	if msg.String() == "ctrl+c" || msg.String() == "q" {
 		return m.handleQuit()
@@ -485,45 +539,59 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 
-		worktree, err := selected.GetGitWorktree()
-		if err != nil {
-			return m, m.handleError(err)
+		// Create the kill action as a tea.Cmd
+		killAction := func() tea.Msg {
+			// Get worktree and check if branch is checked out
+			worktree, err := selected.GetGitWorktree()
+			if err != nil {
+				return err
+			}
+
+			checkedOut, err := worktree.IsBranchCheckedOut()
+			if err != nil {
+				return err
+			}
+
+			if checkedOut {
+				return fmt.Errorf("instance %s is currently checked out", selected.Title)
+			}
+
+			// Delete from storage first
+			if err := m.storage.DeleteInstance(selected.Title); err != nil {
+				return err
+			}
+
+			// Then kill the instance
+			m.list.Kill()
+			return instanceChangedMsg{}
 		}
 
-		checkedOut, err := worktree.IsBranchCheckedOut()
-		if err != nil {
-			return m, m.handleError(err)
-		}
-
-		if checkedOut {
-			return m, m.handleError(fmt.Errorf("instance %s is currently checked out", selected.Title))
-		}
-
-		// Delete from storage first
-		if err := m.storage.DeleteInstance(selected.Title); err != nil {
-			return m, m.handleError(err)
-		}
-
-		// Then kill the instance
-		m.list.Kill()
-		return m, m.instanceChanged()
+		// Show confirmation modal
+		message := fmt.Sprintf("[!] Kill session '%s'? (y/n)", selected.Title)
+		return m, m.confirmAction(message, killAction)
 	case keys.KeySubmit:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
 
-		// Default commit message with timestamp
-		commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
-		worktree, err := selected.GetGitWorktree()
-		if err != nil {
-			return m, m.handleError(err)
-		}
-		if err = worktree.PushChanges(commitMsg, true); err != nil {
-			return m, m.handleError(err)
+		// Create the push action as a tea.Cmd
+		pushAction := func() tea.Msg {
+			// Default commit message with timestamp
+			commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
+			worktree, err := selected.GetGitWorktree()
+			if err != nil {
+				return err
+			}
+			if err = worktree.PushChanges(commitMsg, true); err != nil {
+				return err
+			}
+			return nil
 		}
 
-		return m, nil
+		// Show confirmation modal
+		message := fmt.Sprintf("[!] Push changes from session '%s'? (y/n)", selected.Title)
+		return m, m.confirmAction(message, pushAction)
 	case keys.KeyCheckout:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
@@ -611,6 +679,8 @@ type previewTickMsg struct{}
 
 type tickUpdateMetadataMessage struct{}
 
+type instanceChangedMsg struct{}
+
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
 // overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.
 var tickUpdateMetadataCmd = func() tea.Msg {
@@ -633,6 +703,22 @@ func (m *home) handleError(err error) tea.Cmd {
 	}
 }
 
+// confirmAction shows a confirmation modal and stores the action to execute on confirm
+func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
+	m.confirmation.active = true
+	m.confirmation.message = message
+	m.confirmation.pendingAction = action
+	m.state = stateConfirm
+
+	// Create and show the confirmation overlay
+	m.textOverlay = overlay.NewTextOverlay(m.confirmation.message)
+	// Set a fixed width for consistent appearance
+	m.textOverlay.SetWidth(50)
+	m.textOverlay.SetIsConfirmation(true)
+
+	return nil
+}
+
 func (m *home) View() string {
 	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.list.String())
 	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.tabbedWindow.String())
@@ -651,6 +737,11 @@ func (m *home) View() string {
 		}
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	} else if m.state == stateHelp {
+		if m.textOverlay == nil {
+			log.ErrorLog.Printf("text overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
+	} else if m.state == stateConfirm {
 		if m.textOverlay == nil {
 			log.ErrorLog.Printf("text overlay is nil")
 		}
