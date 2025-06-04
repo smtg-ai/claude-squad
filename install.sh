@@ -173,6 +173,31 @@ check_command_exists() {
     fi
 }
 
+detect_claude_command() {
+    echo "Detecting claude command..."
+    
+    # First check if claude is available in PATH
+    if command -v claude &> /dev/null 2>&1; then
+        CLAUDE_PATH=$(command -v claude)
+        echo "Found claude in PATH: $CLAUDE_PATH"
+        return 0
+    fi
+    
+    # Check common installation location
+    local claude_local_path="$HOME/.claude/local/claude"
+    if [ -x "$claude_local_path" ]; then
+        CLAUDE_PATH="$claude_local_path"
+        echo "Found claude at: $CLAUDE_PATH"
+        return 0
+    fi
+    
+    # If claude not found, use bash as fallback with a warning
+    echo "WARNING: claude command not found. Using 'bash' as default program."
+    echo "You can change this later by editing ~/.claude-squad/config.json"
+    CLAUDE_PATH="bash"
+    return 0
+}
+
 check_and_install_dependencies() {
     echo "Checking for required dependencies..."
     
@@ -265,6 +290,41 @@ check_and_install_dependencies() {
     echo "All dependencies are installed."
 }
 
+update_config_with_claude_path() {
+    local config_dir="$HOME/.claude-squad"
+    local config_file="$config_dir/config.json"
+    
+    # Create config directory if it doesn't exist
+    if [ ! -d "$config_dir" ]; then
+        mkdir -p "$config_dir"
+    fi
+    
+    # Create or update config file with detected claude path
+    if [ -f "$config_file" ]; then
+        # Update existing config file
+        if command -v jq &> /dev/null; then
+            # Use jq if available
+            jq --arg prog "$CLAUDE_PATH" '.default_program = $prog' "$config_file" > "$config_file.tmp" && mv "$config_file.tmp" "$config_file"
+        else
+            # Use sed as fallback
+            sed -i.bak "s|\"default_program\": \"[^\"]*\"|\"default_program\": \"$CLAUDE_PATH\"|" "$config_file"
+            rm -f "$config_file.bak"
+        fi
+        echo "Updated config file with claude path: $CLAUDE_PATH"
+    else
+        # Create new config file
+        cat > "$config_file" <<EOF
+{
+  "default_program": "$CLAUDE_PATH",
+  "auto_yes": false,
+  "daemon_poll_interval": 1000,
+  "branch_prefix": "session/"
+}
+EOF
+        echo "Created config file with claude path: $CLAUDE_PATH"
+    fi
+}
+
 main() {
     # Parse command line arguments
     INSTALL_NAME="cs"
@@ -289,6 +349,8 @@ main() {
     
     check_and_install_dependencies
     
+    detect_claude_command
+    
     setup_shell_and_path
 
     VERSION=${VERSION:-"latest"}
@@ -303,6 +365,9 @@ main() {
     
     download_release "$VERSION" "$BINARY_URL" "$ARCHIVE_NAME" "$TMP_DIR"
     extract_and_install "$TMP_DIR" "$ARCHIVE_NAME" "$BIN_DIR" "$EXTENSION"
+    
+    # Update config with detected claude path
+    update_config_with_claude_path
 }
 
 # Run a command that should never fail. If the command fails execution
