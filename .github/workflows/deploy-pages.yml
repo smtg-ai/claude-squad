@@ -5,12 +5,12 @@ on:
     branches:
       - main
     paths:
-      - 'web/*'
+      - 'web/**'
   pull_request:
     branches:
       - main
     paths:
-      - 'web/*'
+      - 'web/**'
 
 permissions:
   contents: read

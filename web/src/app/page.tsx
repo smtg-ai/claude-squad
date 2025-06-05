@@ -54,6 +54,15 @@ export default function Home() {
 
         <div className={styles.installation}>
           <h2>Installation</h2>
+          <h3>Via Homebrew</h3>
+          <div className={styles.codeBlockWrapper}>
+            <pre className={styles.codeBlock}>
+              <code>brew install claude-squad</code>
+            </pre>
+            <CopyButton textToCopy="brew install claude-squad" />
+          </div>
+          <br></br>
+          <h3>Via Shell Script</h3>
           <div className={styles.codeBlockWrapper}>
             <pre className={styles.codeBlock}>
               <code>curl -fsSL https://raw.githubusercontent.com/stmg-ai/claude-squad/main/install.sh | bash</code>
