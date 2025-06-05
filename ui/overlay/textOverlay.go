@@ -1,7 +1,7 @@
 package overlay
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -27,7 +27,7 @@ func NewTextOverlay(content string) *TextOverlay {
 
 // HandleKeyPress processes a key press and updates the state
 // Returns true if the overlay should be closed
-func (t *TextOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
+func (t *TextOverlay) HandleKeyPress(msg tea.KeyPressMsg) bool {
 	// Close on any key
 	t.Dismissed = true
 	// Call the OnDismiss callback if it exists

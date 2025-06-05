@@ -7,7 +7,7 @@ import (
 	"claude-squad/ui/overlay"
 	"fmt"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -147,13 +147,13 @@ func (m *home) showHelpScreen(helpType helpType, onDismiss func()) (tea.Model, t
 }
 
 // handleHelpState handles key events when in help state
-func (m *home) handleHelpState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *home) handleHelpState(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Any key press will close the help overlay
 	shouldClose := m.textOverlay.HandleKeyPress(msg)
 	if shouldClose {
 		m.state = stateDefault
 		return m, tea.Sequence(
-			tea.WindowSize(),
+			func() tea.Msg { return tea.RequestWindowSize() },
 			func() tea.Msg {
 				m.menu.SetState(ui.StateDefault)
 				return nil

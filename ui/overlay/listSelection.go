@@ -2,7 +2,8 @@ package overlay
 
 import (
 	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea/v2"
+	teav1 "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -129,7 +130,7 @@ func (ls *ListSelection) Init() tea.Cmd {
 func (ls *ListSelection) Update(msg tea.Msg) (*ListSelection, tea.Cmd) {
 	if !ls.hasItems {
 		switch msg.(type) {
-		case tea.KeyMsg:
+		case tea.KeyPressMsg:
 			ls.quitting = true
 			return ls, nil
 		}
@@ -141,7 +142,7 @@ func (ls *ListSelection) Update(msg tea.Msg) (*ListSelection, tea.Cmd) {
 		ls.list.SetWidth(msg.Width)
 		return ls, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch keypress := msg.String(); keypress {
 		case "ctrl+c":
 			// Ctrl+C no longer quits the list selection
@@ -161,9 +162,12 @@ func (ls *ListSelection) Update(msg tea.Msg) (*ListSelection, tea.Cmd) {
 		}
 	}
 
-	var cmd tea.Cmd
-	ls.list, cmd = ls.list.Update(msg)
-	return ls, cmd
+	var cmdv1 teav1.Cmd
+	ls.list, cmdv1 = ls.list.Update(msg)
+	if cmdv1 != nil {
+		return ls, func() tea.Msg { return cmdv1() }
+	}
+	return ls, nil
 }
 
 // View renders the list selection component
