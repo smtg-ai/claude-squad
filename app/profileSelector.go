@@ -4,7 +4,7 @@ import (
 	"claude-squad/config"
 	"claude-squad/ui/overlay"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea/v2"
 )
 
 const profileListHeight = 14

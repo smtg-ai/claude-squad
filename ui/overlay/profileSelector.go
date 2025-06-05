@@ -4,7 +4,8 @@ import (
 	"claude-squad/config"
 
 	"github.com/charmbracelet/bubbles/list"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea/v2"
+	teav1 "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -77,7 +78,7 @@ func (m *ProfileSelector) Init() tea.Cmd {
 func (m *ProfileSelector) Update(msg tea.Msg) (*ProfileSelector, tea.Cmd) {
 	if !m.hasProfiles {
 		switch msg.(type) {
-		case tea.KeyMsg:
+		case tea.KeyPressMsg:
 			m.quitting = true
 			return m, nil
 		}
@@ -89,7 +90,7 @@ func (m *ProfileSelector) Update(msg tea.Msg) (*ProfileSelector, tea.Cmd) {
 		m.list.SetWidth(msg.Width)
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch keypress := msg.String(); keypress {
 		case "ctrl+c":
 			m.quitting = true
@@ -110,9 +111,12 @@ func (m *ProfileSelector) Update(msg tea.Msg) (*ProfileSelector, tea.Cmd) {
 		}
 	}
 
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
-	return m, cmd
+	var cmdv1 teav1.Cmd
+	m.list, cmdv1 = m.list.Update(msg)
+	if cmdv1 != nil {
+		return m, func() tea.Msg { return cmdv1() }
+	}
+	return m, nil
 }
 
 func (m *ProfileSelector) View() string {

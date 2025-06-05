@@ -13,7 +13,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
+	teav1 "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -186,12 +187,13 @@ func (m *home) Init() tea.Cmd {
 	// Upon starting, we want to start the spinner. Whenever we get a spinner.TickMsg, we
 	// update the spinner, which sends a new spinner.TickMsg. I think this lasts forever lol.
 	return tea.Batch(
-		m.spinner.Tick,
+		func() tea.Msg { return m.spinner.Tick() },
 		func() tea.Msg {
 			time.Sleep(100 * time.Millisecond)
 			return previewTickMsg{}
 		},
 		tickUpdateMetadataCmd,
+		tea.RequestKeyboardEnhancements(),
 	)
 }
 
@@ -234,20 +236,18 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		// Handle mouse wheel scrolling in the diff view
 		if m.tabbedWindow.IsInDiffTab() {
-			if msg.Action == tea.MouseActionPress {
-				switch msg.Button {
-				case tea.MouseButtonWheelUp:
-					m.tabbedWindow.ScrollUp()
-					return m, m.instanceChanged()
-				case tea.MouseButtonWheelDown:
-					m.tabbedWindow.ScrollDown()
-					return m, m.instanceChanged()
-				}
+			if msg.Mouse().Button == tea.MouseWheelDown {
+				m.tabbedWindow.ScrollUp()
+				return m, m.instanceChanged()
+			}
+			if msg.Mouse().Button == tea.MouseWheelUp {
+				m.tabbedWindow.ScrollDown()
+				return m, m.instanceChanged()
 			}
 		}
 		return m, nil
 	case tea.KeyMsg:
-		return m.handleKeyPress(msg)
+		return m.handleKeyPress(msg.(tea.KeyPressMsg))
 	case tea.WindowSizeMsg:
 		m.updateHandleWindowSizeEvent(msg)
 		return m, nil
@@ -258,9 +258,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle instance changed after confirmation action
 		return m, m.instanceChanged()
 	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		var cmdv1 teav1.Cmd
+		m.spinner, cmdv1 = m.spinner.Update(msg)
+		if cmdv1 != nil {
+			return m, func() tea.Msg { return cmdv1() }
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -272,7 +275,7 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
-func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly bool) {
+func (m *home) handleMenuHighlighting(msg tea.KeyPressMsg) (cmd tea.Cmd, returnEarly bool) {
 	// Handle menu highlighting when you press a button. We intercept it here and immediately return to
 	// update the ui while re-sending the keypress. Then, on the next call to this, we actually handle the keypress.
 	if m.keySent {
@@ -306,7 +309,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keydownCallback(name)), true
 }
 
-func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
+func (m *home) handleKeyPress(msg tea.KeyPressMsg) (mod tea.Model, cmd tea.Cmd) {
 	cmd, returnEarly := m.handleMenuHighlighting(msg)
 	if returnEarly {
 		return m, cmd
@@ -323,7 +326,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.promptAfterName = false
 			m.list.Kill()
 			return m, tea.Sequence(
-				tea.WindowSize(),
+				func() tea.Msg { return tea.RequestWindowSize() },
 				func() tea.Msg {
 					m.menu.SetState(ui.StateDefault)
 					return nil
@@ -332,7 +335,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		instance := m.list.GetInstances()[m.list.NumInstances()-1]
-		switch msg.Type {
+		switch msg.Code {
 		// Start the instance (enable previews etc) and go back to the main menu state.
 		case tea.KeyEnter:
 			if len(instance.Title) == 0 {
@@ -376,14 +379,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.showHelpScreen(helpTypeInstanceStart, nil)
 			}
 
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
-		case tea.KeyRunes:
-			if len(instance.Title) >= 32 {
-				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
-			}
-			if err := instance.SetTitle(instance.Title + string(msg.Runes)); err != nil {
-				return m, m.handleError(err)
-			}
+			return m, tea.Batch(func() tea.Msg { return tea.RequestWindowSize() }, m.instanceChanged())
 		case tea.KeyBackspace:
 			if len(instance.Title) == 0 {
 				return m, nil
@@ -401,13 +397,19 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.instanceChanged()
 
 			return m, tea.Sequence(
-				tea.WindowSize(),
+				func() tea.Msg { return tea.RequestWindowSize() },
 				func() tea.Msg {
 					m.menu.SetState(ui.StateDefault)
 					return nil
 				},
 			)
 		default:
+			if len(instance.Title) >= 32 {
+				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
+			}
+			if err := instance.SetTitle(instance.Title + msg.Text); err != nil {
+				return m, m.handleError(err)
+			}
 		}
 		return m, nil
 	} else if m.state == statePrompt {
@@ -431,7 +433,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.textInputOverlay = nil
 			m.state = stateDefault
 			return m, tea.Sequence(
-				tea.WindowSize(),
+				func() tea.Msg { return tea.RequestWindowSize() },
 				func() tea.Msg {
 					m.menu.SetState(ui.StateDefault)
 					m.showHelpScreen(helpTypeInstanceStart, nil)
@@ -473,7 +475,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.textInputOverlay = nil
 			m.state = stateDefault
 			return m, tea.Sequence(
-				tea.WindowSize(),
+				func() tea.Msg { return tea.RequestWindowSize() },
 				func() tea.Msg {
 					m.menu.SetState(ui.StateDefault)
 					m.showHelpScreen(helpTypeInstanceStart, nil)
@@ -517,15 +519,26 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 			// Close the selector and reset state
 			m.profileSelector = nil
-			m.state = stateDefault
-			return m, tea.Sequence(
-				tea.WindowSize(),
-				func() tea.Msg {
-					m.menu.SetState(ui.StateDefault)
-					m.showHelpScreen(helpTypeInstanceStart, nil)
-					return nil
-				},
-			)
+
+			// If promptAfterName is true, transition to prompt input instead of default state
+			if m.promptAfterName {
+				m.state = statePrompt
+				m.menu.SetState(ui.StatePrompt)
+				// Initialize the text input overlay
+				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+				m.promptAfterName = false
+				return m, func() tea.Msg { return tea.RequestWindowSize() }
+			} else {
+				m.state = stateDefault
+				return m, tea.Sequence(
+					func() tea.Msg { return tea.RequestWindowSize() },
+					func() tea.Msg {
+						m.menu.SetState(ui.StateDefault)
+						m.showHelpScreen(helpTypeInstanceStart, nil)
+						return nil
+					},
+				)
+			}
 		}
 
 		return m, cmd
@@ -583,7 +596,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.promptAfterName = true
 
 		return m, nil
-	case keys.KeyNewWithProfileLow, keys.KeyNewWithProfileHigh:
+	case keys.KeyNewWithProfile:
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
@@ -608,6 +621,34 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.state = stateNew
 		m.menu.SetState(ui.StateNewInstance)
 		m.selectProfileAfterName = true
+
+		return m, nil
+	case keys.KeyNewWithProfileWithPrompt:
+		if m.list.NumInstances() >= GlobalInstanceLimit {
+			return m, m.handleError(
+				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
+		}
+
+		if len(m.appConfig.Profiles) == 0 {
+			return m, m.handleError(
+				fmt.Errorf("no AI assistant profiles configured. Please add profiles to your config file first"))
+		}
+
+		instance, err := session.NewInstance(session.InstanceOptions{
+			Title:   "",
+			Path:    ".",
+			Program: m.program,
+		})
+		if err != nil {
+			return m, m.handleError(err)
+		}
+
+		m.newInstanceFinalizer = m.list.AddInstance(instance)
+		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+		m.state = stateNew
+		m.menu.SetState(ui.StateNewInstance)
+		m.selectProfileAfterName = true
+		m.promptAfterName = true
 
 		return m, nil
 	case keys.KeyNew:
@@ -731,7 +772,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if err := selected.Resume(); err != nil {
 			return m, m.handleError(err)
 		}
-		return m, tea.WindowSize()
+		return m, func() tea.Msg { return tea.RequestWindowSize() }
 	case keys.KeyEnter:
 		if m.list.NumInstances() == 0 {
 			return m, nil
