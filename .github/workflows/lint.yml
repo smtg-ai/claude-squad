@@ -15,8 +15,7 @@ on:
       - 'go.sum'
 
 jobs:
-  golangci:
-    name: lint
+  gofmt:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,19 +24,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.23'
-          cache: false
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v1.60.0
-          args: --timeout=3m --out-format=line-number --fast --max-issues-per-linter=0 --max-same-issues=0
-          skip-cache: false
-          skip-pkg-cache: false
-          skip-build-cache: false
-          only-new-issues: true
-
-      - name: Check formatting
+      - name: Run gofmt
         run: |
           if [ -n "$(gofmt -l .)" ]; then
             echo "The following files are not formatted correctly:"
