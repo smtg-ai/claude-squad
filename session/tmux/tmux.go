@@ -244,6 +244,17 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 	go func() {
 		defer t.wg.Done()
 		_, _ = io.Copy(os.Stdout, t.ptmx)
+		// When io.Copy returns, it means the connection was closed
+		// This could be due to normal detach or Ctrl-D
+		// Check if the context is done to determine if it was a normal detach
+		select {
+		case <-t.ctx.Done():
+			// Normal detach, do nothing
+		default:
+			// If context is not done, it was likely an abnormal termination (Ctrl-D)
+			// Print warning message
+			fmt.Fprintf(os.Stderr, "\n\033[31mError: Session terminated without detaching. Use Ctrl-Q to properly detach from tmux sessions.\033[0m\n")
+		}
 	}()
 
 	go func() {
