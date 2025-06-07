@@ -1,8 +1,8 @@
 package ui
 
 import (
+	"claude-squad/instance/task"
 	"claude-squad/log"
-	"claude-squad/session"
 	"errors"
 	"fmt"
 	"strings"
@@ -53,7 +53,7 @@ var autoYesStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("#1a1a1a"))
 
 type List struct {
-	items         []*session.Instance
+	items         []*task.Task
 	selectedIdx   int
 	height, width int
 	renderer      *InstanceRenderer
@@ -66,7 +66,7 @@ type List struct {
 
 func NewList(spinner *spinner.Model, autoYes bool) *List {
 	return &List{
-		items:    []*session.Instance{},
+		items:    []*task.Task{},
 		renderer: &InstanceRenderer{spinner: spinner},
 		repos:    make(map[string]int),
 		autoyes:  autoYes,
@@ -113,8 +113,14 @@ func (r *InstanceRenderer) setWidth(width int) {
 // ɹ and ɻ are other options.
 const branchIcon = "Ꮧ"
 
-func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, hasMultipleRepos bool) string {
-	prefix := fmt.Sprintf(" %d. ", idx)
+func (r *InstanceRenderer) Render(i *task.Task, idx int, selected bool, hasMultipleRepos bool) string {
+	// Add indentation for worker instances
+	indentation := ""
+	if i.IsWorker {
+		indentation = "  " // Two spaces for indentation
+	}
+
+	prefix := fmt.Sprintf("%s %d. ", indentation, idx)
 	if idx >= 10 {
 		prefix = prefix[:len(prefix)-1]
 	}
@@ -128,17 +134,21 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	// add spinner next to title if it's running
 	var join string
 	switch i.Status {
-	case session.Running:
+	case task.Running:
 		join = fmt.Sprintf("%s ", r.spinner.View())
-	case session.Ready:
+	case task.Ready:
 		join = readyStyle.Render(readyIcon)
-	case session.Paused:
+	case task.Paused:
 		join = pausedStyle.Render(pausedIcon)
 	default:
 	}
 
 	// Cut the title if it's too long
 	titleText := i.Title
+	// Add visual indicator for worker instances
+	if i.IsWorker {
+		titleText = "↳ " + titleText
+	}
 	widthAvail := r.width - 3 - len(prefix) - 1
 	if widthAvail > 0 && widthAvail < len(titleText) && len(titleText) >= widthAvail-3 {
 		titleText = titleText[:widthAvail-3] + "..."
@@ -334,7 +344,7 @@ func (l *List) rmRepo(repo string) {
 // AddInstance adds a new instance to the list. It returns a finalizer function that should be called when the instance
 // is started. If the instance was restored from storage or is paused, you can call the finalizer immediately.
 // When creating a new one and entering the name, you want to call the finalizer once the name is done.
-func (l *List) AddInstance(instance *session.Instance) (finalize func()) {
+func (l *List) AddInstance(instance *task.Task) (finalize func()) {
 	l.items = append(l.items, instance)
 	// The finalizer registers the repo name once the instance is started.
 	return func() {
@@ -349,7 +359,7 @@ func (l *List) AddInstance(instance *session.Instance) (finalize func()) {
 }
 
 // GetSelectedInstance returns the currently selected instance
-func (l *List) GetSelectedInstance() *session.Instance {
+func (l *List) GetSelectedInstance() *task.Task {
 	if len(l.items) == 0 {
 		return nil
 	}
@@ -365,6 +375,6 @@ func (l *List) SetSelectedInstance(idx int) {
 }
 
 // GetInstances returns all instances in the list
-func (l *List) GetInstances() []*session.Instance {
+func (l *List) GetInstances() []*task.Task {
 	return l.items
 }

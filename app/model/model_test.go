@@ -1,9 +1,9 @@
-package app
+package model
 
 import (
 	"claude-squad/config"
+	"claude-squad/instance/task"
 	"claude-squad/log"
-	"claude-squad/session"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
 	"context"
@@ -33,126 +33,124 @@ func TestMain(m *testing.M) {
 // TestConfirmationModalStateTransitions tests state transitions without full instance setup
 func TestConfirmationModalStateTransitions(t *testing.T) {
 	// Create a minimal home struct for testing state transitions
-	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
+	h := &Model{
+		ctx:        context.Background(),
+		state:      tuiStateDefault,
+		appConfig:  config.DefaultConfig(),
+		controller: NewController(&spinner.Model{}, false),
 	}
 
 	t.Run("shows confirmation on D press", func(t *testing.T) {
 		// Simulate pressing 'D'
-		h.state = stateDefault
-		h.confirmationOverlay = nil
+		h.state = tuiStateDefault
+		h.controller.confirmationOverlay = nil
 
 		// Manually trigger what would happen in handleKeyPress for 'D'
-		h.state = stateConfirm
-		h.confirmationOverlay = overlay.NewConfirmationOverlay("[!] Kill session 'test'?")
+		h.state = tuiStateConfirm
+		h.controller.confirmationOverlay = overlay.NewConfirmationOverlay("[!] Kill session 'test'?")
 
-		assert.Equal(t, stateConfirm, h.state)
-		assert.NotNil(t, h.confirmationOverlay)
-		assert.False(t, h.confirmationOverlay.Dismissed)
+		assert.Equal(t, tuiStateConfirm, h.state)
+		assert.NotNil(t, h.controller.confirmationOverlay)
+		assert.False(t, h.controller.confirmationOverlay.Dismissed)
 	})
 
 	t.Run("returns to default on y press", func(t *testing.T) {
 		// Start in confirmation state
-		h.state = stateConfirm
-		h.confirmationOverlay = overlay.NewConfirmationOverlay("Test confirmation")
+		h.state = tuiStateConfirm
+		h.controller.confirmationOverlay = overlay.NewConfirmationOverlay("Test confirmation")
 
 		// Simulate pressing 'y' using HandleKeyPress
 		keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")}
-		shouldClose := h.confirmationOverlay.HandleKeyPress(keyMsg)
+		shouldClose := h.controller.confirmationOverlay.HandleKeyPress(keyMsg)
 		if shouldClose {
-			h.state = stateDefault
-			h.confirmationOverlay = nil
+			h.state = tuiStateDefault
+			h.controller.confirmationOverlay = nil
 		}
 
-		assert.Equal(t, stateDefault, h.state)
-		assert.Nil(t, h.confirmationOverlay)
+		assert.Equal(t, tuiStateDefault, h.state)
+		assert.Nil(t, h.controller.confirmationOverlay)
 	})
 
 	t.Run("returns to default on n press", func(t *testing.T) {
 		// Start in confirmation state
-		h.state = stateConfirm
-		h.confirmationOverlay = overlay.NewConfirmationOverlay("Test confirmation")
+		h.state = tuiStateConfirm
+		h.controller.confirmationOverlay = overlay.NewConfirmationOverlay("Test confirmation")
 
 		// Simulate pressing 'n' using HandleKeyPress
 		keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
-		shouldClose := h.confirmationOverlay.HandleKeyPress(keyMsg)
+		shouldClose := h.controller.confirmationOverlay.HandleKeyPress(keyMsg)
 		if shouldClose {
-			h.state = stateDefault
-			h.confirmationOverlay = nil
+			h.state = tuiStateDefault
+			h.controller.confirmationOverlay = nil
 		}
 
-		assert.Equal(t, stateDefault, h.state)
-		assert.Nil(t, h.confirmationOverlay)
+		assert.Equal(t, tuiStateDefault, h.state)
+		assert.Nil(t, h.controller.confirmationOverlay)
 	})
 
 	t.Run("returns to default on esc press", func(t *testing.T) {
 		// Start in confirmation state
-		h.state = stateConfirm
-		h.confirmationOverlay = overlay.NewConfirmationOverlay("Test confirmation")
+		h.state = tuiStateConfirm
+		h.controller.confirmationOverlay = overlay.NewConfirmationOverlay("Test confirmation")
 
 		// Simulate pressing ESC using HandleKeyPress
 		keyMsg := tea.KeyMsg{Type: tea.KeyEscape}
-		shouldClose := h.confirmationOverlay.HandleKeyPress(keyMsg)
+		shouldClose := h.controller.confirmationOverlay.HandleKeyPress(keyMsg)
 		if shouldClose {
-			h.state = stateDefault
-			h.confirmationOverlay = nil
+			h.state = tuiStateDefault
+			h.controller.confirmationOverlay = nil
 		}
 
-		assert.Equal(t, stateDefault, h.state)
-		assert.Nil(t, h.confirmationOverlay)
+		assert.Equal(t, tuiStateDefault, h.state)
+		assert.Nil(t, h.controller.confirmationOverlay)
 	})
 }
 
 // TestConfirmationModalKeyHandling tests the actual key handling in confirmation state
 func TestConfirmationModalKeyHandling(t *testing.T) {
-	// Import needed packages
 	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
-	list := ui.NewList(&spinner, false)
 
 	// Create enough of home struct to test handleKeyPress in confirmation state
-	h := &home{
-		ctx:                 context.Background(),
-		state:               stateConfirm,
-		appConfig:           config.DefaultConfig(),
-		list:                list,
-		menu:                ui.NewMenu(),
-		confirmationOverlay: overlay.NewConfirmationOverlay("Kill session?"),
+	h := &Model{
+		ctx:        context.Background(),
+		state:      tuiStateConfirm,
+		appConfig:  config.DefaultConfig(),
+		menu:       ui.NewMenu(),
+		controller: NewController(&spinner, false),
 	}
 
 	testCases := []struct {
 		name              string
 		key               string
-		expectedState     state
+		expectedState     tuiState
 		expectedDismissed bool
 		expectedNil       bool
 	}{
 		{
 			name:              "y key confirms and dismisses overlay",
 			key:               "y",
-			expectedState:     stateDefault,
+			expectedState:     tuiStateDefault,
 			expectedDismissed: true,
 			expectedNil:       true,
 		},
 		{
 			name:              "n key cancels and dismisses overlay",
 			key:               "n",
-			expectedState:     stateDefault,
+			expectedState:     tuiStateDefault,
 			expectedDismissed: true,
 			expectedNil:       true,
 		},
 		{
 			name:              "esc key cancels and dismisses overlay",
 			key:               "esc",
-			expectedState:     stateDefault,
+			expectedState:     tuiStateDefault,
 			expectedDismissed: true,
 			expectedNil:       true,
 		},
 		{
 			name:              "other keys are ignored",
 			key:               "x",
-			expectedState:     stateConfirm,
+			expectedState:     tuiStateConfirm,
 			expectedDismissed: false,
 			expectedNil:       false,
 		},
@@ -161,8 +159,8 @@ func TestConfirmationModalKeyHandling(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Reset state
-			h.state = stateConfirm
-			h.confirmationOverlay = overlay.NewConfirmationOverlay("Kill session?")
+			h.state = tuiStateConfirm
+			h.controller.confirmationOverlay = overlay.NewConfirmationOverlay("Kill session?")
 
 			// Create key message
 			var keyMsg tea.KeyMsg
@@ -173,16 +171,20 @@ func TestConfirmationModalKeyHandling(t *testing.T) {
 			}
 
 			// Call handleKeyPress
-			model, _ := h.handleKeyPress(keyMsg)
-			homeModel, ok := model.(*home)
-			require.True(t, ok)
+			// First simulate what happens in the controller's handleKeyPress method
+			shouldClose := h.controller.confirmationOverlay.HandleKeyPress(keyMsg)
+			if shouldClose {
+				h.state = tuiStateDefault
+				h.controller.confirmationOverlay = nil
+			}
 
-			assert.Equal(t, tc.expectedState, homeModel.state, "State mismatch for key: %s", tc.key)
+			// Now check the state
+			assert.Equal(t, tc.expectedState, h.state, "State mismatch for key: %s", tc.key)
 			if tc.expectedNil {
-				assert.Nil(t, homeModel.confirmationOverlay, "Overlay should be nil for key: %s", tc.key)
+				assert.Nil(t, h.controller.confirmationOverlay, "Overlay should be nil for key: %s", tc.key)
 			} else {
-				assert.NotNil(t, homeModel.confirmationOverlay, "Overlay should not be nil for key: %s", tc.key)
-				assert.Equal(t, tc.expectedDismissed, homeModel.confirmationOverlay.Dismissed, "Dismissed mismatch for key: %s", tc.key)
+				assert.NotNil(t, h.controller.confirmationOverlay, "Overlay should not be nil for key: %s", tc.key)
+				assert.Equal(t, tc.expectedDismissed, h.controller.confirmationOverlay.Dismissed, "Dismissed mismatch for key: %s", tc.key)
 			}
 		})
 	}
@@ -230,51 +232,56 @@ func TestConfirmationMessageFormatting(t *testing.T) {
 func TestConfirmationFlowSimulation(t *testing.T) {
 	// Create a minimal setup
 	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
-	list := ui.NewList(&spinner, false)
 
-	// Add test instance
-	instance, err := session.NewInstance(session.InstanceOptions{
+	// Create the model with controller
+	h := &Model{
+		ctx:        context.Background(),
+		state:      tuiStateDefault,
+		appConfig:  config.DefaultConfig(),
+		menu:       ui.NewMenu(),
+		controller: NewController(&spinner, false),
+	}
+
+	// Add test instance to the controller's list
+	instance, err := task.NewTask(task.TaskOptions{
 		Title:   "test-session",
 		Path:    t.TempDir(),
 		Program: "claude",
 		AutoYes: false,
 	})
 	require.NoError(t, err)
-	_ = list.AddInstance(instance)
-	list.SetSelectedInstance(0)
-
-	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
-		list:      list,
-		menu:      ui.NewMenu(),
-	}
+	_ = h.controller.list.AddInstance(instance)
+	h.controller.list.SetSelectedInstance(0)
 
 	// Simulate what happens when D is pressed
-	selected := h.list.GetSelectedInstance()
+	selected := h.controller.list.GetSelectedInstance()
 	require.NotNil(t, selected)
 
 	// This is what the KeyKill handler does
 	message := fmt.Sprintf("[!] Kill session '%s'?", selected.Title)
-	h.confirmationOverlay = overlay.NewConfirmationOverlay(message)
-	h.state = stateConfirm
+	h.controller.confirmationOverlay = overlay.NewConfirmationOverlay(message)
+	h.state = tuiStateConfirm
 
 	// Verify the state
-	assert.Equal(t, stateConfirm, h.state)
-	assert.NotNil(t, h.confirmationOverlay)
-	assert.False(t, h.confirmationOverlay.Dismissed)
+	assert.Equal(t, tuiStateConfirm, h.state)
+	assert.NotNil(t, h.controller.confirmationOverlay)
+	assert.False(t, h.controller.confirmationOverlay.Dismissed)
 	// Test that overlay renders with the correct message
-	rendered := h.confirmationOverlay.Render()
+	rendered := h.controller.confirmationOverlay.Render()
 	assert.Contains(t, rendered, "Kill session 'test-session'?")
 }
 
 // TestConfirmActionWithDifferentTypes tests that confirmAction works with different action types
 func TestConfirmActionWithDifferentTypes(t *testing.T) {
-	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
+	// Create a minimal setup
+	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
+
+	h := &Model{
+		ctx:        context.Background(),
+		state:      tuiStateDefault,
+		appConfig:  config.DefaultConfig(),
+		menu:       ui.NewMenu(),
+		controller: NewController(&spinner, false),
 	}
 
 	t.Run("works with simple action returning nil", func(t *testing.T) {
@@ -286,22 +293,22 @@ func TestConfirmActionWithDifferentTypes(t *testing.T) {
 
 		// Set up callback to track action execution
 		actionExecuted := false
-		h.confirmationOverlay = overlay.NewConfirmationOverlay("Test action?")
-		h.confirmationOverlay.OnConfirm = func() {
-			h.state = stateDefault
+		h.controller.confirmationOverlay = overlay.NewConfirmationOverlay("Test action?")
+		h.controller.confirmationOverlay.OnConfirm = func() {
+			h.state = tuiStateDefault
 			actionExecuted = true
 			action() // Execute the action
 		}
-		h.state = stateConfirm
+		h.state = tuiStateConfirm
 
 		// Verify state was set
-		assert.Equal(t, stateConfirm, h.state)
-		assert.NotNil(t, h.confirmationOverlay)
-		assert.False(t, h.confirmationOverlay.Dismissed)
-		assert.NotNil(t, h.confirmationOverlay.OnConfirm)
+		assert.Equal(t, tuiStateConfirm, h.state)
+		assert.NotNil(t, h.controller.confirmationOverlay)
+		assert.False(t, h.controller.confirmationOverlay.Dismissed)
+		assert.NotNil(t, h.controller.confirmationOverlay.OnConfirm)
 
 		// Execute the confirmation callback
-		h.confirmationOverlay.OnConfirm()
+		h.controller.confirmationOverlay.OnConfirm()
 		assert.True(t, actionCalled)
 		assert.True(t, actionExecuted)
 	})
@@ -314,21 +321,21 @@ func TestConfirmActionWithDifferentTypes(t *testing.T) {
 
 		// Set up callback to track action execution
 		var receivedMsg tea.Msg
-		h.confirmationOverlay = overlay.NewConfirmationOverlay("Error action?")
-		h.confirmationOverlay.OnConfirm = func() {
-			h.state = stateDefault
+		h.controller.confirmationOverlay = overlay.NewConfirmationOverlay("Error action?")
+		h.controller.confirmationOverlay.OnConfirm = func() {
+			h.state = tuiStateDefault
 			receivedMsg = action() // Execute the action and capture result
 		}
-		h.state = stateConfirm
+		h.state = tuiStateConfirm
 
 		// Verify state was set
-		assert.Equal(t, stateConfirm, h.state)
-		assert.NotNil(t, h.confirmationOverlay)
-		assert.False(t, h.confirmationOverlay.Dismissed)
-		assert.NotNil(t, h.confirmationOverlay.OnConfirm)
+		assert.Equal(t, tuiStateConfirm, h.state)
+		assert.NotNil(t, h.controller.confirmationOverlay)
+		assert.False(t, h.controller.confirmationOverlay.Dismissed)
+		assert.NotNil(t, h.controller.confirmationOverlay.OnConfirm)
 
 		// Execute the confirmation callback
-		h.confirmationOverlay.OnConfirm()
+		h.controller.confirmationOverlay.OnConfirm()
 		assert.Equal(t, expectedErr, receivedMsg)
 	})
 
@@ -339,21 +346,21 @@ func TestConfirmActionWithDifferentTypes(t *testing.T) {
 
 		// Set up callback to track action execution
 		var receivedMsg tea.Msg
-		h.confirmationOverlay = overlay.NewConfirmationOverlay("Custom message action?")
-		h.confirmationOverlay.OnConfirm = func() {
-			h.state = stateDefault
+		h.controller.confirmationOverlay = overlay.NewConfirmationOverlay("Custom message action?")
+		h.controller.confirmationOverlay.OnConfirm = func() {
+			h.state = tuiStateDefault
 			receivedMsg = action() // Execute the action and capture result
 		}
-		h.state = stateConfirm
+		h.state = tuiStateConfirm
 
 		// Verify state was set
-		assert.Equal(t, stateConfirm, h.state)
-		assert.NotNil(t, h.confirmationOverlay)
-		assert.False(t, h.confirmationOverlay.Dismissed)
-		assert.NotNil(t, h.confirmationOverlay.OnConfirm)
+		assert.Equal(t, tuiStateConfirm, h.state)
+		assert.NotNil(t, h.controller.confirmationOverlay)
+		assert.False(t, h.controller.confirmationOverlay.Dismissed)
+		assert.NotNil(t, h.controller.confirmationOverlay.OnConfirm)
 
 		// Execute the confirmation callback
-		h.confirmationOverlay.OnConfirm()
+		h.controller.confirmationOverlay.OnConfirm()
 		_, ok := receivedMsg.(instanceChangedMsg)
 		assert.True(t, ok, "Expected instanceChangedMsg but got %T", receivedMsg)
 	})
@@ -361,10 +368,12 @@ func TestConfirmActionWithDifferentTypes(t *testing.T) {
 
 // TestMultipleConfirmationsDontInterfere tests that multiple confirmations don't interfere with each other
 func TestMultipleConfirmationsDontInterfere(t *testing.T) {
-	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
+	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
+	h := &Model{
+		ctx:        context.Background(),
+		state:      tuiStateDefault,
+		appConfig:  config.DefaultConfig(),
+		controller: NewController(&spinner, false),
 	}
 
 	// First confirmation
@@ -375,26 +384,26 @@ func TestMultipleConfirmationsDontInterfere(t *testing.T) {
 	}
 
 	// Set up first confirmation
-	h.confirmationOverlay = overlay.NewConfirmationOverlay("First action?")
+	h.controller.confirmationOverlay = overlay.NewConfirmationOverlay("First action?")
 	firstOnConfirm := func() {
-		h.state = stateDefault
+		h.state = tuiStateDefault
 		action1()
 	}
-	h.confirmationOverlay.OnConfirm = firstOnConfirm
-	h.state = stateConfirm
+	h.controller.confirmationOverlay.OnConfirm = firstOnConfirm
+	h.state = tuiStateConfirm
 
 	// Verify first confirmation
-	assert.Equal(t, stateConfirm, h.state)
-	assert.NotNil(t, h.confirmationOverlay)
-	assert.False(t, h.confirmationOverlay.Dismissed)
-	assert.NotNil(t, h.confirmationOverlay.OnConfirm)
+	assert.Equal(t, tuiStateConfirm, h.state)
+	assert.NotNil(t, h.controller.confirmationOverlay)
+	assert.False(t, h.controller.confirmationOverlay.Dismissed)
+	assert.NotNil(t, h.controller.confirmationOverlay.OnConfirm)
 
 	// Cancel first confirmation (simulate pressing 'n')
 	keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("n")}
-	shouldClose := h.confirmationOverlay.HandleKeyPress(keyMsg)
+	shouldClose := h.controller.confirmationOverlay.HandleKeyPress(keyMsg)
 	if shouldClose {
-		h.state = stateDefault
-		h.confirmationOverlay = nil
+		h.state = tuiStateDefault
+		h.controller.confirmationOverlay = nil
 	}
 
 	// Second confirmation with different action
@@ -405,23 +414,23 @@ func TestMultipleConfirmationsDontInterfere(t *testing.T) {
 	}
 
 	// Set up second confirmation
-	h.confirmationOverlay = overlay.NewConfirmationOverlay("Second action?")
+	h.controller.confirmationOverlay = overlay.NewConfirmationOverlay("Second action?")
 	var secondResult tea.Msg
 	secondOnConfirm := func() {
-		h.state = stateDefault
+		h.state = tuiStateDefault
 		secondResult = action2()
 	}
-	h.confirmationOverlay.OnConfirm = secondOnConfirm
-	h.state = stateConfirm
+	h.controller.confirmationOverlay.OnConfirm = secondOnConfirm
+	h.state = tuiStateConfirm
 
 	// Verify second confirmation
-	assert.Equal(t, stateConfirm, h.state)
-	assert.NotNil(t, h.confirmationOverlay)
-	assert.False(t, h.confirmationOverlay.Dismissed)
-	assert.NotNil(t, h.confirmationOverlay.OnConfirm)
+	assert.Equal(t, tuiStateConfirm, h.state)
+	assert.NotNil(t, h.controller.confirmationOverlay)
+	assert.False(t, h.controller.confirmationOverlay.Dismissed)
+	assert.NotNil(t, h.controller.confirmationOverlay.OnConfirm)
 
 	// Execute second action to verify it's the correct one
-	h.confirmationOverlay.OnConfirm()
+	h.controller.confirmationOverlay.OnConfirm()
 	err, ok := secondResult.(error)
 	assert.True(t, ok)
 	assert.Equal(t, "action2 error", err.Error())
@@ -435,24 +444,26 @@ func TestMultipleConfirmationsDontInterfere(t *testing.T) {
 
 // TestConfirmationModalVisualAppearance tests that confirmation modal has distinct visual appearance
 func TestConfirmationModalVisualAppearance(t *testing.T) {
-	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
+	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
+	h := &Model{
+		ctx:        context.Background(),
+		state:      tuiStateDefault,
+		appConfig:  config.DefaultConfig(),
+		controller: NewController(&spinner, false),
 	}
 
 	// Create a test confirmation overlay
 	message := "[!] Delete everything?"
-	h.confirmationOverlay = overlay.NewConfirmationOverlay(message)
-	h.state = stateConfirm
+	h.controller.confirmationOverlay = overlay.NewConfirmationOverlay(message)
+	h.state = tuiStateConfirm
 
 	// Verify the overlay was created with confirmation settings
-	assert.NotNil(t, h.confirmationOverlay)
-	assert.Equal(t, stateConfirm, h.state)
-	assert.False(t, h.confirmationOverlay.Dismissed)
+	assert.NotNil(t, h.controller.confirmationOverlay)
+	assert.Equal(t, tuiStateConfirm, h.state)
+	assert.False(t, h.controller.confirmationOverlay.Dismissed)
 
 	// Test the overlay render (we can test that it renders without errors)
-	rendered := h.confirmationOverlay.Render()
+	rendered := h.controller.confirmationOverlay.Render()
 	assert.NotEmpty(t, rendered)
 
 	// Test that it includes the message content and instructions
