@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"claude-squad/session"
+	"claude-squad/instance/task"
 	"fmt"
 	"strings"
 
@@ -43,12 +43,12 @@ func (p *PreviewPane) setFallbackState(message string) {
 }
 
 // Updates the preview pane content with the tmux pane content
-func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
+func (p *PreviewPane) UpdateContent(instance *task.Task) error {
 	switch {
 	case instance == nil:
 		p.setFallbackState("No agents running yet. Spin up a new instance with 'n' to get started!")
 		return nil
-	case instance.Status == session.Paused:
+	case instance.Status == task.Paused:
 		p.setFallbackState(lipgloss.JoinVertical(lipgloss.Center,
 			"Session is paused. Press 'r' to resume.",
 			"",

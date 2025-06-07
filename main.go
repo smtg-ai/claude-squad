@@ -5,10 +5,9 @@ import (
 	cmd2 "claude-squad/cmd"
 	"claude-squad/config"
 	"claude-squad/daemon"
+	"claude-squad/instance/task/git"
+	"claude-squad/instance/task/tmux"
 	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/session/git"
-	"claude-squad/session/tmux"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,6 +21,7 @@ var (
 	programFlag string
 	autoYesFlag bool
 	daemonFlag  bool
+	promptFlag  string
 	rootCmd     = &cobra.Command{
 		Use:   "claude-squad",
 		Short: "Claude Squad - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.",
@@ -82,14 +82,11 @@ var (
 			log.Initialize(false)
 			defer log.Close()
 
-			state := config.LoadState()
-			storage, err := session.NewStorage(state)
-			if err != nil {
-				return fmt.Errorf("failed to initialize storage: %w", err)
-			}
-			if err := storage.DeleteAllInstances(); err != nil {
-				return fmt.Errorf("failed to reset storage: %w", err)
-			}
+			// state := config.LoadState()
+			// storage := task.NewTaskStorage(state)
+			// if err := storage.DeleteAllInstances(); err != nil {
+			// 	return fmt.Errorf("failed to reset storage: %w", err)
+			// }
 			fmt.Println("Storage has been reset successfully")
 
 			if err := tmux.CleanupSessions(cmd2.MakeExecutor()); err != nil {

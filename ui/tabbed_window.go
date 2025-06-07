@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"claude-squad/session"
+	"claude-squad/instance/task"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -94,14 +94,14 @@ func (w *TabbedWindow) Toggle() {
 }
 
 // UpdatePreview updates the content of the preview pane. instance may be nil.
-func (w *TabbedWindow) UpdatePreview(instance *session.Instance) error {
+func (w *TabbedWindow) UpdatePreview(instance *task.Task) error {
 	if w.activeTab != PreviewTab {
 		return nil
 	}
 	return w.preview.UpdateContent(instance)
 }
 
-func (w *TabbedWindow) UpdateDiff(instance *session.Instance) {
+func (w *TabbedWindow) UpdateDiff(instance *task.Task) {
 	if w.activeTab != DiffTab {
 		return
 	}

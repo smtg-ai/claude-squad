@@ -59,6 +59,15 @@ func (t *TextInputOverlay) View() string {
 // HandleKeyPress processes a key press and updates the state accordingly.
 // Returns true if the overlay should be closed.
 func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
+	// Check for Ctrl+Enter combination
+	if msg.String() == "ctrl+enter" {
+		t.Submitted = true
+		if t.OnSubmit != nil {
+			t.OnSubmit()
+		}
+		return true
+	}
+
 	switch msg.Type {
 	case tea.KeyTab:
 		// Toggle focus between input and enter button.
@@ -155,6 +164,12 @@ func (t *TextInputOverlay) Render() string {
 		enterButton = buttonStyle.Render(enterButton)
 	}
 	content += enterButton
+
+	// Add keyboard shortcut hint
+	hintStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("8")).
+		MarginTop(1)
+	content += "\n" + hintStyle.Render("Ctrl+Enter to submit, Tab to switch focus, Esc to cancel")
 
 	return style.Render(content)
 }

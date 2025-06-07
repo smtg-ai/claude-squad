@@ -2,8 +2,13 @@ package daemon
 
 import (
 	"claude-squad/config"
+	"claude-squad/instance"
+	"claude-squad/instance/interfaces"
+	"claude-squad/instance/task"
+	"claude-squad/instance/types"
 	"claude-squad/log"
-	"claude-squad/session"
+	"claude-squad/registry"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,19 +23,37 @@ import (
 // It's expected that the main process kills the daemon when the main process starts.
 func RunDaemon(cfg *config.Config) error {
 	log.InfoLog.Printf("starting daemon")
-	state := config.LoadState()
-	storage, err := session.NewStorage(state)
-	if err != nil {
-		return fmt.Errorf("failed to initialize storage: %w", err)
+	appState := config.LoadState()
+
+	// Create serialization functions for Instance interface
+	toData := func(i interfaces.Instance) ([]byte, error) {
+		return registry.MarshalInstanceWithType(i)
 	}
+
+	fromData := func(data []byte) (interfaces.Instance, error) {
+		// Unmarshal the instance with type information from the registry
+		var tagged types.TaggedInstance
+		if err := json.Unmarshal(data, &tagged); err != nil {
+			return nil, err
+		}
+		return registry.UnmarshalInstanceWithType(tagged)
+	}
+
+	getTitle := func(i interfaces.Instance) string {
+		return i.StatusText()
+	}
+
+	storage := instance.NewStorage(appState, toData, fromData, getTitle)
 
 	instances, err := storage.LoadInstances()
 	if err != nil {
 		return fmt.Errorf("failed to load instacnes: %w", err)
 	}
 	for _, instance := range instances {
-		// Assume AutoYes is true if the daemon is running.
-		instance.AutoYes = true
+		if taskInstance, ok := instance.(*task.Task); ok {
+			// Assume AutoYes is true if the daemon is running.
+			taskInstance.AutoYes = true
+		}
 	}
 
 	pollInterval := time.Duration(cfg.DaemonPollInterval) * time.Millisecond
@@ -47,12 +70,14 @@ func RunDaemon(cfg *config.Config) error {
 		for {
 			for _, instance := range instances {
 				// We only store started instances, but check anyway.
-				if instance.Started() && !instance.Paused() {
-					if _, hasPrompt := instance.HasUpdated(); hasPrompt {
-						instance.TapEnter()
-						if err := instance.UpdateDiffStats(); err != nil {
-							if everyN.ShouldLog() {
-								log.WarningLog.Printf("could not update diff stats for %s: %v", instance.Title, err)
+				if taskInstance, ok := instance.(*task.Task); ok {
+					if taskInstance.Started() && !taskInstance.Paused() {
+						if _, hasPrompt := taskInstance.HasUpdated(); hasPrompt {
+							taskInstance.TapEnter()
+							if err := taskInstance.UpdateDiffStats(); err != nil {
+								if everyN.ShouldLog() {
+									log.WarningLog.Printf("could not update diff stats for %s: %v", taskInstance.Title, err)
+								}
 							}
 						}
 					}

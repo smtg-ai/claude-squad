@@ -12,7 +12,7 @@ type TextOverlay struct {
 	// Callback function to be called when the overlay is dismissed
 	OnDismiss func()
 	// Content to display in the overlay
-	content string
+	Content string
 
 	width int
 }
@@ -21,7 +21,7 @@ type TextOverlay struct {
 func NewTextOverlay(content string) *TextOverlay {
 	return &TextOverlay{
 		Dismissed: false,
-		content:   content,
+		Content:   content,
 	}
 }
 
@@ -47,7 +47,7 @@ func (t *TextOverlay) Render(opts ...WhitespaceOption) string {
 		Width(t.width)
 
 	// Apply the border style and return
-	return style.Render(t.content)
+	return style.Render(t.Content)
 }
 
 func (t *TextOverlay) SetWidth(width int) {

@@ -25,6 +25,9 @@ const (
 	KeyPrompt // New key for entering a prompt
 	KeyHelp   // Key for showing help screen
 
+	KeyOrchestrator // New key for creating orchestrator instances
+	KeyMerge        // New key for merging worker instances
+
 	// Diff keybindings
 	KeyShiftUp
 	KeyShiftDown
@@ -40,7 +43,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"shift+down": KeyShiftDown,
 	"N":          KeyPrompt,
 	"enter":      KeyEnter,
-	"o":          KeyEnter,
+	"o":          KeyOrchestrator,
 	"n":          KeyNew,
 	"D":          KeyKill,
 	"q":          KeyQuit,
@@ -49,7 +52,32 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"r":          KeyResume,
 	"p":          KeySubmit,
 	"?":          KeyHelp,
+	"M":          KeyMerge,
 }
+
+// Mode-specific keymaps
+var InstanceModeKeyMap = map[string]KeyName{
+	"up":         KeyUp,
+	"k":          KeyUp,
+	"down":       KeyDown,
+	"j":          KeyDown,
+	"shift+up":   KeyShiftUp,
+	"shift+down": KeyShiftDown,
+	"N":          KeyPrompt,
+	"enter":      KeyEnter,
+	"o":          KeyOrchestrator,
+	"n":          KeyNew,
+	"D":          KeyKill,
+	"q":          KeyQuit,
+	"tab":        KeyTab,
+	"c":          KeyCheckout,
+	"r":          KeyResume,
+	"p":          KeySubmit,
+	"?":          KeyHelp,
+	"M":          KeyMerge,
+}
+
+// Removed OrchestratorModeKeyMap - using unified InstanceModeKeyMap only
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
 var GlobalkeyBindings = map[KeyName]key.Binding{
@@ -70,8 +98,8 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithHelp("shift+↓", "scroll"),
 	),
 	KeyEnter: key.NewBinding(
-		key.WithKeys("enter", "o"),
-		key.WithHelp("↵/o", "open"),
+		key.WithKeys("enter"),
+		key.WithHelp("↵", "open"),
 	),
 	KeyNew: key.NewBinding(
 		key.WithKeys("n"),
@@ -115,5 +143,14 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeySubmitName: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "submit name"),
+	),
+
+	KeyOrchestrator: key.NewBinding(
+		key.WithKeys("o"),
+		key.WithHelp("o", "orchestrate"),
+	),
+	KeyMerge: key.NewBinding(
+		key.WithKeys("M"),
+		key.WithHelp("M", "merge workers"),
 	),
 }
