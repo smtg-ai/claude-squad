@@ -40,6 +40,10 @@ type Config struct {
 	Danger bool `json:"danger"`
 	// KeyMappings allows users to customize key bindings
 	KeyMappings map[string][]string `json:"key_mappings,omitempty"`
+	// WorktreePattern is the pattern used to determine worktree location.
+	// Supports variables: {repo_root}, {repo_name}, {issue_number}, {title}, {timestamp}
+	// Example: "{repo_root}/worktree/{issue_number}-{title}"
+	WorktreePattern string `json:"worktree_pattern"`
 }
 
 // DefaultConfig returns the default configuration

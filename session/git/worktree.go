@@ -62,14 +62,28 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 		return nil, "", err
 	}
 
-	worktreeDir, err := getWorktreeDirectory()
-	if err != nil {
-		return nil, "", err
-	}
+	var worktreePath string
 
-	// Use sanitized branch name for the worktree directory name
-	worktreePath := filepath.Join(worktreeDir, branchName)
-	worktreePath = worktreePath + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
+	// Use configured pattern if available
+	if cfg.WorktreePattern != "" {
+		vars := PatternVariables{
+			RepoRoot:    repoPath,
+			RepoName:    filepath.Base(repoPath),
+			IssueNumber: extractIssueNumber(sessionName),
+			Title:       branchName,
+			Timestamp:   fmt.Sprintf("%x", time.Now().UnixNano()),
+		}
+		worktreePath = parseWorktreePattern(cfg.WorktreePattern, vars)
+	} else {
+		// Fall back to default behavior
+		worktreeDir, err := getWorktreeDirectory()
+		if err != nil {
+			return nil, "", err
+		}
+		// Use sanitized branch name for the worktree directory name
+		worktreePath = filepath.Join(worktreeDir, branchName)
+		worktreePath = worktreePath + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
+	}
 
 	return &GitWorktree{
 		repoPath:     repoPath,
