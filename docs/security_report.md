@@ -19,7 +19,7 @@ Overall, the application's use of Go's `os/exec` package with distinct arguments
     *   **Recommendation**:
         1.  Generate SHA256 checksums for all release assets during the build process.
         2.  Upload these checksums alongside the assets to the GitHub release.
-        3.  Modify `install.sh` to download the appropriate checksum file and verify the integrity of the downloaded binary archive before extraction and installation. Exit if validation fails.
+        3.  Modify `install.sh` to download the appropriate checksum file (ensuring it's retrieved from a trusted source or its integrity is verifiable) and verify the integrity of the downloaded binary archive before extraction and installation. Exit if validation fails.
 
 *   **Finding 1.2: Dependency Installation with `sudo`**
     *   **Severity**: Medium
@@ -28,7 +28,7 @@ Overall, the application's use of Go's `os/exec` package with distinct arguments
     *   **Recommendation**:
         1.  This is a common pattern, but users should be aware of the trust placed in these external sources when running the script.
         2.  Consider advising users to install dependencies manually if they prefer, or to carefully review the script sections involving `sudo`.
-        3.  Ensure all `curl` commands for GPG keys and repository information use HTTPS and securely fetch resources.
+        3.  Ensure all `curl` commands use HTTPS. If additional security measures are implied beyond standard HTTPS (e.g., GPG key fingerprint verification), specify these.
 
 *   **Finding 1.3: General Risk of `curl | bash`**
     *   **Severity**: Informational (User Awareness)
@@ -51,6 +51,7 @@ Overall, the application's use of Go's `os/exec` package with distinct arguments
     *   **Recommendation**:
         1.  When loading `Program` from config, validate it to ensure it doesn't contain unexpected shell metacharacters or arguments if it's not simply a path.
         2.  Consider if `program` should always be a full path to an executable or come from a predefined list of known safe programs.
+        3.  If the configured `program` appears to be a shell, consider issuing a warning or requiring explicit user confirmation, especially if features like `AutoYes` are active.
 
 ### 2.3. File System Interactions
 
@@ -70,7 +71,7 @@ Overall, the application's use of Go's `os/exec` package with distinct arguments
         *   Change `Path` or `Worktree.RepoPath` to point to different Git repositories, potentially causing the application to operate on unintended data or execute hooks from a malicious repository if such hooks are triggered by the application's git operations.
     *   **Recommendation**:
         1.  The application must operate under the assumption that these configuration files can be user-modified (maliciously or accidentally).
-        2.  For `Program` / `DefaultProgram`: Critical. Consider if these should be validated against a list of known programs or if their execution should be sandboxed/restricted if they are arbitrary. At a minimum, clearly document that these are executable paths defined by the user's config.
+        2.  For `Program` / `DefaultProgram`: Critical. Consider if these should be validated against a list of known programs, restricted to user-configurable trusted directories, or if their execution should be sandboxed/restricted if they are arbitrary.
         3.  For `Path` / `RepoPath`: The check `findGitRepoRoot` provides some safety by ensuring it's a git repo. Further validation (e.g., against a list of user-approved repo locations) is likely overkill for a local tool but could be considered for higher-security contexts.
 
 ### 2.5. Daemon Behavior (`daemon/daemon.go`)
@@ -91,6 +92,7 @@ Overall, the application's use of Go's `os/exec` package with distinct arguments
         1.  This is an inherent challenge when automating CLI tools via screen scraping.
         2.  Explore if Claude/Aider offer more robust ways to signal that they are at a user prompt (e.g., specific exit codes for a "check prompt" command, IPC, or more unique/non-printable markers in the TUI).
         3.  Regularly test compatibility with new versions of the supported AI tools.
+        4.  As a potential short-term mitigation, consider allowing user-configurable prompt detection strings.
 
 ## 3. Conclusion
 
