@@ -8,7 +8,7 @@ import (
 
 func TestParseWorktreePattern(t *testing.T) {
 	homeDir, _ := os.UserHomeDir()
-	
+
 	tests := []struct {
 		name     string
 		pattern  string
@@ -58,9 +58,9 @@ func TestParseWorktreePattern(t *testing.T) {
 			expected: "",
 		},
 		{
-			name:    "no variables",
-			pattern: "/fixed/path/worktree",
-			vars:    PatternVariables{},
+			name:     "no variables",
+			pattern:  "/fixed/path/worktree",
+			vars:     PatternVariables{},
 			expected: "/fixed/path/worktree",
 		},
 		{
@@ -85,9 +85,9 @@ func TestParseWorktreePattern(t *testing.T) {
 			name:    "empty issue number with delimiter",
 			pattern: "{repo_root}/worktree/{issue_number}-{title}",
 			vars: PatternVariables{
-				RepoRoot: "/home/user/projects/myrepo",
+				RepoRoot:    "/home/user/projects/myrepo",
 				IssueNumber: "",
-				Title:    "feature",
+				Title:       "feature",
 			},
 			expected: "/home/user/projects/myrepo/worktree/feature",
 		},
@@ -95,9 +95,9 @@ func TestParseWorktreePattern(t *testing.T) {
 			name:    "empty title with delimiter",
 			pattern: "{repo_root}/worktree/{issue_number}-{title}",
 			vars: PatternVariables{
-				RepoRoot: "/home/user/projects/myrepo",
+				RepoRoot:    "/home/user/projects/myrepo",
 				IssueNumber: "123",
-				Title:    "",
+				Title:       "",
 			},
 			expected: "/home/user/projects/myrepo/worktree/123",
 		},
@@ -105,10 +105,10 @@ func TestParseWorktreePattern(t *testing.T) {
 			name:    "multiple empty variables",
 			pattern: "{repo_root}/worktree/{issue_number}-{title}_{timestamp}",
 			vars: PatternVariables{
-				RepoRoot: "/home/user/projects/myrepo",
+				RepoRoot:    "/home/user/projects/myrepo",
 				IssueNumber: "",
-				Title:    "",
-				Timestamp: "abc123",
+				Title:       "",
+				Timestamp:   "abc123",
 			},
 			expected: "/home/user/projects/myrepo/worktree/abc123",
 		},
@@ -116,9 +116,9 @@ func TestParseWorktreePattern(t *testing.T) {
 			name:    "path separator preservation",
 			pattern: "{repo_root}/worktree/{issue_number}/{title}",
 			vars: PatternVariables{
-				RepoRoot: "/home/user/projects/myrepo",
+				RepoRoot:    "/home/user/projects/myrepo",
 				IssueNumber: "",
-				Title:    "feature",
+				Title:       "feature",
 			},
 			expected: "/home/user/projects/myrepo/worktree/feature",
 		},

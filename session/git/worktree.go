@@ -61,15 +61,15 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 	}
 
 	var worktreePath string
-	
+
 	// Use configured pattern if available
 	if cfg.WorktreePattern != "" {
 		vars := PatternVariables{
-			RepoRoot:     repoPath,
-			RepoName:     filepath.Base(repoPath),
-			IssueNumber:  extractIssueNumber(sessionName),
-			Title:        sanitizedName,
-			Timestamp:    fmt.Sprintf("%x", time.Now().UnixNano()),
+			RepoRoot:    repoPath,
+			RepoName:    filepath.Base(repoPath),
+			IssueNumber: extractIssueNumber(sessionName),
+			Title:       sanitizedName,
+			Timestamp:   fmt.Sprintf("%x", time.Now().UnixNano()),
 		}
 		worktreePath = parseWorktreePattern(cfg.WorktreePattern, vars)
 	} else {
