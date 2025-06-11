@@ -95,12 +95,12 @@ func (h helpType) ToContent(instance *session.Instance) string {
 		content := lipgloss.JoinVertical(lipgloss.Left,
 			titleStyle.Render("Checkout Instance"),
 			"",
-			"Changes will be committed and pushed to GitHub. The branch name has been copied to your clipboard for you to checkout.",
+			"Changes will be committed locally. The branch name has been copied to your clipboard for you to checkout.",
 			"",
 			"Feel free to make changes to the branch and commit them. When resuming, the session will continue from where you left off.",
 			"",
 			headerStyle.Render("Commands:"),
-			keyStyle.Render("c")+descStyle.Render(" - Checkout: commit changes and pause session"),
+			keyStyle.Render("c")+descStyle.Render(" - Checkout: commit changes locally and pause session"),
 			keyStyle.Render("r")+descStyle.Render(" - Resume a paused session"),
 		)
 		return content

@@ -78,6 +78,31 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 	return nil
 }
 
+// CommitChanges commits changes locally without pushing to remote
+func (g *GitWorktree) CommitChanges(commitMessage string) error {
+	// Check if there are any changes to commit
+	isDirty, err := g.IsDirty()
+	if err != nil {
+		return fmt.Errorf("failed to check for changes: %w", err)
+	}
+
+	if isDirty {
+		// Stage all changes
+		if _, err := g.runGitCommand(g.worktreePath, "add", "."); err != nil {
+			log.ErrorLog.Print(err)
+			return fmt.Errorf("failed to stage changes: %w", err)
+		}
+
+		// Create commit (local only)
+		if _, err := g.runGitCommand(g.worktreePath, "commit", "-m", commitMessage, "--no-verify"); err != nil {
+			log.ErrorLog.Print(err)
+			return fmt.Errorf("failed to commit changes: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // IsDirty checks if the worktree has uncommitted changes
 func (g *GitWorktree) IsDirty() (bool, error) {
 	output, err := g.runGitCommand(g.worktreePath, "status", "--porcelain")
