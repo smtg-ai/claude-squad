@@ -11,11 +11,11 @@ import (
 
 // PatternVariables holds the available variables for worktree pattern substitution
 type PatternVariables struct {
-	RepoRoot     string
-	RepoName     string
-	IssueNumber  string
-	Title        string
-	Timestamp    string
+	RepoRoot    string
+	RepoName    string
+	IssueNumber string
+	Title       string
+	Timestamp   string
 }
 
 // parseWorktreePattern substitutes variables in the pattern with actual values
@@ -64,13 +64,13 @@ func parseWorktreePattern(pattern string, vars PatternVariables) string {
 func cleanupDelimiters(s string) string {
 	// Common delimiters to clean up
 	delimiters := "-_.:"
-	
+
 	// Remove leading delimiters
 	s = strings.TrimLeft(s, delimiters)
-	
+
 	// Remove trailing delimiters
 	s = strings.TrimRight(s, delimiters)
-	
+
 	// Replace multiple consecutive delimiters with a single one
 	// We need to handle each delimiter type separately to preserve the original delimiter
 	for _, delim := range delimiters {
@@ -80,14 +80,14 @@ func cleanupDelimiters(s string) string {
 			s = strings.ReplaceAll(s, multiple, delimStr)
 		}
 	}
-	
+
 	// Special case: remove delimiter before or after path separator
 	// e.g., "/-" -> "/", "-/" -> "/"
 	for _, delim := range delimiters {
 		s = strings.ReplaceAll(s, "/"+string(delim), "/")
 		s = strings.ReplaceAll(s, string(delim)+"/", "/")
 	}
-	
+
 	return s
 }
 
