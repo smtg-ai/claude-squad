@@ -25,6 +25,9 @@ const ProgramAider = "aider"
 
 // TmuxSession represents a managed tmux session
 type TmuxSession struct {
+	// Called when user input is sent to the tmux session (stdin)
+	OnUserInput func()
+
 	// Initialized by NewTmuxSession
 	//
 	// The name of the tmux session and the sanitized name used for tmux commands.
@@ -140,7 +143,7 @@ func (t *TmuxSession) Start(workDir string) error {
 		// Deal with "do you trust the files" screen by sending an enter keystroke.
 		for i := 0; i < iterations; i++ {
 			time.Sleep(200 * time.Millisecond)
-			content, err := t.CapturePaneContent()
+			content, err := t.CapturePaneContent(false)
 			if err != nil {
 				log.ErrorLog.Printf("could not check 'do you trust the files screen': %v", err)
 			}
@@ -185,6 +188,9 @@ func (m *statusMonitor) hash(s string) []byte {
 
 // TapEnter sends an enter keystroke to the tmux pane.
 func (t *TmuxSession) TapEnter() error {
+	if t.OnUserInput != nil {
+		t.OnUserInput()
+	}
 	_, err := t.ptmx.Write([]byte{0x0D})
 	if err != nil {
 		return fmt.Errorf("error sending enter keystroke to PTY: %w", err)
@@ -194,6 +200,9 @@ func (t *TmuxSession) TapEnter() error {
 
 // TapDAndEnter sends 'D' followed by an enter keystroke to the tmux pane.
 func (t *TmuxSession) TapDAndEnter() error {
+	if t.OnUserInput != nil {
+		t.OnUserInput()
+	}
 	_, err := t.ptmx.Write([]byte{0x44, 0x0D})
 	if err != nil {
 		return fmt.Errorf("error sending enter keystroke to PTY: %w", err)
@@ -202,6 +211,9 @@ func (t *TmuxSession) TapDAndEnter() error {
 }
 
 func (t *TmuxSession) SendKeys(keys string) error {
+	if t.OnUserInput != nil {
+		t.OnUserInput()
+	}
 	_, err := t.ptmx.Write([]byte(keys))
 	return err
 }
@@ -209,7 +221,7 @@ func (t *TmuxSession) SendKeys(keys string) error {
 // HasUpdated checks if the tmux pane content has changed since the last tick. It also returns true if
 // the tmux pane has a prompt for aider or claude code.
 func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
-	content, err := t.CapturePaneContent()
+	content, err := t.CapturePaneContent(false)
 	if err != nil {
 		log.ErrorLog.Printf("error capturing pane content in status monitor: %v", err)
 		return false, false
@@ -297,6 +309,9 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 				return
 			}
 
+			if t.OnUserInput != nil {
+				t.OnUserInput()
+			}
 			// Forward other input to tmux
 			_, _ = t.ptmx.Write(buf[:nr])
 		}
@@ -395,12 +410,21 @@ func (t *TmuxSession) DoesSessionExist() bool {
 }
 
 // CapturePaneContent captures the content of the tmux pane
-func (t *TmuxSession) CapturePaneContent() (string, error) {
-	// Add -e flag to preserve escape sequences (ANSI color codes)
-	cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-t", t.sanitizedName)
+func (t *TmuxSession) CapturePaneContent(full bool) (string, error) {
+	if !full {
+		// Add -e flag to preserve escape sequences (ANSI color codes)
+		cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-t", t.sanitizedName)
+		output, err := t.cmdExec.Output(cmd)
+		if err != nil {
+			return "", fmt.Errorf("error capturing pane content: %v", err)
+		}
+		return string(output), nil
+	}
+	// Capture the entire pane content with scrollback
+	cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-S", "-", "-t", t.sanitizedName)
 	output, err := t.cmdExec.Output(cmd)
 	if err != nil {
-		return "", fmt.Errorf("error capturing pane content: %v", err)
+		return "", fmt.Errorf("error capturing full pane content with scrollback: %v", err)
 	}
 	return string(output), nil
 }
