@@ -3,6 +3,7 @@ package model
 import (
 	instanceInterfaces "claude-squad/instance/interfaces"
 	"claude-squad/instance/task"
+	"claude-squad/instance/task/git"
 	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/ui"
@@ -25,12 +26,12 @@ type Controller struct {
 	// promptAfterName tracks if we should enter prompt mode after naming
 	promptAfterName bool
 
-	// instances is the list of instances being managed
+	// instances is the list of instances being managed - this is the source of truth
 	instances []instanceInterfaces.Instance
 
 	// # UI Components
 
-	// list displays the list of instances
+	// list displays the list of instances - observes changes to instances
 	list *ui.List
 	// tabbedWindow displays the tabbed window with preview and diff panes
 	tabbedWindow *ui.TabbedWindow
@@ -44,10 +45,13 @@ type Controller struct {
 
 // NewController creates a new controller
 func NewController(spinner *spinner.Model, autoYes bool) *Controller {
-	return &Controller{
+	c := &Controller{
 		list:         ui.NewList(spinner, autoYes),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
 	}
+	// Initialize with empty instances
+	c.notifyInstancesChanged()
+	return c
 }
 
 // Render returns the rendered UI
@@ -113,21 +117,22 @@ func (c *Controller) Update(model *Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // handleMetadataUpdate updates the metadata for all instances
 func (c *Controller) handleMetadataUpdate() tea.Cmd {
-	for _, instance := range c.list.GetInstances() {
-		if !instance.Started() || instance.Paused() {
+	for _, instance := range c.instances {
+		taskInstance := instance.(*task.Task)
+		if !taskInstance.Started() || taskInstance.Paused() {
 			continue
 		}
-		updated, prompt := instance.HasUpdated()
+		updated, prompt := taskInstance.HasUpdated()
 		if updated {
-			instance.SetStatus(task.Running)
+			taskInstance.SetStatus(task.Running)
 		} else {
 			if prompt {
-				instance.TapEnter()
+				taskInstance.TapEnter()
 			} else {
-				instance.SetStatus(task.Ready)
+				taskInstance.SetStatus(task.Ready)
 			}
 		}
-		if err := instance.UpdateDiffStats(); err != nil {
+		if err := taskInstance.UpdateDiffStats(); err != nil {
 			log.WarningLog.Printf("could not update diff stats: %v", err)
 		}
 	}
@@ -177,7 +182,8 @@ func (c *Controller) handlePromptKeyEvent(model *Model, msg tea.KeyMsg) (tea.Mod
 		// Handle regular prompt for selected instance
 		selected := c.list.GetSelectedInstance()
 		if selected != nil {
-			if err := selected.SendPrompt(c.textInputOverlay.GetValue()); err != nil {
+			taskInstance := selected.(*task.Task)
+			if err := taskInstance.SendPrompt(c.textInputOverlay.GetValue()); err != nil {
 				return model, model.handleError(err)
 			}
 		}
@@ -281,5 +287,80 @@ func (c *Controller) handleKeyPress(model *Model, msg tea.KeyMsg) (mod tea.Model
 func (c *Controller) HandleQuit(model *Model) {
 	if err := model.storage.SaveInstances(c.instances); err != nil {
 		model.handleError(err)
+	}
+}
+
+// convertToUIStatus converts task.Status to ui.InstanceStatus
+func convertToUIStatus(status task.Status) ui.InstanceStatus {
+	switch status {
+	case task.Running:
+		return ui.InstanceRunning
+	case task.Ready:
+		return ui.InstanceReady
+	case task.Paused:
+		return ui.InstancePaused
+	case task.Loading:
+		return ui.InstanceLoading
+	default:
+		return ui.InstanceReady
+	}
+}
+
+// convertDiffStats converts git.DiffStats to ui.DiffStats
+func convertDiffStats(stats *git.DiffStats) *ui.DiffStats {
+	if stats == nil {
+		return nil
+	}
+	return &ui.DiffStats{
+		Added:   stats.Added,
+		Removed: stats.Removed,
+		Error:   stats.Error,
+	}
+}
+
+// notifyInstancesChanged converts instances and notifies the UI list
+func (c *Controller) notifyInstancesChanged() {
+	renderData := make([]ui.InstanceRenderData, len(c.instances))
+	repos := make(map[string]int)
+
+	for i, instance := range c.instances {
+		taskInstance := instance.(*task.Task)
+
+		// Convert to rendering data
+		renderData[i] = ui.InstanceRenderData{
+			Title:     taskInstance.Title,
+			Branch:    taskInstance.Branch,
+			Status:    convertToUIStatus(taskInstance.Status),
+			DiffStats: convertDiffStats(taskInstance.GetDiffStats()),
+			IsStarted: taskInstance.Started(),
+		}
+
+		// Add repo name if instance is started
+		if taskInstance.Started() {
+			if repoName, err := taskInstance.RepoName(); err == nil {
+				renderData[i].RepoName = repoName
+				repos[repoName]++
+			}
+		}
+	}
+
+	c.list.OnInstancesChanged(c.instances)
+	c.list.SetRenderData(renderData, repos)
+}
+
+// addInstance adds an instance to the instances slice and notifies observers
+func (c *Controller) addInstance(instance instanceInterfaces.Instance) {
+	c.instances = append(c.instances, instance)
+	c.notifyInstancesChanged()
+}
+
+// removeInstance removes an instance from the instances slice and notifies observers
+func (c *Controller) removeInstance(title string) {
+	for i, inst := range c.instances {
+		if inst.(*task.Task).Title == title {
+			c.instances = append(c.instances[:i], c.instances[i+1:]...)
+			c.notifyInstancesChanged()
+			break
+		}
 	}
 }

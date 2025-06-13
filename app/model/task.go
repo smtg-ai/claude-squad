@@ -19,12 +19,10 @@ func (c *Controller) LoadExistingInstances(storage *instance.Storage[instanceInt
 		return err
 	}
 
-	for _, instance := range instances {
-		finalizer := c.list.AddInstance(instance.(*task.Task))
-		finalizer() // Call finalizer immediately since instance is already started
-	}
-
 	c.instances = instances
+
+	// Notify observers of the loaded instances
+	c.notifyInstancesChanged()
 
 	return nil
 }
@@ -43,14 +41,23 @@ func (c *Controller) handleNewTask(model *Model, promptAfter bool) (tea.Model, t
 	// Create a new task immediately with default name
 	options := task.TaskOptions{
 		Program: model.program,
-		Title:   "",
+		Title:   "New Instance",
 		Path:    ".",
 	}
 	newTask, err := task.NewTask(options)
 	if err != nil {
 		return model, model.handleError(err)
 	}
-	c.newInstanceFinalizer = c.list.AddInstance(newTask)
+
+	// Add the new instance to the list immediately so it can be edited
+	c.addInstance(newTask)
+
+	// Select the new instance
+	c.list.SetSelectedInstance(len(c.instances) - 1)
+
+	c.newInstanceFinalizer = func() {
+		_ = newTask.Start(true)
+	}
 
 	return model, tea.WindowSize()
 }
@@ -59,9 +66,19 @@ func (c *Controller) handleNewTask(model *Model, promptAfter bool) (tea.Model, t
 func (c *Controller) handleNewInstanceState(model *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Handle quit commands first. Don't handle q because the user might want to type that.
 	if msg.String() == "ctrl+c" {
+		// Remove the new instance from the list
+		selected := c.list.GetSelectedInstance()
+		if selected != nil {
+			taskInstance := selected.(*task.Task)
+			if !taskInstance.Started() {
+				// Remove the unstarted instance
+				c.removeInstance(taskInstance.Title)
+			}
+		}
+
 		model.state = tuiStateDefault
 		c.promptAfterName = false
-		c.list.Kill()
+		c.newInstanceFinalizer = nil // Don't add the cancelled instance
 		return model, tea.Sequence(
 			tea.WindowSize(),
 			func() tea.Msg {
@@ -73,18 +90,19 @@ func (c *Controller) handleNewInstanceState(model *Model, msg tea.KeyMsg) (tea.M
 
 	// Handle escape to cancel instance creation
 	if msg.String() == "esc" {
-		// Revert the new instance
-		if c.newInstanceFinalizer != nil {
-			c.newInstanceFinalizer()
-			c.newInstanceFinalizer = nil
-		}
-		filtered := c.instances[:0]
-		for _, inst := range c.instances {
-			if inst.IsRunning() {
-				filtered = append(filtered, inst)
+		// Remove the new instance from the list
+		selected := c.list.GetSelectedInstance()
+		if selected != nil {
+			taskInstance := selected.(*task.Task)
+			if !taskInstance.Started() {
+				// Remove the unstarted instance
+				c.removeInstance(taskInstance.Title)
 			}
 		}
-		c.instances = filtered
+
+		// Clear the finalizer since we're canceling
+		c.newInstanceFinalizer = nil
+
 		model.state = tuiStateDefault
 		model.menu.SetState(ui.StateDefault)
 		return model, tea.WindowSize()
@@ -96,14 +114,19 @@ func (c *Controller) handleNewInstanceState(model *Model, msg tea.KeyMsg) (tea.M
 		if selected == nil {
 			return model, nil
 		}
-		return c.finalizeNewInstance(model, selected)
+		taskInstance := selected.(*task.Task)
+		return c.finalizeNewInstance(model, taskInstance)
 	}
 
 	// Handle backspace
 	if msg.String() == "backspace" {
 		selected := c.list.GetSelectedInstance()
-		if selected != nil && len(selected.Title) > 0 {
-			selected.Title = selected.Title[:len(selected.Title)-1]
+		if selected != nil {
+			taskInstance := selected.(*task.Task)
+			if len(taskInstance.Title) > 0 {
+				taskInstance.Title = taskInstance.Title[:len(taskInstance.Title)-1]
+				c.notifyInstancesChanged() // Update UI when title changes
+			}
 		}
 		return model, nil
 	}
@@ -112,17 +135,24 @@ func (c *Controller) handleNewInstanceState(model *Model, msg tea.KeyMsg) (tea.M
 	if len(msg.String()) == 1 && msg.String() >= " " && msg.String() <= "~" {
 		selected := c.list.GetSelectedInstance()
 		if selected != nil {
+			taskInstance := selected.(*task.Task)
 			// Clear default name on first character
-			if selected.Title == "New Instance" {
-				selected.Title = ""
+			if taskInstance.Title == "New Instance" {
+				taskInstance.Title = ""
 			}
-			selected.Title += msg.String()
+			taskInstance.Title += msg.String()
+			c.notifyInstancesChanged() // Update UI when title changes
 		}
 		return model, nil
 	}
 
 	// Show help screen for unhandled keys
-	model.ShowHelpScreen(helpTypeInstanceStart, c.list.GetSelectedInstance(), nil, nil)
+	selected := c.list.GetSelectedInstance()
+	var taskInstance *task.Task
+	if selected != nil {
+		taskInstance = selected.(*task.Task)
+	}
+	model.ShowHelpScreen(helpTypeInstanceStart, taskInstance, nil, nil)
 	return model, nil
 }
 
@@ -149,8 +179,7 @@ func (c *Controller) finalizeNewInstance(model *Model, instance *task.Task) (tea
 		c.newInstanceFinalizer = nil
 	}
 
-	// Add the successfully started instance to our instances slice for saving
-	c.instances = append(c.instances, instance)
+	// Instance already added via newInstanceFinalizer
 
 	// If we should prompt after creating the instance, do so
 	if c.promptAfterName {
@@ -182,59 +211,64 @@ func (c *Controller) handleKillInstance(model *Model) (tea.Model, tea.Cmd) {
 		return model, nil
 	}
 
+	taskInstance := selected.(*task.Task)
+
 	// Create the kill action as a tea.Cmd
 	killAction := func() tea.Msg {
-		// Get worktree and check if branch is checked out
-		worktree, err := selected.GetGitWorktree()
-		if err != nil {
-			return err
-		}
-
-		checkedOut, err := worktree.IsBranchCheckedOut()
-		if err != nil {
-			return err
-		}
-
-		if checkedOut {
-			return fmt.Errorf("instance %s is currently checked out", selected.Title)
-		}
-
-		// Delete from storage first
-		if err := model.storage.DeleteInstance(selected.Title); err != nil {
-			return err
-		}
-
-		// Then kill the instance from the list
-		c.list.Kill()
-
-		// Also remove from our instances slice
-		for i, inst := range c.instances {
-			if inst.(*task.Task).Title == selected.Title {
-				c.instances = append(c.instances[:i], c.instances[i+1:]...)
-				break
+		// Only check git worktree if the instance has been started
+		if taskInstance.Started() {
+			// Get worktree and check if branch is checked out
+			worktree, err := taskInstance.GetGitWorktree()
+			if err != nil {
+				return err
 			}
+
+			checkedOut, err := worktree.IsBranchCheckedOut()
+			if err != nil {
+				return err
+			}
+
+			if checkedOut {
+				return fmt.Errorf("instance %s is currently checked out", taskInstance.Title)
+			}
+
+			// Delete from storage first (only if started)
+			if err := model.storage.DeleteInstance(taskInstance.Title); err != nil {
+				return err
+			}
+
+			// Kill the tmux session first
+			c.list.Kill()
 		}
+
+		// Remove from our instances slice and notify observers
+		c.removeInstance(taskInstance.Title)
 
 		return instanceChangedMsg{}
 	}
 
 	// Show confirmation modal
-	message := fmt.Sprintf("[!] Kill session '%s'?", selected.Title)
+	message := fmt.Sprintf("[!] Kill session '%s'?", taskInstance.Title)
 	return model, model.confirmAction(message, killAction)
 }
 
 // handleSubmitChanges submits changes to the selected instance
 func (c *Controller) handleSubmitChanges(model *Model) (tea.Model, tea.Cmd) {
 	selected := c.list.GetSelectedInstance()
-	if selected == nil || selected.Paused() {
+	if selected == nil {
+		return model, nil
+	}
+
+	taskInstance := selected.(*task.Task)
+	if taskInstance.Paused() {
 		return model, nil
 	}
 
 	// Create the push action as a tea.Cmd
 	pushAction := func() tea.Msg {
 		// Default commit message with timestamp
-		commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
-		worktree, err := selected.GetGitWorktree()
+		commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s", taskInstance.Title, time.Now().Format(time.RFC822))
+		worktree, err := taskInstance.GetGitWorktree()
 		if err != nil {
 			return err
 		}
@@ -245,7 +279,7 @@ func (c *Controller) handleSubmitChanges(model *Model) (tea.Model, tea.Cmd) {
 	}
 
 	// Show confirmation modal
-	message := fmt.Sprintf("[!] Push changes from session '%s'?", selected.Title)
+	message := fmt.Sprintf("[!] Push changes from session '%s'?", taskInstance.Title)
 	return model, model.confirmAction(message, pushAction)
 }
 
@@ -256,9 +290,10 @@ func (c *Controller) handleCheckoutInstance(model *Model) (tea.Model, tea.Cmd) {
 		return model, nil
 	}
 
+	taskInstance := selected.(*task.Task)
 	// Show help screen before pausing
-	model.ShowHelpScreen(helpTypeInstanceCheckout, selected, nil, func() {
-		if err := selected.Pause(); err != nil {
+	model.ShowHelpScreen(helpTypeInstanceCheckout, taskInstance, nil, func() {
+		if err := taskInstance.Pause(); err != nil {
 			model.handleError(err)
 		}
 		c.instanceChanged(model)
@@ -272,7 +307,8 @@ func (c *Controller) handleResumeInstance(model *Model) (tea.Model, tea.Cmd) {
 	if selected == nil {
 		return model, nil
 	}
-	if err := selected.Resume(); err != nil {
+	taskInstance := selected.(*task.Task)
+	if err := taskInstance.Resume(); err != nil {
 		return model, model.handleError(err)
 	}
 	return model, tea.WindowSize()
@@ -284,11 +320,15 @@ func (c *Controller) handleAttachInstance(model *Model) (tea.Model, tea.Cmd) {
 		return model, nil
 	}
 	selected := c.list.GetSelectedInstance()
-	if selected == nil || selected.Paused() || !selected.TmuxAlive() {
+	if selected == nil {
+		return model, nil
+	}
+	taskInstance := selected.(*task.Task)
+	if taskInstance.Paused() || !taskInstance.TmuxAlive() {
 		return model, nil
 	}
 	// Show help screen before attaching
-	model.ShowHelpScreen(helpTypeInstanceAttach, selected, nil, func() {
+	model.ShowHelpScreen(helpTypeInstanceAttach, taskInstance, nil, func() {
 		ch, err := c.list.Attach()
 		if err != nil {
 			model.handleError(err)
@@ -305,12 +345,17 @@ func (c *Controller) instanceChanged(model *Model) tea.Cmd {
 	// selected may be nil
 	selected := c.list.GetSelectedInstance()
 
-	c.tabbedWindow.UpdateDiff(selected)
+	var taskInstance *task.Task
+	if selected != nil {
+		taskInstance = selected.(*task.Task)
+	}
+
+	c.tabbedWindow.UpdateDiff(taskInstance)
 	// Update menu with current instance
-	model.menu.SetInstance(selected)
+	model.menu.SetInstance(taskInstance)
 
 	// If there's no selected instance, we don't need to update the preview.
-	if err := c.tabbedWindow.UpdatePreview(selected); err != nil {
+	if err := c.tabbedWindow.UpdatePreview(taskInstance); err != nil {
 		return model.handleError(err)
 	}
 	return nil

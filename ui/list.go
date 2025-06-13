@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"claude-squad/instance/task"
+	"claude-squad/instance"
 	"claude-squad/log"
 	"errors"
 	"fmt"
@@ -53,7 +53,7 @@ var autoYesStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("#1a1a1a"))
 
 type List struct {
-	items         []*task.Task
+	items         []instance.Instance
 	selectedIdx   int
 	height, width int
 	renderer      *InstanceRenderer
@@ -62,11 +62,14 @@ type List struct {
 	// map of repo name to number of instances using it. Used to display the repo name only if there are
 	// multiple repos in play.
 	repos map[string]int
+
+	// renderData contains the data needed to render each instance
+	renderData []InstanceRenderData
 }
 
 func NewList(spinner *spinner.Model, autoYes bool) *List {
 	return &List{
-		items:    []*task.Task{},
+		items:    []instance.Instance{}, // Will be populated via observer callbacks
 		renderer: &InstanceRenderer{spinner: spinner},
 		repos:    make(map[string]int),
 		autoyes:  autoYes,
@@ -84,7 +87,7 @@ func (l *List) SetSize(width, height int) {
 // width and height.
 func (l *List) SetSessionPreviewSize(width, height int) (err error) {
 	for i, item := range l.items {
-		if !item.Started() || item.Paused() {
+		if !item.IsRunning() {
 			continue
 		}
 
@@ -100,7 +103,36 @@ func (l *List) NumInstances() int {
 	return len(l.items)
 }
 
-// InstanceRenderer handles rendering of session.Instance objects
+// InstanceRenderData contains the data needed to render an instance
+type InstanceRenderData struct {
+	Title     string
+	Branch    string
+	Status    InstanceStatus
+	DiffStats *DiffStats
+	IsStarted bool
+	RepoName  string
+}
+
+type InstanceStatus int
+
+const (
+	InstanceRunning InstanceStatus = iota
+	InstanceReady
+	InstancePaused
+	InstanceLoading
+)
+
+type DiffStats struct {
+	Added   int
+	Removed int
+	Error   error
+}
+
+func (d *DiffStats) IsEmpty() bool {
+	return d.Added == 0 && d.Removed == 0
+}
+
+// InstanceRenderer handles rendering of instance data
 type InstanceRenderer struct {
 	spinner *spinner.Model
 	width   int
@@ -113,7 +145,7 @@ func (r *InstanceRenderer) setWidth(width int) {
 // ɹ and ɻ are other options.
 const branchIcon = "Ꮧ"
 
-func (r *InstanceRenderer) Render(i *task.Task, idx int, selected bool, hasMultipleRepos bool) string {
+func (r *InstanceRenderer) Render(data InstanceRenderData, idx int, selected bool, hasMultipleRepos bool) string {
 	prefix := fmt.Sprintf("%s %d. ", "", idx)
 	if idx >= 10 {
 		prefix = prefix[:len(prefix)-1]
@@ -127,18 +159,18 @@ func (r *InstanceRenderer) Render(i *task.Task, idx int, selected bool, hasMulti
 
 	// add spinner next to title if it's running
 	var join string
-	switch i.Status {
-	case task.Running:
+	switch data.Status {
+	case InstanceRunning:
 		join = fmt.Sprintf("%s ", r.spinner.View())
-	case task.Ready:
+	case InstanceReady:
 		join = readyStyle.Render(readyIcon)
-	case task.Paused:
+	case InstancePaused:
 		join = pausedStyle.Render(pausedIcon)
 	default:
 	}
 
 	// Cut the title if it's too long
-	titleText := i.Title
+	titleText := data.Title
 	widthAvail := r.width - 3 - len(prefix) - 1
 	if widthAvail > 0 && widthAvail < len(titleText) && len(titleText) >= widthAvail-3 {
 		titleText = titleText[:widthAvail-3] + "..."
@@ -150,7 +182,7 @@ func (r *InstanceRenderer) Render(i *task.Task, idx int, selected bool, hasMulti
 		join,
 	))
 
-	stat := i.GetDiffStats()
+	stat := data.DiffStats
 
 	var diff string
 	var addedDiff, removedDiff string
@@ -182,13 +214,10 @@ func (r *InstanceRenderer) Render(i *task.Task, idx int, selected bool, hasMulti
 	// Use fixed width for diff stats to avoid layout issues
 	remainingWidth -= diffWidth
 
-	branch := i.Branch
-	if i.Started() && hasMultipleRepos {
-		repoName, err := i.RepoName()
-		if err != nil {
-			log.ErrorLog.Printf("could not get repo name in instance renderer: %v", err)
-		} else {
-			branch += fmt.Sprintf(" (%s)", repoName)
+	branch := data.Branch
+	if data.IsStarted && hasMultipleRepos {
+		if data.RepoName != "" {
+			branch += fmt.Sprintf(" (%s)", data.RepoName)
 		}
 	}
 	// Don't show branch if there's no space for it. Or show ellipsis if it's too long.
@@ -222,6 +251,12 @@ func (r *InstanceRenderer) Render(i *task.Task, idx int, selected bool, hasMulti
 	return text
 }
 
+// SetRenderData sets the rendering data for instances
+func (l *List) SetRenderData(renderData []InstanceRenderData, repos map[string]int) {
+	l.repos = repos
+	l.renderData = renderData
+}
+
 func (l *List) String() string {
 	const titleText = " Instances "
 	const autoYesText = " auto-yes "
@@ -250,8 +285,12 @@ func (l *List) String() string {
 	b.WriteString("\n")
 
 	// Render the list.
-	for i, item := range l.items {
-		b.WriteString(l.renderer.Render(item, i+1, i == l.selectedIdx, len(l.repos) > 1))
+	for i := range l.items {
+		var renderData InstanceRenderData
+		if i < len(l.renderData) {
+			renderData = l.renderData[i]
+		}
+		b.WriteString(l.renderer.Render(renderData, i+1, i == l.selectedIdx, len(l.repos) > 1))
 		if i != len(l.items)-1 {
 			b.WriteString("\n\n")
 		}
@@ -269,7 +308,8 @@ func (l *List) Down() {
 	}
 }
 
-// Kill selects the next item in the list.
+// Kill kills the selected instance's tmux session
+// Note: The actual removal from the list happens via observer pattern
 func (l *List) Kill() {
 	if len(l.items) == 0 {
 		return
@@ -280,22 +320,6 @@ func (l *List) Kill() {
 	if err := targetInstance.Kill(); err != nil {
 		log.ErrorLog.Printf("could not kill instance: %v", err)
 	}
-
-	// If you delete the last one in the list, select the previous one.
-	if l.selectedIdx == len(l.items)-1 {
-		defer l.Up()
-	}
-
-	// Unregister the reponame.
-	repoName, err := targetInstance.RepoName()
-	if err != nil {
-		log.ErrorLog.Printf("could not get repo name: %v", err)
-	} else {
-		l.rmRepo(repoName)
-	}
-
-	// Since there's items after this, the selectedIdx can stay the same.
-	l.items = append(l.items[:l.selectedIdx], l.items[l.selectedIdx+1:]...)
 }
 
 func (l *List) Attach() (chan struct{}, error) {
@@ -331,25 +355,15 @@ func (l *List) rmRepo(repo string) {
 	}
 }
 
-// AddInstance adds a new instance to the list. It returns a finalizer function that should be called when the instance
-// is started. If the instance was restored from storage or is paused, you can call the finalizer immediately.
-// When creating a new one and entering the name, you want to call the finalizer once the name is done.
-func (l *List) AddInstance(instance *task.Task) (finalize func()) {
-	l.items = append(l.items, instance)
-	// The finalizer registers the repo name once the instance is started.
-	return func() {
-		repoName, err := instance.RepoName()
-		if err != nil {
-			log.ErrorLog.Printf("could not get repo name: %v", err)
-			return
-		}
-
-		l.addRepo(repoName)
-	}
+// AddInstance is deprecated - instances are now managed via observer pattern
+// This method is kept for backward compatibility during transition
+func (l *List) AddInstance(inst instance.Instance) (finalize func()) {
+	// Return a no-op finalizer since instances are managed via observer pattern
+	return func() {}
 }
 
 // GetSelectedInstance returns the currently selected instance
-func (l *List) GetSelectedInstance() *task.Task {
+func (l *List) GetSelectedInstance() instance.Instance {
 	if len(l.items) == 0 {
 		return nil
 	}
@@ -365,6 +379,29 @@ func (l *List) SetSelectedInstance(idx int) {
 }
 
 // GetInstances returns all instances in the list
-func (l *List) GetInstances() []*task.Task {
+func (l *List) GetInstances() []instance.Instance {
 	return l.items
+}
+
+// OnInstancesChanged implements InstanceObserver interface
+// This updates the list when the underlying instances change
+func (l *List) OnInstancesChanged(instances []instance.Instance) {
+	l.items = instances
+
+	// Note: Repos map rebuilding will be handled by the model/controller
+	// that provides the render data
+
+	// Ensure selectedIdx is within bounds
+	if l.selectedIdx >= len(l.items) && len(l.items) > 0 {
+		l.selectedIdx = len(l.items) - 1
+	} else if len(l.items) == 0 {
+		l.selectedIdx = 0
+	}
+}
+
+// OnInstanceSelected implements InstanceObserver interface
+func (l *List) OnInstanceSelected(selectedIdx int) {
+	if selectedIdx >= 0 && selectedIdx < len(l.items) {
+		l.selectedIdx = selectedIdx
+	}
 }

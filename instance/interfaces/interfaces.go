@@ -10,4 +10,9 @@ type Instance interface {
 	Deserialize([]byte) error
 
 	IsRunning() bool
+
+	// Core instance operations
+	Kill() error
+	Attach() (chan struct{}, error)
+	SetPreviewSize(width, height int) error
 }

@@ -94,6 +94,9 @@ func NewModel(ctx context.Context, program string, autoYes bool) *Model {
 	}
 
 	getTitle := func(i instanceInterfaces.Instance) string {
+		if task, ok := i.(*task.Task); ok {
+			return task.Title
+		}
 		return i.StatusText()
 	}
 

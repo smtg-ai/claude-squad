@@ -143,9 +143,16 @@ func (t *TmuxSession) Start(workDir string) error {
 		// Deal with "do you trust the files" screen by sending an enter keystroke.
 		for i := 0; i < iterations; i++ {
 			time.Sleep(200 * time.Millisecond)
+
+			// Check if session exists before trying to capture pane content
+			if !t.DoesSessionExist() {
+				continue
+			}
+
 			content, err := t.CapturePaneContent(false)
 			if err != nil {
 				log.ErrorLog.Printf("could not check 'do you trust the files screen': %v", err)
+				continue // Continue trying instead of potentially breaking
 			}
 			if strings.Contains(content, searchString) {
 				if err := tapFunc(); err != nil {
@@ -221,6 +228,11 @@ func (t *TmuxSession) SendKeys(keys string) error {
 // HasUpdated checks if the tmux pane content has changed since the last tick. It also returns true if
 // the tmux pane has a prompt for aider or claude code.
 func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
+	// Check if session exists before trying to capture content
+	if !t.DoesSessionExist() {
+		return false, false
+	}
+
 	content, err := t.CapturePaneContent(false)
 	if err != nil {
 		log.ErrorLog.Printf("error capturing pane content in status monitor: %v", err)

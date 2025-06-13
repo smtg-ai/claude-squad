@@ -242,7 +242,7 @@ func TestConfirmationFlowSimulation(t *testing.T) {
 		controller: NewController(&spinner, false),
 	}
 
-	// Add test instance to the controller's list
+	// Add test instance to the controller's instances (source of truth)
 	instance, err := task.NewTask(task.TaskOptions{
 		Title:   "test-session",
 		Path:    t.TempDir(),
@@ -250,7 +250,7 @@ func TestConfirmationFlowSimulation(t *testing.T) {
 		AutoYes: false,
 	})
 	require.NoError(t, err)
-	_ = h.controller.list.AddInstance(instance)
+	h.controller.addInstance(instance)
 	h.controller.list.SetSelectedInstance(0)
 
 	// Simulate what happens when D is pressed
@@ -258,7 +258,8 @@ func TestConfirmationFlowSimulation(t *testing.T) {
 	require.NotNil(t, selected)
 
 	// This is what the KeyKill handler does
-	message := fmt.Sprintf("[!] Kill session '%s'?", selected.Title)
+	taskInstance := selected.(*task.Task)
+	message := fmt.Sprintf("[!] Kill session '%s'?", taskInstance.Title)
 	h.controller.confirmationOverlay = overlay.NewConfirmationOverlay(message)
 	h.state = tuiStateConfirm
 

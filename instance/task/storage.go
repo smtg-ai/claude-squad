@@ -89,8 +89,13 @@ func FromInstanceData(data TaskData) (*Task, error) {
 		},
 	}
 
-	if instance.Paused() {
+	// Set started flag based on whether we have valid worktree data
+	// This ensures GetGitWorktree() works even if tmux session isn't running
+	if data.Worktree.RepoPath != "" && data.Worktree.BranchName != "" {
 		instance.started = true
+	}
+
+	if instance.Paused() {
 		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program)
 	} else {
 		if err := instance.Start(false); err != nil {
