@@ -6,19 +6,24 @@ toolchain go1.24.1
 
 require (
 	github.com/atotto/clipboard v0.1.4
-	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.3.4
-	github.com/charmbracelet/lipgloss v1.0.0
+	github.com/charmbracelet/bubbletea/v2 v2.0.0-beta.3
+	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/creack/pty v1.1.24
 	github.com/go-git/go-git/v5 v5.14.0
 	github.com/mattn/go-runewidth v0.0.16
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 	github.com/muesli/reflow v0.3.0
-	github.com/muesli/termenv v0.15.2
+	github.com/muesli/termenv v0.16.0
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/sys v0.31.0
+	golang.org/x/sys v0.32.0
 	golang.org/x/term v0.30.0
+)
+
+require (
+	github.com/charmbracelet/x/input v0.3.5-0.20250424101541-abb4d9a9b197 // indirect
+	github.com/charmbracelet/x/windows v0.2.1 // indirect
 )
 
 require (
@@ -26,7 +31,10 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.1.5 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
+	github.com/charmbracelet/bubbles v0.21.0 // indirect
+	github.com/charmbracelet/colorprofile v0.3.1 // indirect
 	github.com/charmbracelet/x/ansi v0.8.0 // indirect
+	github.com/charmbracelet/x/cellbuf v0.0.14-0.20250501183327-ad3bc78c6a81 // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/cloudflare/circl v1.6.0 // indirect
 	github.com/cyphar/filepath-securejoin v0.4.1 // indirect
@@ -46,14 +54,16 @@ require (
 	github.com/pjbgf/sha1cd v0.3.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/sergi/go-diff v1.3.2-0.20230802210424-5b0b94c5c0d3 // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
+	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/net v0.36.0 // indirect
-	golang.org/x/sync v0.11.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/sync v0.13.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

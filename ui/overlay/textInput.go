@@ -2,7 +2,7 @@ package overlay
 
 import (
 	"github.com/charmbracelet/bubbles/textarea"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea/v2"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -48,7 +48,7 @@ func (t *TextInputOverlay) SetSize(width, height int) {
 
 // Init initializes the text input overlay model
 func (t *TextInputOverlay) Init() tea.Cmd {
-	return textarea.Blink
+	return nil
 }
 
 // View renders the model's view
@@ -58,8 +58,8 @@ func (t *TextInputOverlay) View() string {
 
 // HandleKeyPress processes a key press and updates the state accordingly.
 // Returns true if the overlay should be closed.
-func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
-	switch msg.Type {
+func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyPressMsg) bool {
+	switch msg.Code {
 	case tea.KeyTab:
 		// Toggle focus between input and enter button.
 		t.FocusIndex = (t.FocusIndex + 1) % 2
@@ -69,15 +69,16 @@ func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 			t.textarea.Blur()
 		}
 		return false
-	case tea.KeyShiftTab:
-		// Toggle focus in reverse.
-		t.FocusIndex = (t.FocusIndex + 1) % 2
-		if t.FocusIndex == 0 {
-			t.textarea.Focus()
-		} else {
-			t.textarea.Blur()
-		}
-		return false
+	// Handle shift+tab differently in v2, remove for now
+		// case tea.KeyTab:
+		//	// Toggle focus in reverse.
+		//	t.FocusIndex = (t.FocusIndex + 1) % 2
+		//	if t.FocusIndex == 0 {
+		//		t.textarea.Focus()
+		//	} else {
+		//		t.textarea.Blur()
+		//	}
+		//	return false
 	case tea.KeyEsc:
 		t.Canceled = true
 		return true

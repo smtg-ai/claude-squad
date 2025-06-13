@@ -26,6 +26,17 @@ func GetConfigDir() (string, error) {
 	return filepath.Join(homeDir, ".claude-squad"), nil
 }
 
+// Profile represents an AI assistant profile
+type Profile struct {
+	// Command is the command to run for this profile
+	Command string `json:"command"`
+	// Env is a map of environment variables to set for this profile
+	Env map[string]string `json:"env"`
+	// Default is true if this profile should be used as the default.
+	// If multiple profiles are set as default, the first one will be used.
+	Default bool `json:"default"`
+}
+
 // Config represents the application configuration
 type Config struct {
 	// DefaultProgram is the default program to run in new instances
@@ -36,6 +47,17 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// Profiles is a map of profile name to profile configuration
+	Profiles map[string]Profile `json:"profiles"`
+}
+
+func (c *Config) GetDefaultProfile() Profile {
+	for _, profile := range c.Profiles {
+		if profile.Default {
+			return profile
+		}
+	}
+	return Profile{}
 }
 
 // DefaultConfig returns the default configuration
@@ -58,6 +80,7 @@ func DefaultConfig() *Config {
 			}
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
+		Profiles:           map[string]Profile{},
 	}
 }
 
@@ -109,10 +132,36 @@ func GetClaudeCommand() (string, error) {
 	return "", fmt.Errorf("claude command not found in aliases or PATH")
 }
 
+// safeLogf logs a message safely, handling the case where loggers might not be initialized
+func safeLogf(level string, format string, args ...interface{}) {
+	message := fmt.Sprintf(format, args...)
+	// Try to use the logger if it's initialized
+	switch level {
+	case "error":
+		if log.ErrorLog != nil {
+			log.ErrorLog.Print(message)
+			return
+		}
+	case "warning":
+		if log.WarningLog != nil {
+			log.WarningLog.Print(message)
+			return
+		}
+	case "info":
+		if log.InfoLog != nil {
+			log.InfoLog.Print(message)
+			return
+		}
+	}
+
+	// Fallback to fmt if logger is not initialized
+	fmt.Printf("%s: %s\n", level, message)
+}
+
 func LoadConfig() *Config {
 	configDir, err := GetConfigDir()
 	if err != nil {
-		log.ErrorLog.Printf("failed to get config directory: %v", err)
+		safeLogf("error", "failed to get config directory: %v", err)
 		return DefaultConfig()
 	}
 
@@ -123,18 +172,18 @@ func LoadConfig() *Config {
 			// Create and save default config if file doesn't exist
 			defaultCfg := DefaultConfig()
 			if saveErr := saveConfig(defaultCfg); saveErr != nil {
-				log.WarningLog.Printf("failed to save default config: %v", saveErr)
+				safeLogf("warning", "failed to save default config: %v", saveErr)
 			}
 			return defaultCfg
 		}
 
-		log.WarningLog.Printf("failed to get config file: %v", err)
+		safeLogf("warning", "failed to get config file: %v", err)
 		return DefaultConfig()
 	}
 
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
-		log.ErrorLog.Printf("failed to parse config file: %v", err)
+		safeLogf("error", "failed to parse config file: %v", err)
 		return DefaultConfig()
 	}
 

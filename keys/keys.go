@@ -22,8 +22,10 @@ const (
 
 	KeyCheckout
 	KeyResume
-	KeyPrompt // New key for entering a prompt
-	KeyHelp   // Key for showing help screen
+	KeyPrompt                   // New key for entering a prompt
+	KeyNewWithProfile           // New key for creating a new instance with profile selection (alt+n)
+	KeyNewWithProfileWithPrompt // New key for creating a new instance with profile selection and a prompt (ctrl+shift+n)
+	KeyHelp                     // Key for showing help screen
 
 	// Diff keybindings
 	KeyShiftUp
@@ -32,23 +34,25 @@ const (
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
 var GlobalKeyStringsMap = map[string]KeyName{
-	"up":         KeyUp,
-	"k":          KeyUp,
-	"down":       KeyDown,
-	"j":          KeyDown,
-	"shift+up":   KeyShiftUp,
-	"shift+down": KeyShiftDown,
-	"N":          KeyPrompt,
-	"enter":      KeyEnter,
-	"o":          KeyEnter,
-	"n":          KeyNew,
-	"D":          KeyKill,
-	"q":          KeyQuit,
-	"tab":        KeyTab,
-	"c":          KeyCheckout,
-	"r":          KeyResume,
-	"p":          KeySubmit,
-	"?":          KeyHelp,
+	"up":           KeyUp,
+	"k":            KeyUp,
+	"down":         KeyDown,
+	"j":            KeyDown,
+	"shift+up":     KeyShiftUp,
+	"shift+down":   KeyShiftDown,
+	"N":            KeyPrompt,
+	"ctrl+n":       KeyNewWithProfile,
+	"ctrl+shift+n": KeyNewWithProfileWithPrompt,
+	"enter":        KeyEnter,
+	"o":            KeyEnter,
+	"n":            KeyNew,
+	"D":            KeyKill,
+	"q":            KeyQuit,
+	"tab":          KeyTab,
+	"c":            KeyCheckout,
+	"r":            KeyResume,
+	"p":            KeySubmit,
+	"?":            KeyHelp,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -96,6 +100,14 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyPrompt: key.NewBinding(
 		key.WithKeys("N"),
 		key.WithHelp("N", "new with prompt"),
+	),
+	KeyNewWithProfile: key.NewBinding(
+		key.WithKeys("ctrl+n"),
+		key.WithHelp("ctrl+n", "new with profile"),
+	),
+	KeyNewWithProfileWithPrompt: key.NewBinding(
+		key.WithKeys("ctrl+shift+n"),
+		key.WithHelp("ctrl+shift+n", "new with profile and prompt"),
 	),
 	KeyCheckout: key.NewBinding(
 		key.WithKeys("c"),
