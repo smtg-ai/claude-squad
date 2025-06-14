@@ -2,10 +2,10 @@
 
 [Claude Squad](https://smtg-ai.github.io/claude-squad/) is a terminal app that manages multiple [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex) (and other local agents including [Aider](https://github.com/Aider-AI/aider)) in separate workspaces, allowing you to work on multiple tasks simultaneously.
 
-
 ![Claude Squad Screenshot](assets/screenshot.png)
 
 ### Highlights
+
 - Complete tasks in the background (including yolo / auto-accept mode!)
 - Manage instances and tasks in one terminal window
 - Review changes before applying them, checkout changes before pushing them
@@ -13,7 +13,7 @@
 
 <br />
 
-https://github.com/user-attachments/assets/aef18253-e58f-4525-9032-f5a3d66c975a
+<https://github.com/user-attachments/assets/aef18253-e58f-4525-9032-f5a3d66c975a>
 
 <br />
 
@@ -78,24 +78,28 @@ cs
 <br />
 
 <b>Using Claude Squad with other AI assistants:</b>
+
 - For [Codex](https://github.com/openai/codex): Set your API key with `export OPENAI_API_KEY=<your_key>`
 - Launch with specific assistants:
-   - Codex: `cs -p "codex"`
-   - Aider: `cs -p "aider ..."`
+  - Codex: `cs -p "codex"`
+  - Aider: `cs -p "aider ..."`
 - Make this the default, by modifying the config file (locate with `cs debug`)
 
 <br />
 
 #### Menu
-The menu at the bottom of the screen shows available commands: 
+
+The menu at the bottom of the screen shows available commands:
 
 ##### Instance/Session Management
+
 - `n` - Create a new session
 - `N` - Create a new session with a prompt
 - `D` - Kill (delete) the selected session
 - `↑/j`, `↓/k` - Navigate between sessions
 
 ##### Actions
+
 - `↵/o` - Attach to the selected session to reprompt
 - `ctrl-q` - Detach from session
 - `s` - Commit and push branch to github
@@ -104,6 +108,7 @@ The menu at the bottom of the screen shows available commands:
 - `?` - Show help menu
 
 ##### Navigation
+
 - `tab` - Switch between preview tab and diff tab
 - `q` - Quit the application
 - `shift-↓/↑` - scroll in diff view

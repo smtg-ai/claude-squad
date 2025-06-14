@@ -6,6 +6,7 @@ import (
 	"claude-squad/config"
 	"claude-squad/daemon"
 	"claude-squad/log"
+	"claude-squad/security"
 	"claude-squad/session"
 	"claude-squad/session/git"
 	"claude-squad/session/tmux"
@@ -138,6 +139,31 @@ var (
 			fmt.Printf("https://github.com/smtg-ai/claude-squad/releases/tag/v%s\n", version)
 		},
 	}
+
+	securityCmd = &cobra.Command{
+		Use:   "security",
+		Short: "Security and permission management",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log.Initialize(false)
+			defer log.Close()
+
+			// Load configuration
+			cfg := config.LoadConfig()
+
+			// Initialize security integration
+			securityIntegration, err := security.NewSecurityIntegration(cfg)
+			if err != nil {
+				return fmt.Errorf("failed to initialize security: %w", err)
+			}
+			defer securityIntegration.Stop()
+
+			// Create CLI handler
+			securityCLI := security.NewSecurityCLI(securityIntegration)
+
+			// Handle the command
+			return securityCLI.HandleSecurityCommand(args)
+		},
+	}
 )
 
 func init() {
@@ -157,6 +183,7 @@ func init() {
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
+	rootCmd.AddCommand(securityCmd)
 }
 
 func main() {
