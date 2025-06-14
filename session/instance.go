@@ -515,3 +515,12 @@ func (i *Instance) SendPrompt(prompt string) error {
 
 	return nil
 }
+
+// TmuxSessionID returns the tmux session ID for monitoring purposes
+func (i *Instance) TmuxSessionID() string {
+	if i.tmuxSession == nil {
+		return i.Title // Use title as fallback
+	}
+	// Return title as session ID for monitoring
+	return i.Title
+}

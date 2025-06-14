@@ -9,6 +9,7 @@ This document describes the comprehensive monitoring and usage tracking framewor
 ### 1. Usage Tracking System (`monitoring/tracker.go`)
 
 **Comprehensive Event Tracking:**
+
 - Session lifecycle events (create, attach, detach, kill)
 - Command execution tracking with timing
 - Git operations monitoring (commit, push, pull, branch)
@@ -17,6 +18,7 @@ This document describes the comprehensive monitoring and usage tracking framewor
 - System events and state changes
 
 **Advanced Features:**
+
 - Async logging with configurable buffering
 - Event filtering and querying
 - Automatic log rotation and retention
@@ -25,6 +27,7 @@ This document describes the comprehensive monitoring and usage tracking framewor
 - Real-time statistics generation
 
 **Event Types:**
+
 ```go
 EventSessionCreated, EventSessionAttached, EventSessionKilled
 EventCommandExecuted, EventPromptSent, EventResponseReceived
@@ -35,6 +38,7 @@ EventSystemStart, EventSystemStop, EventError, EventPerformance
 ### 2. Metrics Collection System (`monitoring/metrics.go`)
 
 **System Metrics:**
+
 - Memory usage (allocated, heap, stack, system)
 - CPU utilization and load averages
 - Goroutine tracking and analysis
@@ -43,6 +47,7 @@ EventSystemStart, EventSystemStop, EventError, EventPerformance
 - Response time percentiles (P95, P99)
 
 **Application Metrics:**
+
 - Active and total session counts
 - Command execution statistics
 - Git operation tracking
@@ -51,6 +56,7 @@ EventSystemStart, EventSystemStop, EventError, EventPerformance
 - Configuration change tracking
 
 **Health Monitoring:**
+
 - Component health status
 - Overall system health scoring
 - Performance trending analysis
@@ -59,6 +65,7 @@ EventSystemStart, EventSystemStop, EventError, EventPerformance
 - Recommendation engine
 
 **Alert System:**
+
 - Configurable thresholds for all metrics
 - Real-time alert triggering
 - Multi-level severity (info, warning, critical)
@@ -69,6 +76,7 @@ EventSystemStart, EventSystemStop, EventError, EventPerformance
 ### 3. Integration Layer (`monitoring/integration.go`)
 
 **Unified Monitoring Interface:**
+
 - Seamless integration with claude-squad
 - Context-aware session tracking
 - Performance timing utilities
@@ -77,6 +85,7 @@ EventSystemStart, EventSystemStop, EventError, EventPerformance
 - Configuration management
 
 **Session Context Tracking:**
+
 ```go
 SessionContext {
     ID, Name, Program, StartTime, LastActivity
@@ -86,6 +95,7 @@ SessionContext {
 ```
 
 **Performance Timer:**
+
 - Operation timing with unique IDs
 - Automatic duration calculation
 - Context correlation
@@ -94,6 +104,7 @@ SessionContext {
 ### 4. Web Dashboard (`monitoring/dashboard.go`)
 
 **Interactive Dashboard Features:**
+
 - Real-time metrics visualization
 - Session monitoring and management
 - Performance graphs and charts
@@ -102,6 +113,7 @@ SessionContext {
 - Historical data analysis
 
 **Widget System:**
+
 - Overview widget (high-level KPIs)
 - Session widget (active sessions, history)
 - Performance widget (CPU, memory, GC)
@@ -114,6 +126,7 @@ SessionContext {
 - Alert widget (notifications)
 
 **Dashboard Configuration:**
+
 ```go
 DashboardConfig {
     Port, Host, RefreshInterval
@@ -124,6 +137,7 @@ DashboardConfig {
 ```
 
 **RESTful API Endpoints:**
+
 - `/api/dashboard` - Complete dashboard data
 - `/api/stats` - Detailed statistics
 - `/api/health` - Health status
@@ -133,6 +147,7 @@ DashboardConfig {
 ### 5. Report Generation (`monitoring/reporting.go`)
 
 **Automated Report Generation:**
+
 - Daily, weekly, monthly reports
 - Configurable report templates
 - Multiple output formats (JSON, CSV, HTML, Markdown)
@@ -141,12 +156,14 @@ DashboardConfig {
 - Actionable recommendations
 
 **Report Types:**
+
 - **Daily Summary:** Quick overview of system activity
 - **Weekly Detailed:** Comprehensive analysis with trends
 - **Monthly Executive:** Strategic insights and recommendations
 - **Custom Reports:** User-defined templates and filters
 
 **Report Sections:**
+
 - Executive summary with KPIs
 - Session analysis and patterns
 - Performance metrics and trends
@@ -157,6 +174,7 @@ DashboardConfig {
 - Growth predictions and recommendations
 
 **Intelligent Insights:**
+
 - Automatic anomaly detection
 - Performance bottleneck identification
 - Usage pattern analysis
@@ -167,6 +185,7 @@ DashboardConfig {
 ### 6. Command-Line Interface (`monitoring/cli.go`)
 
 **Comprehensive CLI Commands:**
+
 ```bash
 claude-squad monitoring status              # System status overview
 claude-squad monitoring stats --format=json # Detailed statistics
@@ -180,6 +199,7 @@ claude-squad monitoring config show         # Configuration
 ```
 
 **Advanced Features:**
+
 - Interactive status displays with icons
 - Multiple output formats (table, JSON, CSV)
 - Real-time data streaming
@@ -222,6 +242,7 @@ claude-squad monitoring config show         # Configuration
 ## 📊 Key Metrics Tracked
 
 ### System Performance
+
 - **Memory:** Usage percentage, allocation patterns, GC pressure
 - **CPU:** Utilization, load averages, process-specific usage
 - **Goroutines:** Count, creation rate, lifecycle analysis
@@ -229,6 +250,7 @@ claude-squad monitoring config show         # Configuration
 - **Disk:** Usage, I/O operations, read/write throughput
 
 ### Application Metrics
+
 - **Sessions:** Total, active, average duration, success rate
 - **Commands:** Execution count, timing, success rate
 - **Git Operations:** Commits, pushes, pulls, branch operations
@@ -236,6 +258,7 @@ claude-squad monitoring config show         # Configuration
 - **Security:** Authentication events, permission checks
 
 ### Business Intelligence
+
 - **Usage Patterns:** Peak hours, program preferences, trends
 - **Performance Trends:** Response time evolution, bottlenecks
 - **Growth Metrics:** User adoption, feature usage, scaling needs
@@ -244,6 +267,7 @@ claude-squad monitoring config show         # Configuration
 ## 🎛️ Configuration
 
 ### Monitoring Configuration
+
 ```json
 {
   "enabled": true,
@@ -278,6 +302,7 @@ claude-squad monitoring config show         # Configuration
 ```
 
 ### Integration Settings
+
 - **Track Sessions:** Monitor session lifecycle and activity
 - **Track Commands:** Log command execution and timing
 - **Track Git Operations:** Monitor repository activities
@@ -288,6 +313,7 @@ claude-squad monitoring config show         # Configuration
 ## 🚀 Usage Examples
 
 ### Basic Monitoring
+
 ```bash
 # Check system status
 claude-squad monitoring status
@@ -303,6 +329,7 @@ claude-squad monitoring performance
 ```
 
 ### Dashboard Management
+
 ```bash
 # Start web dashboard
 claude-squad monitoring dashboard start --port=8080
@@ -314,6 +341,7 @@ claude-squad monitoring dashboard status
 ```
 
 ### Report Generation
+
 ```bash
 # Generate daily report
 claude-squad monitoring reports generate daily
@@ -329,6 +357,7 @@ claude-squad monitoring reports history
 ```
 
 ### Data Export
+
 ```bash
 # Export statistics as JSON
 claude-squad monitoring export stats json --time=7d
@@ -341,6 +370,7 @@ claude-squad monitoring export metrics json --time=1h
 ```
 
 ### Alert Management
+
 ```bash
 # List active alerts
 claude-squad monitoring alerts list
@@ -358,6 +388,7 @@ claude-squad monitoring alerts rules
 ## 📈 Dashboard Features
 
 ### Real-time Monitoring
+
 - Live system metrics updates
 - Active session monitoring
 - Performance graphs with historical data
@@ -365,6 +396,7 @@ claude-squad monitoring alerts rules
 - Health status indicators
 
 ### Interactive Widgets
+
 - Customizable dashboard layout
 - Drag-and-drop widget arrangement
 - Real-time chart updates
@@ -372,6 +404,7 @@ claude-squad monitoring alerts rules
 - Export functionality
 
 ### Mobile Responsive
+
 - Optimized for mobile devices
 - Touch-friendly interface
 - Responsive layout adaptation
@@ -380,6 +413,7 @@ claude-squad monitoring alerts rules
 ## 📋 Report Capabilities
 
 ### Automated Insights
+
 - Performance bottleneck identification
 - Usage pattern analysis
 - Anomaly detection
@@ -387,6 +421,7 @@ claude-squad monitoring alerts rules
 - Optimization recommendations
 
 ### Executive Reporting
+
 - High-level KPI summaries
 - Strategic insights
 - Growth analysis
@@ -394,6 +429,7 @@ claude-squad monitoring alerts rules
 - Decision support data
 
 ### Technical Reports
+
 - Detailed performance analysis
 - Error root cause analysis
 - System capacity planning
@@ -403,6 +439,7 @@ claude-squad monitoring alerts rules
 ## 🔧 Integration Points
 
 ### Claude-Squad Integration
+
 ```go
 // Track session creation
 monitoring.TrackSessionCreated(sessionID, sessionName, program, repo, userID)
@@ -422,6 +459,7 @@ monitoring.TrackError(sessionID, userID, errorType, errorMsg, severity)
 ```
 
 ### Event-Driven Architecture
+
 - Automatic event generation
 - Context-aware tracking
 - Performance impact minimization
@@ -431,6 +469,7 @@ monitoring.TrackError(sessionID, userID, errorType, errorMsg, severity)
 ## 🛡️ Security and Privacy
 
 ### Data Protection
+
 - Local data storage only
 - Configurable data retention
 - Sensitive data filtering
@@ -438,6 +477,7 @@ monitoring.TrackError(sessionID, userID, errorType, errorMsg, severity)
 - Audit trail maintenance
 
 ### Performance Impact
+
 - Minimal overhead design
 - Async processing
 - Configurable sampling
@@ -447,18 +487,21 @@ monitoring.TrackError(sessionID, userID, errorType, errorMsg, severity)
 ## 🎯 Benefits
 
 ### For Developers
+
 - **Visibility:** Complete insight into system behavior
 - **Performance:** Identify and resolve bottlenecks
 - **Debugging:** Comprehensive error tracking and analysis
 - **Optimization:** Data-driven performance improvements
 
 ### For Operations
+
 - **Monitoring:** Real-time system health visibility
 - **Alerting:** Proactive issue detection and notification
 - **Reporting:** Automated operational reporting
 - **Capacity Planning:** Usage trend analysis and forecasting
 
 ### For Management
+
 - **Analytics:** Business intelligence and usage insights
 - **Compliance:** Audit trails and regulatory reporting
 - **ROI:** Productivity metrics and optimization opportunities
@@ -489,6 +532,7 @@ monitoring.TrackError(sessionID, userID, errorType, errorMsg, severity)
 ### 🚀 Ready for Deployment
 
 The monitoring framework is fully implemented and ready for:
+
 - Development environments (with basic monitoring)
 - Testing environments (with detailed tracking)
 - Production environments (with full monitoring and alerting)

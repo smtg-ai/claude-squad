@@ -4,6 +4,7 @@ import (
 	"claude-squad/config"
 	"claude-squad/keys"
 	"claude-squad/log"
+	"claude-squad/monitoring"
 	"claude-squad/session"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
@@ -58,6 +59,8 @@ type home struct {
 	appConfig *config.Config
 	// appState stores persistent application state like seen help screens
 	appState config.AppState
+	// monitoring handles usage tracking and system monitoring
+	monitoring *monitoring.MonitoringIntegration
 
 	// -- State --
 
@@ -107,6 +110,23 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		os.Exit(1)
 	}
 
+	// Initialize monitoring - don't fail the app if monitoring can't start
+	var monitoringIntegration *monitoring.MonitoringIntegration
+	if appConfig.Monitoring.Enabled {
+		monitoringIntegration, err = monitoring.NewMonitoringIntegration(appConfig)
+		if err != nil {
+			log.WarningLog.Printf("Failed to initialize monitoring: %v", err)
+			monitoringIntegration = nil
+		} else {
+			// Start monitoring system
+			if err := monitoringIntegration.Start(); err != nil {
+				log.WarningLog.Printf("Failed to start monitoring: %v", err)
+				monitoringIntegration.Stop() // Clean up
+				monitoringIntegration = nil
+			}
+		}
+	}
+
 	h := &home{
 		ctx:          ctx,
 		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
@@ -119,6 +139,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		autoYes:      autoYes,
 		state:        stateDefault,
 		appState:     appState,
+		monitoring:   monitoringIntegration,
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 
@@ -257,6 +278,14 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
 		return m, m.handleError(err)
 	}
+	
+	// Stop monitoring system
+	if m.monitoring != nil {
+		if err := m.monitoring.Stop(); err != nil {
+			log.WarningLog.Printf("Failed to stop monitoring: %v", err)
+		}
+	}
+	
 	return m, tea.Quit
 }
 
@@ -332,6 +361,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.state = stateDefault
 				return m, m.handleError(err)
 			}
+			
+			// Track session creation
+			if m.monitoring != nil {
+				m.monitoring.TrackSessionCreated(
+					instance.TmuxSessionID(),
+					instance.Title,
+					m.program,
+					instance.Path, // repository path
+					"system", // user ID - would be better if configurable
+				)
+			}
+			
 			// Save after adding new instance
 			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
 				return m, m.handleError(err)
@@ -401,6 +442,16 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				if selected == nil {
 					return m, nil
 				}
+				
+				// Track prompt sending
+				if m.monitoring != nil {
+					m.monitoring.TrackPromptSent(
+						selected.TmuxSessionID(),
+						"system", // user ID
+						m.textInputOverlay.GetValue(),
+					)
+				}
+				
 				if err := selected.SendPrompt(m.textInputOverlay.GetValue()); err != nil {
 					return m, m.handleError(err)
 				}
@@ -530,6 +581,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return fmt.Errorf("instance %s is currently checked out", selected.Title)
 			}
 
+			// Track session killing
+			if m.monitoring != nil {
+				m.monitoring.TrackSessionKilled(
+					selected.TmuxSessionID(),
+					"system", // user ID
+				)
+			}
+			
 			// Delete from storage first
 			if err := m.storage.DeleteInstance(selected.Title); err != nil {
 				return err
@@ -599,6 +658,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		// Show help screen before attaching
 		m.showHelpScreen(helpTypeInstanceAttach, func() {
+			// Track session attachment
+			if m.monitoring != nil {
+				m.monitoring.TrackSessionAttached(
+					selected.TmuxSessionID(),
+					"system", // user ID
+				)
+			}
+			
 			ch, err := m.list.Attach()
 			if err != nil {
 				m.handleError(err)

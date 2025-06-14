@@ -36,6 +36,30 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// Monitoring contains monitoring system configuration
+	Monitoring MonitoringConfig `json:"monitoring"`
+}
+
+// MonitoringConfig represents monitoring system configuration
+type MonitoringConfig struct {
+	// Enabled controls whether monitoring is active
+	Enabled bool `json:"enabled"`
+	// TrackSessions enables session lifecycle tracking
+	TrackSessions bool `json:"track_sessions"`
+	// TrackCommands enables command execution tracking
+	TrackCommands bool `json:"track_commands"`
+	// TrackGitOps enables git operation tracking
+	TrackGitOps bool `json:"track_git_ops"`
+	// TrackPerformance enables performance metrics collection
+	TrackPerformance bool `json:"track_performance"`
+	// TrackErrors enables error tracking
+	TrackErrors bool `json:"track_errors"`
+	// DashboardPort specifies the dashboard web server port
+	DashboardPort int `json:"dashboard_port"`
+	// DashboardEnabled controls whether the web dashboard is available
+	DashboardEnabled bool `json:"dashboard_enabled"`
+	// AutoReports enables automatic report generation
+	AutoReports bool `json:"auto_reports"`
 }
 
 // DefaultConfig returns the default configuration
@@ -58,6 +82,17 @@ func DefaultConfig() *Config {
 			}
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
+		Monitoring: MonitoringConfig{
+			Enabled:          true,
+			TrackSessions:    true,
+			TrackCommands:    true,
+			TrackGitOps:      true,
+			TrackPerformance: true,
+			TrackErrors:      true,
+			DashboardPort:    8080,
+			DashboardEnabled: true,
+			AutoReports:      false,
+		},
 	}
 }
 

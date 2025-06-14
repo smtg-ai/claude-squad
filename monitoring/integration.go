@@ -706,25 +706,53 @@ func (pt *PerformanceTimer) End(operationID string) time.Duration {
 
 // LoadMonitoringConfig loads monitoring configuration
 func LoadMonitoringConfig(appConfig *config.Config) (*MonitoringConfig, error) {
-	// Default configuration
+	// Use configuration from app config if available, otherwise use defaults
+	enabled := true
+	trackSessions := true
+	trackCommands := true
+	trackGitOps := true
+	trackPerformance := true
+	trackErrors := true
+	dashboardPort := 8080
+	dashboardEnabled := true
+	
+	// Override with app config if monitoring section exists
+	if appConfig != nil {
+		enabled = appConfig.Monitoring.Enabled
+		trackSessions = appConfig.Monitoring.TrackSessions
+		trackCommands = appConfig.Monitoring.TrackCommands
+		trackGitOps = appConfig.Monitoring.TrackGitOps
+		trackPerformance = appConfig.Monitoring.TrackPerformance
+		trackErrors = appConfig.Monitoring.TrackErrors
+		if appConfig.Monitoring.DashboardPort > 0 {
+			dashboardPort = appConfig.Monitoring.DashboardPort
+		}
+		dashboardEnabled = appConfig.Monitoring.DashboardEnabled
+	}
+
+	// Create configuration
 	monitoringConfig := &MonitoringConfig{
-		Enabled:    true,
+		Enabled:    enabled,
 		StorageDir: "~/.claude-squad/monitoring",
 		Usage:      *DefaultTrackerConfig(),
 		Metrics:    *DefaultMetricsConfig(),
 		Dashboard:  *DefaultDashboardConfig(),
 		Reporting:  *DefaultReportConfig(),
 		Integration: IntegrationConfig{
-			TrackSessions:    true,
-			TrackCommands:    true,
-			TrackGitOps:      true,
-			TrackPerformance: true,
-			TrackErrors:      true,
+			TrackSessions:    trackSessions,
+			TrackCommands:    trackCommands,
+			TrackGitOps:      trackGitOps,
+			TrackPerformance: trackPerformance,
+			TrackErrors:      trackErrors,
 			TrackSecurity:    false,
 			AutoStartStop:    true,
 			RealTimeUpdates:  true,
 		},
 	}
+	
+	// Update dashboard config
+	monitoringConfig.Dashboard.Enabled = dashboardEnabled
+	monitoringConfig.Dashboard.Port = dashboardPort
 
 	// Expand storage directory path
 	if monitoringConfig.StorageDir[0] == '~' {
