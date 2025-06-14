@@ -6,6 +6,7 @@ import (
 	"claude-squad/config"
 	"claude-squad/daemon"
 	"claude-squad/log"
+	"claude-squad/monitoring"
 	"claude-squad/security"
 	"claude-squad/session"
 	"claude-squad/session/git"
@@ -164,6 +165,31 @@ var (
 			return securityCLI.HandleSecurityCommand(args)
 		},
 	}
+
+	monitoringCmd = &cobra.Command{
+		Use:   "monitoring",
+		Short: "Monitoring and usage tracking",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log.Initialize(false)
+			defer log.Close()
+
+			// Load configuration
+			cfg := config.LoadConfig()
+
+			// Initialize monitoring integration
+			monitoringIntegration, err := monitoring.NewMonitoringIntegrationFromConfig(cfg)
+			if err != nil {
+				return fmt.Errorf("failed to initialize monitoring: %w", err)
+			}
+			defer monitoringIntegration.Stop()
+
+			// Create CLI handler
+			monitoringCLI := monitoring.NewMonitoringCLI(monitoringIntegration)
+
+			// Handle the command
+			return monitoringCLI.HandleMonitoringCommand(args)
+		},
+	}
 )
 
 func init() {
@@ -184,6 +210,7 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
 	rootCmd.AddCommand(securityCmd)
+	rootCmd.AddCommand(monitoringCmd)
 }
 
 func main() {
