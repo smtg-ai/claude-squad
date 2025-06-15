@@ -51,11 +51,11 @@ func (i *Task) ToInstanceData() TaskData {
 	}
 
 	// Only include diff stats if they exist
-	if i.diffStats != nil {
+	if i.DiffStats != nil {
 		data.DiffStats = DiffStatsData{
-			Added:   i.diffStats.Added,
-			Removed: i.diffStats.Removed,
-			Content: i.diffStats.Content,
+			Added:   i.DiffStats.Added,
+			Removed: i.DiffStats.Removed,
+			Content: i.DiffStats.Content,
 		}
 	}
 
@@ -82,7 +82,7 @@ func FromInstanceData(data TaskData) (*Task, error) {
 			data.Worktree.BranchName,
 			data.Worktree.BaseCommitSHA,
 		),
-		diffStats: &git.DiffStats{
+		DiffStats: &git.DiffStats{
 			Added:   data.DiffStats.Added,
 			Removed: data.DiffStats.Removed,
 			Content: data.DiffStats.Content,
@@ -151,6 +151,6 @@ func (t *Task) Deserialize(data []byte) error {
 	t.CreatedAt = newTask.CreatedAt
 	t.UpdatedAt = newTask.UpdatedAt
 	t.AutoYes = newTask.AutoYes
-	t.diffStats = newTask.diffStats
+	t.DiffStats = newTask.DiffStats
 	return nil
 }

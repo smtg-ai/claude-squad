@@ -5,6 +5,7 @@ import (
 	"claude-squad/log"
 	"fmt"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -29,6 +30,8 @@ type GitWorktree struct {
 	branchName string
 	// Base commit hash for the worktree
 	baseCommitSHA string
+	// Mutex to synchronize operations (cleanup, diff, etc.)
+	opMu sync.RWMutex
 }
 
 func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string) *GitWorktree {

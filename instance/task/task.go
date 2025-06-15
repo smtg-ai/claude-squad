@@ -58,11 +58,13 @@ type Task struct {
 	Prompt string
 
 	// DiffStats stores the current git diff statistics
-	diffStats *git.DiffStats
+	DiffStats *git.DiffStats
 
 	// The below fields are initialized upon calling Start().
 
-	started bool
+	started       bool
+	terminating   bool
+	terminatingMu sync.Mutex
 	// tmuxSession is the tmux session for the instance.
 	tmuxSession *tmux.TmuxSession
 	// gitWorktree is the git worktree for the instance.
@@ -95,7 +97,7 @@ func NewTask(opts TaskOptions) (*Task, error) {
 
 	return &Task{
 		Title:     opts.Title,
-		Status:    Ready,
+		Status:    Loading,
 		Path:      absPath,
 		Program:   opts.Program,
 		Height:    0,
@@ -191,6 +193,11 @@ func (t *Task) Start(firstTimeSetup bool) error {
 
 // Kill terminates the instance and cleans up all resources
 func (t *Task) Kill() error {
+	// Set terminating flag to prevent concurrent operations
+	t.terminatingMu.Lock()
+	t.terminating = true
+	t.terminatingMu.Unlock()
+
 	if !t.started {
 		// If instance was never started, just return success
 		return nil
@@ -419,7 +426,17 @@ func (t *Task) Resume() error {
 // UpdateDiffStats updates the git diff statistics for this instance
 func (t *Task) UpdateDiffStats() error {
 	if !t.started {
-		t.diffStats = nil
+		t.DiffStats = nil
+		return nil
+	}
+
+	// Check if instance is being terminated
+	t.terminatingMu.Lock()
+	isTerminating := t.terminating
+	t.terminatingMu.Unlock()
+
+	if isTerminating {
+		// Don't update diff stats if instance is terminating
 		return nil
 	}
 
@@ -432,19 +449,19 @@ func (t *Task) UpdateDiffStats() error {
 	if stats.Error != nil {
 		if strings.Contains(stats.Error.Error(), "base commit SHA not set") {
 			// Worktree is not fully set up yet, not an error
-			t.diffStats = nil
+			t.DiffStats = nil
 			return nil
 		}
 		return fmt.Errorf("failed to get diff stats: %w", stats.Error)
 	}
 
-	t.diffStats = stats
+	t.DiffStats = stats
 	return nil
 }
 
 // GetDiffStats returns the current git diff statistics
 func (t *Task) GetDiffStats() *git.DiffStats {
-	return t.diffStats
+	return t.DiffStats
 }
 
 // SendPrompt sends a prompt to the tmux session

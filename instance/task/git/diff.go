@@ -1,6 +1,7 @@
 package git
 
 import (
+	"os"
 	"strings"
 )
 
@@ -23,17 +24,42 @@ func (d *DiffStats) IsEmpty() bool {
 
 // Diff returns the git diff between the worktree and the base branch along with statistics
 func (g *GitWorktree) Diff() *DiffStats {
+	// Use read lock to allow concurrent diff operations but prevent cleanup during diff
+	g.opMu.RLock()
+	defer g.opMu.RUnlock()
+
 	stats := &DiffStats{}
+
+	// Check if worktree directory exists before attempting git operations
+	if _, err := os.Stat(g.worktreePath); os.IsNotExist(err) {
+		// Worktree directory doesn't exist (likely being cleaned up), return empty stats
+		return stats
+	} else if err != nil {
+		stats.Error = err
+		return stats
+	}
 
 	// -N stages untracked files (intent to add), including them in the diff
 	_, err := g.runGitCommand(g.worktreePath, "add", "-N", ".")
 	if err != nil {
+		// Check if error is due to missing directory (race condition)
+		if strings.Contains(err.Error(), "No such file or directory") ||
+			strings.Contains(err.Error(), "cannot change to") {
+			// Directory was removed during operation, return empty stats
+			return stats
+		}
 		stats.Error = err
 		return stats
 	}
 
 	content, err := g.runGitCommand(g.worktreePath, "--no-pager", "diff", g.GetBaseCommitSHA())
 	if err != nil {
+		// Check if error is due to missing directory (race condition)
+		if strings.Contains(err.Error(), "No such file or directory") ||
+			strings.Contains(err.Error(), "cannot change to") {
+			// Directory was removed during operation, return empty stats
+			return stats
+		}
 		stats.Error = err
 		return stats
 	}

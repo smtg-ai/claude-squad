@@ -1,19 +1,20 @@
 package model
 
 import (
-	"claude-squad/instance"
-	instanceInterfaces "claude-squad/instance/interfaces"
-	"claude-squad/instance/task"
-	"claude-squad/ui"
-	"claude-squad/ui/overlay"
 	"fmt"
 	"time"
+
+	"claude-squad/instance"
+	"claude-squad/instance/task"
+	"claude-squad/log"
+	"claude-squad/ui"
+	"claude-squad/ui/overlay"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // LoadExistingInstances loads instances from storage into the list
-func (c *Controller) LoadExistingInstances(storage *instance.Storage[instanceInterfaces.Instance]) error {
+func (c *Controller) LoadExistingInstances(storage *instance.Storage[instance.Instance]) error {
 	instances, err := storage.LoadInstances()
 	if err != nil {
 		return err
@@ -21,15 +22,11 @@ func (c *Controller) LoadExistingInstances(storage *instance.Storage[instanceInt
 
 	c.instances = instances
 
-	// Notify observers of the loaded instances
-	c.notifyInstancesChanged()
-
 	return nil
 }
 
 // handleNewTask creates a new task
 func (c *Controller) handleNewTask(model *Model, promptAfter bool) (tea.Model, tea.Cmd) {
-	// Check if we've hit the instance limit
 	if c.list.NumInstances() >= globalInstanceLimit {
 		return model, model.handleError(fmt.Errorf("maximum number of instances (%d) reached", globalInstanceLimit))
 	}
@@ -38,25 +35,24 @@ func (c *Controller) handleNewTask(model *Model, promptAfter bool) (tea.Model, t
 	model.state = tuiStateNew
 	model.menu.SetState(ui.StatePrompt)
 
-	// Create a new task immediately with default name
-	options := task.TaskOptions{
+	newTask, err := task.NewTask(task.TaskOptions{
 		Program: model.program,
-		Title:   "New Instance",
+		Title:   "",
 		Path:    ".",
-	}
-	newTask, err := task.NewTask(options)
+	})
 	if err != nil {
 		return model, model.handleError(err)
 	}
 
-	// Add the new instance to the list immediately so it can be edited
 	c.addInstance(newTask)
-
-	// Select the new instance
 	c.list.SetSelectedInstance(len(c.instances) - 1)
+	log.InfoLog.Printf("DEBUG: Created instance %d, %v", len(c.instances), c.list.GetSelectedInstance())
 
 	c.newInstanceFinalizer = func() {
-		_ = newTask.Start(true)
+		err := newTask.Start(true)
+		if err != nil {
+			log.ErrorLog.Printf("Failed to start instance: %s", err)
+		}
 	}
 
 	return model, tea.WindowSize()
@@ -125,7 +121,6 @@ func (c *Controller) handleNewInstanceState(model *Model, msg tea.KeyMsg) (tea.M
 			taskInstance := selected.(*task.Task)
 			if len(taskInstance.Title) > 0 {
 				taskInstance.Title = taskInstance.Title[:len(taskInstance.Title)-1]
-				c.notifyInstancesChanged() // Update UI when title changes
 			}
 		}
 		return model, nil
@@ -141,7 +136,6 @@ func (c *Controller) handleNewInstanceState(model *Model, msg tea.KeyMsg) (tea.M
 				taskInstance.Title = ""
 			}
 			taskInstance.Title += msg.String()
-			c.notifyInstancesChanged() // Update UI when title changes
 		}
 		return model, nil
 	}
@@ -162,8 +156,7 @@ func (c *Controller) finalizeNewInstance(model *Model, instance *task.Task) (tea
 	model.state = tuiStateDefault
 	model.menu.SetState(ui.StateDefault)
 
-	// Start the instance with firstTimeSetup=true
-	err := instance.Start(true)
+	err := instance.Start(true /* firstTimeSetup */)
 	if err != nil {
 		// If there's an error, delete the instance from the list and revert
 		c.list.Kill()
@@ -173,13 +166,10 @@ func (c *Controller) finalizeNewInstance(model *Model, instance *task.Task) (tea
 		return model, model.handleError(err)
 	}
 
-	// Call the finalizer to indicate we're done with the instance
 	if c.newInstanceFinalizer != nil {
 		c.newInstanceFinalizer()
 		c.newInstanceFinalizer = nil
 	}
-
-	// Instance already added via newInstanceFinalizer
 
 	// If we should prompt after creating the instance, do so
 	if c.promptAfterName {

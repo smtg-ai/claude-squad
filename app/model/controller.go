@@ -1,14 +1,16 @@
 package model
 
 import (
-	instanceInterfaces "claude-squad/instance/interfaces"
+	"slices"
+	"time"
+
+	"claude-squad/instance"
 	"claude-squad/instance/task"
-	"claude-squad/instance/task/git"
 	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/ui"
+	"claude-squad/ui/list"
 	"claude-squad/ui/overlay"
-	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,12 +29,12 @@ type Controller struct {
 	promptAfterName bool
 
 	// instances is the list of instances being managed - this is the source of truth
-	instances []instanceInterfaces.Instance
+	instances []instance.Instance
 
 	// # UI Components
 
 	// list displays the list of instances - observes changes to instances
-	list *ui.List
+	list *list.List
 	// tabbedWindow displays the tabbed window with preview and diff panes
 	tabbedWindow *ui.TabbedWindow
 	// textInputOverlay handles text input with state
@@ -45,13 +47,12 @@ type Controller struct {
 
 // NewController creates a new controller
 func NewController(spinner *spinner.Model, autoYes bool) *Controller {
-	c := &Controller{
-		list:         ui.NewList(spinner, autoYes),
+	instances := make([]instance.Instance, 0)
+	return &Controller{
+		instances:    instances,
+		list:         list.NewList(instances, spinner, autoYes),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
 	}
-	// Initialize with empty instances
-	c.notifyInstancesChanged()
-	return c
 }
 
 // Render returns the rendered UI
@@ -107,9 +108,8 @@ func (c *Controller) Update(model *Model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	case instanceChangedMsg:
 		return model, c.instanceChanged(model)
 	case spinner.TickMsg:
-		spinner := model.spinner
 		var cmd tea.Cmd
-		_, cmd = spinner.Update(msg)
+		_, cmd = model.spinner.Update(msg)
 		return model, cmd
 	}
 	return model, nil
@@ -290,76 +290,17 @@ func (c *Controller) HandleQuit(model *Model) {
 	}
 }
 
-// convertToUIStatus converts task.Status to ui.InstanceStatus
-func convertToUIStatus(status task.Status) ui.InstanceStatus {
-	switch status {
-	case task.Running:
-		return ui.InstanceRunning
-	case task.Ready:
-		return ui.InstanceReady
-	case task.Paused:
-		return ui.InstancePaused
-	case task.Loading:
-		return ui.InstanceLoading
-	default:
-		return ui.InstanceReady
-	}
-}
-
-// convertDiffStats converts git.DiffStats to ui.DiffStats
-func convertDiffStats(stats *git.DiffStats) *ui.DiffStats {
-	if stats == nil {
-		return nil
-	}
-	return &ui.DiffStats{
-		Added:   stats.Added,
-		Removed: stats.Removed,
-		Error:   stats.Error,
-	}
-}
-
-// notifyInstancesChanged converts instances and notifies the UI list
-func (c *Controller) notifyInstancesChanged() {
-	renderData := make([]ui.InstanceRenderData, len(c.instances))
-	repos := make(map[string]int)
-
-	for i, instance := range c.instances {
-		taskInstance := instance.(*task.Task)
-
-		// Convert to rendering data
-		renderData[i] = ui.InstanceRenderData{
-			Title:     taskInstance.Title,
-			Branch:    taskInstance.Branch,
-			Status:    convertToUIStatus(taskInstance.Status),
-			DiffStats: convertDiffStats(taskInstance.GetDiffStats()),
-			IsStarted: taskInstance.Started(),
-		}
-
-		// Add repo name if instance is started
-		if taskInstance.Started() {
-			if repoName, err := taskInstance.RepoName(); err == nil {
-				renderData[i].RepoName = repoName
-				repos[repoName]++
-			}
-		}
-	}
-
-	c.list.OnInstancesChanged(c.instances)
-	c.list.SetRenderData(renderData, repos)
-}
-
 // addInstance adds an instance to the instances slice and notifies observers
-func (c *Controller) addInstance(instance instanceInterfaces.Instance) {
+func (c *Controller) addInstance(instance instance.Instance) {
 	c.instances = append(c.instances, instance)
-	c.notifyInstancesChanged()
 }
 
 // removeInstance removes an instance from the instances slice and notifies observers
 func (c *Controller) removeInstance(title string) {
 	for i, inst := range c.instances {
 		if inst.(*task.Task).Title == title {
-			c.instances = append(c.instances[:i], c.instances[i+1:]...)
-			c.notifyInstancesChanged()
+			c.instances = slices.Delete(c.instances, i, i+1)
+			// c.instances = append(c.instances[:i], c.instances[i+1:]...)
 			break
 		}
 	}

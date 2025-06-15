@@ -96,6 +96,10 @@ func (g *GitWorktree) SetupNewWorktree() error {
 
 // Cleanup removes the worktree and associated branch
 func (g *GitWorktree) Cleanup() error {
+	// Use write lock to prevent concurrent operations during cleanup
+	g.opMu.Lock()
+	defer g.opMu.Unlock()
+
 	var errs []error
 
 	// Check if worktree path exists before attempting removal
@@ -141,6 +145,10 @@ func (g *GitWorktree) Cleanup() error {
 
 // Remove removes the worktree but keeps the branch
 func (g *GitWorktree) Remove() error {
+	// Use write lock to prevent concurrent operations during removal
+	g.opMu.Lock()
+	defer g.opMu.Unlock()
+
 	// Remove the worktree using git command
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath); err != nil {
 		return fmt.Errorf("failed to remove worktree: %w", err)
