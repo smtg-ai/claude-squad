@@ -38,8 +38,14 @@ func (g *GitWorktree) SetupFromExistingBranch() error {
 		return fmt.Errorf("failed to create worktrees directory: %w", err)
 	}
 
-	// Clean up any existing worktree first
+	// Clean up any existing worktree for this specific path
 	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath) // Ignore error if worktree doesn't exist
+
+	// Clean up any existing worktree for this branch (critical fix)
+	if err := g.cleanupExistingWorktreeForBranch(); err != nil {
+		log.ErrorLog.Printf("Warning: failed to cleanup existing worktree for branch %s: %v", g.branchName, err)
+		// Continue anyway - Git will give us a clearer error if this is the real problem
+	}
 
 	// Create a new worktree from the existing branch
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", g.worktreePath, g.branchName); err != nil {
@@ -57,8 +63,14 @@ func (g *GitWorktree) SetupNewWorktree() error {
 		return fmt.Errorf("failed to create worktrees directory: %w", err)
 	}
 
-	// Clean up any existing worktree first
+	// Clean up any existing worktree for this specific path
 	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath) // Ignore error if worktree doesn't exist
+
+	// Clean up any existing worktree for this branch (critical fix)
+	if err := g.cleanupExistingWorktreeForBranch(); err != nil {
+		log.ErrorLog.Printf("Warning: failed to cleanup existing worktree for branch %s: %v", g.branchName, err)
+		// Continue anyway - Git will give us a clearer error if this is the real problem
+	}
 
 	// Open the repository
 	repo, err := git.PlainOpen(g.repoPath)
@@ -89,6 +101,49 @@ func (g *GitWorktree) SetupNewWorktree() error {
 	// TODO: we might want to give an option to use main/master instead of the current branch.
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, headCommit); err != nil {
 		return fmt.Errorf("failed to create worktree from commit %s: %w", headCommit, err)
+	}
+
+	return nil
+}
+
+// cleanupExistingWorktreeForBranch removes any existing worktree for the same branch
+func (g *GitWorktree) cleanupExistingWorktreeForBranch() error {
+	// List all worktrees to find any using our branch
+	output, err := g.runGitCommand(g.repoPath, "worktree", "list", "--porcelain")
+	if err != nil {
+		return fmt.Errorf("failed to list worktrees: %w", err)
+	}
+
+	// Parse the output to find worktrees using our branch
+	lines := strings.Split(output, "\n")
+	var currentWorktreePath string
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "worktree ") {
+			currentWorktreePath = strings.TrimPrefix(line, "worktree ")
+		} else if strings.HasPrefix(line, "branch ") && currentWorktreePath != "" {
+			branchRef := strings.TrimPrefix(line, "branch ")
+			branchName := strings.TrimPrefix(branchRef, "refs/heads/")
+			
+			// If this worktree is using our branch and it's not our current path
+			if branchName == g.branchName && currentWorktreePath != g.worktreePath {
+				log.ErrorLog.Printf("Found existing worktree for branch %s at %s, removing it", g.branchName, currentWorktreePath)
+				
+				// Force remove the existing worktree
+				if _, removeErr := g.runGitCommand(g.repoPath, "worktree", "remove", "-f", currentWorktreePath); removeErr != nil {
+					log.ErrorLog.Printf("Failed to remove existing worktree at %s: %v", currentWorktreePath, removeErr)
+					// Continue anyway, maybe it was already partially cleaned up
+				}
+			}
+			currentWorktreePath = "" // Reset for next worktree
+		}
+	}
+
+	// Prune any dangling worktree references
+	if _, err := g.runGitCommand(g.repoPath, "worktree", "prune"); err != nil {
+		log.ErrorLog.Printf("Warning: failed to prune worktrees: %v", err)
+		// Not a critical error, continue
 	}
 
 	return nil
