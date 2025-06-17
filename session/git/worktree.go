@@ -44,7 +44,7 @@ func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName
 // NewGitWorktree creates a new GitWorktree instance
 func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, branchname string, err error) {
 	cfg := config.LoadConfig()
-	sanitizedName := sanitizeBranchName(sessionName)
+	sanitizedName := SanitizeBranchName(sessionName)
 	branchName := fmt.Sprintf("%s%s", cfg.BranchPrefix, sanitizedName)
 
 	// Convert repoPath to absolute path

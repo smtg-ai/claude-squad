@@ -64,7 +64,7 @@ func TestSanitizeBranchName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := sanitizeBranchName(tt.input)
+			got := SanitizeBranchName(tt.input)
 			if got != tt.expected {
 				t.Errorf("sanitizeBranchName(%q) = %q, want %q", tt.input, got, tt.expected)
 			}

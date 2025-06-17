@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"claude-squad/config"
 	"claude-squad/log"
 	"claude-squad/project"
 	"claude-squad/session"
+	"claude-squad/session/git"
 	"errors"
 	"fmt"
 	"strings"
@@ -79,6 +81,49 @@ func (l *List) SetSize(width, height int) {
 	l.width = width
 	l.height = height
 	l.renderer.setWidth(width)
+}
+
+// TruncateBranchName truncates a branch name using suffix-preserving logic
+// This ensures the most specific part (suffix) of the branch name remains visible
+func TruncateBranchName(branchName string, maxWidth int) string {
+	if maxWidth < 0 {
+		return ""
+	}
+
+	if len(branchName) <= maxWidth {
+		return branchName
+	}
+
+	if maxWidth < 3 {
+		return ""
+	}
+
+	// Truncate from prefix (beginning) to preserve suffix (most specific part)
+	suffixLength := maxWidth - 3
+	if suffixLength > len(branchName) {
+		// This shouldn't happen given the condition above, but being safe
+		suffixLength = len(branchName)
+	}
+
+	return "..." + branchName[len(branchName)-suffixLength:]
+}
+
+// GenerateBranchNamePreview generates a preview of what the branch name would look like
+// when truncated, based on the current title input
+func GenerateBranchNamePreview(title string, maxWidth int) string {
+	if title == "" {
+		return ""
+	}
+
+	// Load config to get branch prefix
+	cfg := config.LoadConfig()
+
+	// Generate the full branch name like git.NewGitWorktree would
+	sanitizedName := git.SanitizeBranchName(title)
+	fullBranchName := fmt.Sprintf("%s%s", cfg.BranchPrefix, sanitizedName)
+
+	// Apply truncation using the same logic as the UI
+	return TruncateBranchName(fullBranchName, maxWidth)
 }
 
 // SetSessionPreviewSize sets the height and width for the tmux sessions. This makes the stdout line have the correct
@@ -207,16 +252,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		}
 	}
 	// Don't show branch if there's no space for it. Or show ellipsis if it's too long.
-	if remainingWidth < 0 {
-		branch = ""
-	} else if remainingWidth < len(branch) {
-		if remainingWidth < 3 {
-			branch = ""
-		} else {
-			// We know the remainingWidth is at least 4 and branch is longer than that, so this is safe.
-			branch = branch[:remainingWidth-3] + "..."
-		}
-	}
+	branch = TruncateBranchName(branch, remainingWidth)
 	remainingWidth -= len(branch)
 
 	// Add spaces to fill the remaining width.

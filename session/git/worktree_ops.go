@@ -117,7 +117,7 @@ func (g *GitWorktree) cleanupExistingWorktreeForBranch() error {
 	// Parse the output to find worktrees using our branch
 	lines := strings.Split(output, "\n")
 	var currentWorktreePath string
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "worktree ") {
@@ -125,11 +125,11 @@ func (g *GitWorktree) cleanupExistingWorktreeForBranch() error {
 		} else if strings.HasPrefix(line, "branch ") && currentWorktreePath != "" {
 			branchRef := strings.TrimPrefix(line, "branch ")
 			branchName := strings.TrimPrefix(branchRef, "refs/heads/")
-			
+
 			// If this worktree is using our branch and it's not our current path
 			if branchName == g.branchName && currentWorktreePath != g.worktreePath {
 				log.ErrorLog.Printf("Found existing worktree for branch %s at %s, removing it", g.branchName, currentWorktreePath)
-				
+
 				// Force remove the existing worktree
 				if _, removeErr := g.runGitCommand(g.repoPath, "worktree", "remove", "-f", currentWorktreePath); removeErr != nil {
 					log.ErrorLog.Printf("Failed to remove existing worktree at %s: %v", currentWorktreePath, removeErr)

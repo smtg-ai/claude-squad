@@ -2,9 +2,9 @@
 
 **Epic ID:** Epic 1  
 **Title:** Multi-Project: Focused UX Improvements  
-**Status:** ✅ **COMPLETE (100%)**  
-**Completion Date:** 2025-06-17  
-**Total Duration:** 4 Stories Delivered  
+**Status:** 🔄 **IN PROGRESS (80%)**  
+**Last Updated:** 2025-06-17  
+**Total Duration:** 4 Stories Delivered, 1 Active  
 
 ## Executive Summary
 
@@ -24,11 +24,11 @@ Epic 1 successfully addressed all 4 critical UX issues identified during Epic 1.
 | 1.2 | Fix Session Creation Errors | P0 | ✅ Complete | Previous Session |
 | 1.3 | Center Add Project Dialog | P1 | ✅ Complete | Previous Session |
 | **1.4** | **Display Current Active Project** | **P1** | **✅ Complete** | **2025-06-17** |
-| 1.5 | Enhanced Project Visualization | P2 | ⏭️ Deferred | N/A |
+| 1.5 | Fix Branch Name Truncation | P1 | ✅ Approved | Ready for Dev |
 
-**Final Epic Score: 4/4 Core Stories Complete (100%)**
+**Current Epic Score: 4/5 Core Stories Complete (80%)**
 
-*Note: Story 1.5 was identified as P2 and deferred per Epic success criteria focusing on critical issues only.*
+*Note: Story 1.5 has been reactivated as P1 UX improvement - Fix Branch Name Truncation.*
 
 ### Quality Metrics
 
