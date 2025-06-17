@@ -25,7 +25,7 @@ const (
 	KeyPrompt // New key for entering a prompt
 	KeyHelp   // Key for showing help screen
 
-	// Diff keybindings
+	// Scroll keybindings (work in both preview and diff panels)
 	KeyShiftUp
 	KeyShiftDown
 )
@@ -63,11 +63,11 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeyShiftUp: key.NewBinding(
 		key.WithKeys("shift+up"),
-		key.WithHelp("shift+↑", "scroll"),
+		key.WithHelp("shift+↑", "scroll up"),
 	),
 	KeyShiftDown: key.NewBinding(
 		key.WithKeys("shift+down"),
-		key.WithHelp("shift+↓", "scroll"),
+		key.WithHelp("shift+↓", "scroll down"),
 	),
 	KeyEnter: key.NewBinding(
 		key.WithKeys("enter", "o"),

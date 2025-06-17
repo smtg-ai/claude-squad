@@ -110,13 +110,17 @@ func (w *TabbedWindow) UpdateDiff(instance *session.Instance) {
 
 // Add these new methods for handling scroll events
 func (w *TabbedWindow) ScrollUp() {
-	if w.activeTab == 1 { // Diff tab
+	if w.activeTab == 0 { // Preview tab
+		w.preview.ScrollUp()
+	} else if w.activeTab == 1 { // Diff tab
 		w.diff.ScrollUp()
 	}
 }
 
 func (w *TabbedWindow) ScrollDown() {
-	if w.activeTab == 1 { // Diff tab
+	if w.activeTab == 0 { // Preview tab
+		w.preview.ScrollDown()
+	} else if w.activeTab == 1 { // Diff tab
 		w.diff.ScrollDown()
 	}
 }

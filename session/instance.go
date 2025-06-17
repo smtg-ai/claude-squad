@@ -299,7 +299,8 @@ func (i *Instance) Preview() (string, error) {
 	if !i.started || i.Status == Paused {
 		return "", nil
 	}
-	return i.tmuxSession.CapturePaneContent()
+	// Capture all history instead of just visible content
+	return i.tmuxSession.CapturePaneContentWithOptions("-", "-")
 }
 
 func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {

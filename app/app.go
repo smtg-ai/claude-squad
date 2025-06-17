@@ -220,17 +220,15 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tickUpdateMetadataCmd
 	case tea.MouseMsg:
-		// Handle mouse wheel scrolling in the diff view
-		if m.tabbedWindow.IsInDiffTab() {
-			if msg.Action == tea.MouseActionPress {
-				switch msg.Button {
-				case tea.MouseButtonWheelUp:
-					m.tabbedWindow.ScrollUp()
-					return m, m.instanceChanged()
-				case tea.MouseButtonWheelDown:
-					m.tabbedWindow.ScrollDown()
-					return m, m.instanceChanged()
-				}
+		// Handle mouse wheel scrolling in both preview and diff views
+		if msg.Action == tea.MouseActionPress {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.tabbedWindow.ScrollUp()
+				return m, m.instanceChanged()
+			case tea.MouseButtonWheelDown:
+				m.tabbedWindow.ScrollDown()
+				return m, m.instanceChanged()
 			}
 		}
 		return m, nil
@@ -279,9 +277,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 	if m.list.GetSelectedInstance() != nil && m.list.GetSelectedInstance().Paused() && name == keys.KeyEnter {
 		return nil, false
 	}
-	if name == keys.KeyShiftDown || name == keys.KeyShiftUp {
-		return nil, false
-	}
+	// Remove the shift key blocking to allow scroll functionality
 
 	// Skip the menu highlighting if the key is not in the map or we are using the shift up and down keys.
 	// TODO: cleanup: when you press enter on stateNew, we use keys.KeySubmitName. We should unify the keymap.
@@ -494,14 +490,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.list.Down()
 		return m, m.instanceChanged()
 	case keys.KeyShiftUp:
-		if m.tabbedWindow.IsInDiffTab() {
-			m.tabbedWindow.ScrollUp()
-		}
+		m.tabbedWindow.ScrollUp()
 		return m, m.instanceChanged()
 	case keys.KeyShiftDown:
-		if m.tabbedWindow.IsInDiffTab() {
-			m.tabbedWindow.ScrollDown()
-		}
+		m.tabbedWindow.ScrollDown()
 		return m, m.instanceChanged()
 	case keys.KeyTab:
 		m.tabbedWindow.Toggle()
