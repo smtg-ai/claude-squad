@@ -3,6 +3,7 @@ package app
 import (
 	"claude-squad/config"
 	"claude-squad/keys"
+	"claude-squad/session"
 	"claude-squad/ui"
 	"context"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestPreviewScrollMethods tests that PreviewPane has scroll methods
@@ -136,6 +138,59 @@ func TestMouseScrollEvents(t *testing.T) {
 	assert.NotPanics(t, func() {
 		_, _ = h.Update(mouseMsg)
 	}, "Mouse wheel down should not panic")
+}
+
+func TestInstanceScrollIsolation(t *testing.T) {
+	h := createTestHome()
+	
+	// Create two test instances
+	instance1, err := session.NewInstance(session.InstanceOptions{
+		Title:   "test1",
+		Path:    ".",
+		Program: "echo",
+	})
+	require.NoError(t, err)
+	
+	instance2, err := session.NewInstance(session.InstanceOptions{
+		Title:   "test2", 
+		Path:    ".",
+		Program: "echo",
+	})
+	require.NoError(t, err)
+	
+	// Add instances to list
+	h.list.AddInstance(instance1)()
+	h.list.AddInstance(instance2)()
+	
+	// Set up preview pane with some content for both instances
+	h.tabbedWindow.UpdatePreview(instance1)
+	
+	// Scroll down in instance1
+	for i := 0; i < 5; i++ {
+		h.tabbedWindow.ScrollDown()
+	}
+	
+	// Switch to instance2
+	h.list.SetSelectedInstance(1)
+	h.tabbedWindow.UpdatePreview(instance2)
+	
+	// Scroll up in instance2  
+	for i := 0; i < 3; i++ {
+		h.tabbedWindow.ScrollUp()
+	}
+	
+	// Switch back to instance1
+	h.list.SetSelectedInstance(0)
+	h.tabbedWindow.UpdatePreview(instance1)
+	
+	// Test that scroll operations don't panic and instances maintain separate state
+	assert.NotPanics(t, func() {
+		h.tabbedWindow.ScrollUp()
+		h.tabbedWindow.ScrollDown()
+	}, "Instance scroll isolation should work without panics")
+	
+	// Note: This test mainly ensures no panics occur. 
+	// Full position verification would require exposing viewport internals
 }
 
 // Helper function to create a test home instance (copied from existing app_test.go pattern)

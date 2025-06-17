@@ -16,8 +16,9 @@ type PreviewPane struct {
 	width    int
 	height   int
 
-	previewState    previewState
-	initialPosition bool // Track if we've positioned to bottom initially
+	previewState      previewState
+	instancePositions map[string]viewport.Model // Track viewport state per instance
+	activeInstance    string                    // Track which instance is currently active
 }
 
 type previewState struct {
@@ -29,7 +30,8 @@ type previewState struct {
 
 func NewPreviewPane() *PreviewPane {
 	return &PreviewPane{
-		viewport: viewport.New(0, 0),
+		viewport:          viewport.New(0, 0),
+		instancePositions: make(map[string]viewport.Model),
 	}
 }
 
@@ -90,16 +92,27 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		return nil
 	}
 
+	// Get or create viewport for this instance
+	instanceViewport, exists := p.instancePositions[instance.Title]
+	if !exists {
+		// Create new viewport for this instance
+		instanceViewport = viewport.New(p.width, p.height)
+		instanceViewport.SetContent(content)
+		instanceViewport.GotoBottom() // Position at bottom only for new instances
+		p.instancePositions[instance.Title] = instanceViewport
+	} else {
+		// Update content while preserving scroll position
+		instanceViewport.SetContent(content)
+		p.instancePositions[instance.Title] = instanceViewport
+	}
+
+	// Update the main viewport to be a reference to this instance's viewport
+	p.viewport = p.instancePositions[instance.Title]
+	p.activeInstance = instance.Title
+	
 	p.previewState = previewState{
 		fallback: false,
 		text:     content,
-	}
-	p.viewport.SetContent(content)
-	
-	// Only position at bottom on first load, not on every update
-	if !p.initialPosition {
-		p.viewport.GotoBottom()
-		p.initialPosition = true
 	}
 	
 	return nil
@@ -112,9 +125,20 @@ func (p *PreviewPane) String() string {
 // ScrollUp scrolls the viewport up
 func (p *PreviewPane) ScrollUp() {
 	p.viewport.LineUp(1)
+	// Update the map with the modified viewport
+	p.syncViewportToMap()
 }
 
 // ScrollDown scrolls the viewport down
 func (p *PreviewPane) ScrollDown() {
 	p.viewport.LineDown(1)
+	// Update the map with the modified viewport
+	p.syncViewportToMap()
+}
+
+// syncViewportToMap updates the instance map with current viewport state
+func (p *PreviewPane) syncViewportToMap() {
+	if p.activeInstance != "" {
+		p.instancePositions[p.activeInstance] = p.viewport
+	}
 }
