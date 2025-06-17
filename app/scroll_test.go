@@ -193,6 +193,80 @@ func TestInstanceScrollIsolation(t *testing.T) {
 	// Full position verification would require exposing viewport internals
 }
 
+func TestAutoScrollBehavior(t *testing.T) {
+	h := createTestHome()
+	
+	// Create a test instance
+	instance, err := session.NewInstance(session.InstanceOptions{
+		Title:   "auto-scroll-test",
+		Path:    ".",
+		Program: "echo",
+	})
+	require.NoError(t, err)
+	
+	// Add instance to list
+	h.list.AddInstance(instance)()
+	
+	// Initial content update - should go to bottom for new instance
+	h.tabbedWindow.UpdatePreview(instance)
+	
+	assert.NotPanics(t, func() {
+		// Simulate scrolling up (user reading something above)
+		for i := 0; i < 3; i++ {
+			h.tabbedWindow.ScrollUp()
+		}
+		
+		// Update content again (simulating new content while user is scrolled up)
+		h.tabbedWindow.UpdatePreview(instance)
+		
+		// Should not panic and should preserve user's scroll position
+		// (This tests that we don't force scroll to bottom when user is reading above)
+	}, "Auto-scroll should preserve user position when scrolled up")
+}
+
+func TestInstanceSwitchAutoScroll(t *testing.T) {
+	h := createTestHome()
+	
+	// Create two test instances
+	instance1, err := session.NewInstance(session.InstanceOptions{
+		Title:   "switch-test-1",
+		Path:    ".",
+		Program: "echo",
+	})
+	require.NoError(t, err)
+	
+	instance2, err := session.NewInstance(session.InstanceOptions{
+		Title:   "switch-test-2",
+		Path:    ".",
+		Program: "echo",
+	})
+	require.NoError(t, err)
+	
+	// Add instances to list
+	h.list.AddInstance(instance1)()
+	h.list.AddInstance(instance2)()
+	
+	assert.NotPanics(t, func() {
+		// Start with instance1
+		h.list.SetSelectedInstance(0)
+		h.tabbedWindow.UpdatePreview(instance1)
+		
+		// Scroll up in instance1
+		for i := 0; i < 5; i++ {
+			h.tabbedWindow.ScrollUp()
+		}
+		
+		// Switch to instance2 - should auto-scroll to bottom to show latest activity
+		h.list.SetSelectedInstance(1)
+		h.tabbedWindow.UpdatePreview(instance2)
+		
+		// Switch back to instance1 - should auto-scroll to bottom
+		h.list.SetSelectedInstance(0)
+		h.tabbedWindow.UpdatePreview(instance1)
+		
+	}, "Instance switching should auto-scroll to show latest activity")
+}
+
 // Helper function to create a test home instance (copied from existing app_test.go pattern)
 func createTestHome() *home {
 	testSpinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))

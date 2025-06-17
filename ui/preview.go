@@ -18,6 +18,7 @@ type PreviewPane struct {
 
 	previewState      previewState
 	instancePositions map[string]viewport.Model // Track viewport state per instance
+	instanceContent   map[string]string         // Track content hash per instance to detect changes
 	activeInstance    string                    // Track which instance is currently active
 }
 
@@ -32,6 +33,7 @@ func NewPreviewPane() *PreviewPane {
 	return &PreviewPane{
 		viewport:          viewport.New(0, 0),
 		instancePositions: make(map[string]viewport.Model),
+		instanceContent:   make(map[string]string),
 	}
 }
 
@@ -92,19 +94,42 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		return nil
 	}
 
+	// Check if this is new content or instance switch
+	oldContent, contentExists := p.instanceContent[instance.Title]
+	isNewContent := !contentExists || oldContent != content
+	isInstanceSwitch := p.activeInstance != instance.Title
+
 	// Get or create viewport for this instance
 	instanceViewport, exists := p.instancePositions[instance.Title]
 	if !exists {
 		// Create new viewport for this instance
 		instanceViewport = viewport.New(p.width, p.height)
 		instanceViewport.SetContent(content)
-		instanceViewport.GotoBottom() // Position at bottom only for new instances
+		instanceViewport.GotoBottom() // Position at bottom for new instances
 		p.instancePositions[instance.Title] = instanceViewport
 	} else {
-		// Update content while preserving scroll position
+		// Check if user is currently at the bottom before updating content
+		wasAtBottom := instanceViewport.AtBottom()
+		
+		// Update content
 		instanceViewport.SetContent(content)
+		
+		// Auto-scroll behavior:
+		// 1. Always go to bottom when switching to a different instance (show latest activity)
+		// 2. Only auto-scroll for new content if user was already at the bottom (terminal behavior)
+		if isInstanceSwitch {
+			instanceViewport.GotoBottom()
+		} else if isNewContent && wasAtBottom {
+			// Only auto-scroll if user was already viewing the latest content
+			instanceViewport.GotoBottom()
+		}
+		// If user was scrolled up and there's new content, preserve their position
+		
 		p.instancePositions[instance.Title] = instanceViewport
 	}
+
+	// Update content tracking
+	p.instanceContent[instance.Title] = content
 
 	// Update the main viewport to be a reference to this instance's viewport
 	p.viewport = p.instancePositions[instance.Title]
