@@ -267,6 +267,89 @@ func TestInstanceSwitchAutoScroll(t *testing.T) {
 	}, "Instance switching should auto-scroll to show latest activity")
 }
 
+func TestFastScrollMethods(t *testing.T) {
+	h := createTestHome()
+	
+	// Create a test instance
+	instance, err := session.NewInstance(session.InstanceOptions{
+		Title:   "fast-scroll-test",
+		Path:    ".",
+		Program: "echo",
+	})
+	require.NoError(t, err)
+	
+	// Add instance to list
+	h.list.AddInstance(instance)()
+	h.tabbedWindow.UpdatePreview(instance)
+	
+	assert.NotPanics(t, func() {
+		// Test fast scroll methods exist and work in preview tab
+		h.tabbedWindow.FastScrollUp()
+		h.tabbedWindow.FastScrollDown()
+		
+		// Switch to diff tab and test there too
+		h.tabbedWindow.Toggle()
+		h.tabbedWindow.FastScrollUp()
+		h.tabbedWindow.FastScrollDown()
+	}, "Fast scroll methods should work without panics")
+}
+
+func TestFastScrollKeyBindings(t *testing.T) {
+	// Test that fast scroll key bindings are properly defined
+	ctrlShiftUpKey, exists := keys.GlobalKeyStringsMap["ctrl+shift+up"]
+	assert.True(t, exists, "ctrl+shift+up should be defined in key map")
+	assert.Equal(t, keys.KeyCtrlShiftUp, ctrlShiftUpKey)
+	
+	ctrlShiftDownKey, exists := keys.GlobalKeyStringsMap["ctrl+shift+down"]
+	assert.True(t, exists, "ctrl+shift+down should be defined in key map")
+	assert.Equal(t, keys.KeyCtrlShiftDown, ctrlShiftDownKey)
+	
+	// Test key bindings have proper help text
+	binding := keys.GlobalkeyBindings[keys.KeyCtrlShiftUp]
+	assert.Contains(t, binding.Help().Key, "ctrl+shift+↑")
+	assert.Contains(t, binding.Help().Desc, "fast scroll up")
+	
+	binding = keys.GlobalkeyBindings[keys.KeyCtrlShiftDown]
+	assert.Contains(t, binding.Help().Key, "ctrl+shift+↓")
+	assert.Contains(t, binding.Help().Desc, "fast scroll down")
+}
+
+func TestFastScrollKeyHandling(t *testing.T) {
+	h := createTestHome()
+	
+	// Create a test instance
+	instance, err := session.NewInstance(session.InstanceOptions{
+		Title:   "fast-key-test",
+		Path:    ".",
+		Program: "echo",
+	})
+	require.NoError(t, err)
+	
+	// Add instance to list
+	h.list.AddInstance(instance)()
+	h.tabbedWindow.UpdatePreview(instance)
+	
+	// Test ctrl+shift+up key handling (simulate the key string)
+	ctrlShiftUpMsg := tea.KeyMsg{
+		Type: tea.KeyRunes,
+		Runes: []rune("ctrl+shift+up"),
+	}
+	
+	assert.NotPanics(t, func() {
+		_, _ = h.Update(ctrlShiftUpMsg)
+	}, "Ctrl+Shift+Up key should not panic")
+	
+	// Test ctrl+shift+down key handling (simulate the key string)
+	ctrlShiftDownMsg := tea.KeyMsg{
+		Type: tea.KeyRunes,
+		Runes: []rune("ctrl+shift+down"),
+	}
+	
+	assert.NotPanics(t, func() {
+		_, _ = h.Update(ctrlShiftDownMsg)
+	}, "Ctrl+Shift+Down key should not panic")
+}
+
 // Helper function to create a test home instance (copied from existing app_test.go pattern)
 func createTestHome() *home {
 	testSpinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))

@@ -495,6 +495,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyShiftDown:
 		m.tabbedWindow.ScrollDown()
 		return m, m.instanceChanged()
+	case keys.KeyCtrlShiftUp:
+		m.tabbedWindow.FastScrollUp()
+		return m, m.instanceChanged()
+	case keys.KeyCtrlShiftDown:
+		m.tabbedWindow.FastScrollDown()
+		return m, m.instanceChanged()
 	case keys.KeyTab:
 		m.tabbedWindow.Toggle()
 		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())

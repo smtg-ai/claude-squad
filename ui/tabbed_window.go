@@ -125,6 +125,22 @@ func (w *TabbedWindow) ScrollDown() {
 	}
 }
 
+func (w *TabbedWindow) FastScrollUp() {
+	if w.activeTab == 0 { // Preview tab
+		w.preview.FastScrollUp()
+	} else if w.activeTab == 1 { // Diff tab
+		w.diff.FastScrollUp()
+	}
+}
+
+func (w *TabbedWindow) FastScrollDown() {
+	if w.activeTab == 0 { // Preview tab
+		w.preview.FastScrollDown()
+	} else if w.activeTab == 1 { // Diff tab
+		w.diff.FastScrollDown()
+	}
+}
+
 // IsInDiffTab returns true if the diff tab is currently active
 func (w *TabbedWindow) IsInDiffTab() bool {
 	return w.activeTab == 1

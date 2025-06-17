@@ -28,6 +28,8 @@ const (
 	// Scroll keybindings (work in both preview and diff panels)
 	KeyShiftUp
 	KeyShiftDown
+	KeyCtrlShiftUp   // Fast scroll up (10 lines)
+	KeyCtrlShiftDown // Fast scroll down (10 lines)
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
@@ -36,8 +38,10 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"k":          KeyUp,
 	"down":       KeyDown,
 	"j":          KeyDown,
-	"shift+up":   KeyShiftUp,
-	"shift+down": KeyShiftDown,
+	"shift+up":        KeyShiftUp,
+	"shift+down":      KeyShiftDown,
+	"ctrl+shift+up":   KeyCtrlShiftUp,
+	"ctrl+shift+down": KeyCtrlShiftDown,
 	"N":          KeyPrompt,
 	"enter":      KeyEnter,
 	"o":          KeyEnter,
@@ -63,11 +67,19 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeyShiftUp: key.NewBinding(
 		key.WithKeys("shift+up"),
-		key.WithHelp("shift+↑", "scroll up"),
+		key.WithHelp("shift+↑", "scroll up (+ctrl for fast)"),
 	),
 	KeyShiftDown: key.NewBinding(
 		key.WithKeys("shift+down"),
-		key.WithHelp("shift+↓", "scroll down"),
+		key.WithHelp("shift+↓", "scroll down (+ctrl for fast)"),
+	),
+	KeyCtrlShiftUp: key.NewBinding(
+		key.WithKeys("ctrl+shift+up"),
+		key.WithHelp("ctrl+shift+↑", "fast scroll up"),
+	),
+	KeyCtrlShiftDown: key.NewBinding(
+		key.WithKeys("ctrl+shift+down"),
+		key.WithHelp("ctrl+shift+↓", "fast scroll down"),
 	),
 	KeyEnter: key.NewBinding(
 		key.WithKeys("enter", "o"),

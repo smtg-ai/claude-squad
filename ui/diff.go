@@ -108,6 +108,16 @@ func (d *DiffPane) ScrollDown() {
 	d.viewport.LineDown(1)
 }
 
+// FastScrollUp scrolls the viewport up by 10 lines
+func (d *DiffPane) FastScrollUp() {
+	d.viewport.LineUp(10)
+}
+
+// FastScrollDown scrolls the viewport down by 10 lines
+func (d *DiffPane) FastScrollDown() {
+	d.viewport.LineDown(10)
+}
+
 func colorizeDiff(diff string) string {
 	var coloredOutput strings.Builder
 

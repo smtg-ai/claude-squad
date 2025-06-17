@@ -161,6 +161,20 @@ func (p *PreviewPane) ScrollDown() {
 	p.syncViewportToMap()
 }
 
+// FastScrollUp scrolls the viewport up by 10 lines
+func (p *PreviewPane) FastScrollUp() {
+	p.viewport.LineUp(10)
+	// Update the map with the modified viewport
+	p.syncViewportToMap()
+}
+
+// FastScrollDown scrolls the viewport down by 10 lines
+func (p *PreviewPane) FastScrollDown() {
+	p.viewport.LineDown(10)
+	// Update the map with the modified viewport
+	p.syncViewportToMap()
+}
+
 // syncViewportToMap updates the instance map with current viewport state
 func (p *PreviewPane) syncViewportToMap() {
 	if p.activeInstance != "" {

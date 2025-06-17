@@ -59,7 +59,7 @@ func (h helpType) ToContent(instance *session.Instance) string {
 			"",
 			headerStyle.Render("Other:"),
 			keyStyle.Render("tab")+descStyle.Render("       - Switch between preview and diff tabs"),
-			keyStyle.Render("shift-↓/↑")+descStyle.Render(" - Scroll in preview and diff views"),
+			keyStyle.Render("shift-↓/↑")+descStyle.Render(" - Scroll in preview and diff views (ctrl+shift for fast)"),
 			keyStyle.Render("q")+descStyle.Render("         - Quit the application"),
 		)
 		return content
