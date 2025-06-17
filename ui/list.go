@@ -2,6 +2,7 @@ package ui
 
 import (
 	"claude-squad/log"
+	"claude-squad/project"
 	"claude-squad/session"
 	"errors"
 	"fmt"
@@ -64,10 +65,10 @@ type List struct {
 	repos map[string]int
 }
 
-func NewList(spinner *spinner.Model, autoYes bool) *List {
+func NewList(spinner *spinner.Model, autoYes bool, projectManager *project.ProjectManager) *List {
 	return &List{
 		items:    []*session.Instance{},
-		renderer: &InstanceRenderer{spinner: spinner},
+		renderer: &InstanceRenderer{spinner: spinner, projectManager: projectManager},
 		repos:    make(map[string]int),
 		autoyes:  autoYes,
 	}
@@ -102,8 +103,9 @@ func (l *List) NumInstances() int {
 
 // InstanceRenderer handles rendering of session.Instance objects
 type InstanceRenderer struct {
-	spinner *spinner.Model
-	width   int
+	spinner        *spinner.Model
+	width          int
+	projectManager *project.ProjectManager
 }
 
 func (r *InstanceRenderer) setWidth(width int) {
@@ -137,8 +139,21 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	default:
 	}
 
-	// Cut the title if it's too long
+	// Cut the title if it's too long and add project context
 	titleText := i.Title
+	if i.ProjectID != "" {
+		// Get project name instead of ID for better UX
+		if r.projectManager != nil {
+			if project, exists := r.projectManager.GetProject(i.ProjectID); exists {
+				titleText = fmt.Sprintf("[%s] %s", project.Name, i.Title)
+			} else {
+				// Fallback to ID if project not found
+				titleText = fmt.Sprintf("[%s] %s", i.ProjectID, i.Title)
+			}
+		} else {
+			titleText = fmt.Sprintf("[%s] %s", i.ProjectID, i.Title)
+		}
+	}
 	widthAvail := r.width - 3 - len(prefix) - 1
 	if widthAvail > 0 && widthAvail < len(titleText) && len(titleText) >= widthAvail-3 {
 		titleText = titleText[:widthAvail-3] + "..."

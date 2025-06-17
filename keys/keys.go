@@ -30,6 +30,7 @@ const (
 	KeyShiftDown
 	KeyCtrlShiftUp   // Fast scroll up (10 lines)
 	KeyCtrlShiftDown // Fast scroll down (10 lines)
+	KeyAddProject    // Key for adding a new project
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
@@ -52,6 +53,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"c":               KeyCheckout,
 	"r":               KeyResume,
 	"p":               KeySubmit,
+	"P":               KeyAddProject,
 	"?":               KeyHelp,
 }
 
@@ -120,6 +122,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyResume: key.NewBinding(
 		key.WithKeys("r"),
 		key.WithHelp("r", "resume"),
+	),
+	KeyAddProject: key.NewBinding(
+		key.WithKeys("P"),
+		key.WithHelp("P", "add project"),
 	),
 
 	// -- Special keybindings --

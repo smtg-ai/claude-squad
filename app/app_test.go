@@ -110,7 +110,7 @@ func TestConfirmationModalStateTransitions(t *testing.T) {
 func TestConfirmationModalKeyHandling(t *testing.T) {
 	// Import needed packages
 	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
-	list := ui.NewList(&spinner, false)
+	list := ui.NewList(&spinner, false, nil)
 
 	// Create enough of home struct to test handleKeyPress in confirmation state
 	h := &home{
@@ -231,7 +231,7 @@ func TestConfirmationMessageFormatting(t *testing.T) {
 func TestConfirmationFlowSimulation(t *testing.T) {
 	// Create a minimal setup
 	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
-	list := ui.NewList(&spinner, false)
+	list := ui.NewList(&spinner, false, nil)
 
 	// Add test instance
 	instance, err := session.NewInstance(session.InstanceOptions{
@@ -456,7 +456,8 @@ func TestPreviewScrollMethods(t *testing.T) {
 func TestTabbedWindowScrollDelegation(t *testing.T) {
 	preview := ui.NewPreviewPane()
 	diff := ui.NewDiffPane()
-	tabbedWindow := ui.NewTabbedWindow(preview, diff)
+	console := ui.NewConsolePane()
+	tabbedWindow := ui.NewTabbedWindow(preview, diff, console)
 
 	tabbedWindow.SetSize(100, 30)
 
@@ -871,8 +872,8 @@ func createTestHome() *home {
 		ctx:          context.Background(),
 		state:        stateDefault,
 		appConfig:    config.DefaultConfig(),
-		list:         ui.NewList(&testSpinner, false),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
+		list:         ui.NewList(&testSpinner, false, nil),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewConsolePane()),
 		menu:         ui.NewMenu(),
 		spinner:      testSpinner,
 	}

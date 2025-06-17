@@ -4,6 +4,7 @@ import (
 	"claude-squad/config"
 	"claude-squad/keys"
 	"claude-squad/log"
+	"claude-squad/project"
 	"claude-squad/session"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
@@ -42,6 +43,8 @@ const (
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
+	// stateAddProject is the state when the user is adding a new project.
+	stateAddProject
 )
 
 type home struct {
@@ -91,6 +94,10 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// projectManager manages multiple projects
+	projectManager *project.ProjectManager
+	// projectInputOverlay handles project input
+	projectInputOverlay *ui.ProjectInputOverlay
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -107,20 +114,30 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		os.Exit(1)
 	}
 
-	h := &home{
-		ctx:          ctx,
-		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
-		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewConsolePane()),
-		errBox:       ui.NewErrBox(),
-		storage:      storage,
-		appConfig:    appConfig,
-		program:      program,
-		autoYes:      autoYes,
-		state:        stateDefault,
-		appState:     appState,
+	// Initialize project manager
+	projectStorage := project.NewStateProjectStorage(appState)
+	projectManager, err := project.NewProjectManager(projectStorage)
+	if err != nil {
+		fmt.Printf("Failed to initialize project manager: %v\n", err)
+		os.Exit(1)
 	}
-	h.list = ui.NewList(&h.spinner, autoYes)
+
+	h := &home{
+		ctx:                 ctx,
+		spinner:             spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+		menu:                ui.NewMenu(),
+		tabbedWindow:        ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewConsolePane()),
+		errBox:              ui.NewErrBox(),
+		storage:             storage,
+		appConfig:           appConfig,
+		program:             program,
+		autoYes:             autoYes,
+		state:               stateDefault,
+		appState:            appState,
+		projectManager:      projectManager,
+		projectInputOverlay: ui.NewProjectInputOverlay(),
+	}
+	h.list = ui.NewList(&h.spinner, autoYes, projectManager)
 
 	// Load saved instances
 	instances, err := storage.LoadInstances()
@@ -161,6 +178,9 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	}
 	if m.textOverlay != nil {
 		m.textOverlay.SetWidth(int(float32(msg.Width) * 0.6))
+	}
+	if m.projectInputOverlay != nil {
+		m.projectInputOverlay.SetSize(msg.Width, msg.Height)
 	}
 
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
@@ -265,7 +285,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateAddProject {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -429,6 +449,51 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle add project state
+	if m.state == stateAddProject {
+		// Handle escape to cancel
+		if msg.String() == "ctrl+c" || msg.Type == tea.KeyEsc {
+			m.state = stateDefault
+			m.projectInputOverlay.Hide()
+			return m, tea.WindowSize()
+		}
+
+		// Update the project input overlay
+		var cmd tea.Cmd
+		m.projectInputOverlay, cmd = m.projectInputOverlay.Update(msg)
+
+		// Handle enter to submit
+		if msg.Type == tea.KeyEnter {
+			path := m.projectInputOverlay.GetValue()
+			if path != "" {
+				// Try to add the project
+				if err := m.projectManager.ValidateProjectPath(path); err != nil {
+					m.projectInputOverlay.SetError(err.Error())
+					return m, cmd
+				}
+
+				// Add the project
+				projectName := "" // Let NewProject generate name from path
+				project, err := m.projectManager.AddProject(path, projectName)
+				if err != nil {
+					m.projectInputOverlay.SetError(err.Error())
+					return m, cmd
+				}
+
+				// Success - hide overlay and return to default state
+				m.state = stateDefault
+				m.projectInputOverlay.Hide()
+				
+				// Optional: Set the new project as active
+				m.projectManager.SetActiveProject(project.ID)
+				
+				return m, tea.WindowSize()
+			}
+		}
+
+		return m, cmd
+	}
+
 
 	// Handle quit commands first
 	if msg.String() == "ctrl+c" || msg.String() == "q" {
@@ -448,11 +513,25 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
+		// Get active project path, default to current directory
+		projectPath := "."
+		var projectID string
+		if activeProject := m.projectManager.GetActiveProject(); activeProject != nil {
+			projectPath = activeProject.Path
+			projectID = activeProject.ID
+		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:   "",
-			Path:    ".",
+			Path:    projectPath,
 			Program: m.program,
 		})
+		if err == nil {
+			instance.ProjectID = projectID
+			// Add instance to project if there's an active project
+			if projectID != "" {
+				m.projectManager.AddInstanceToProject(projectID, instance.Title)
+			}
+		}
 		if err != nil {
 			return m, m.handleError(err)
 		}
@@ -469,11 +548,25 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
+		// Get active project path, default to current directory
+		projectPath := "."
+		var projectID string
+		if activeProject := m.projectManager.GetActiveProject(); activeProject != nil {
+			projectPath = activeProject.Path
+			projectID = activeProject.ID
+		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:   "",
-			Path:    ".",
+			Path:    projectPath,
 			Program: m.program,
 		})
+		if err == nil {
+			instance.ProjectID = projectID
+			// Add instance to project if there's an active project
+			if projectID != "" {
+				m.projectManager.AddInstanceToProject(projectID, instance.Title)
+			}
+		}
 		if err != nil {
 			return m, m.handleError(err)
 		}
@@ -484,6 +577,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.menu.SetState(ui.StateNewInstance)
 
 		return m, nil
+	case keys.KeyAddProject:
+		// Show project input overlay
+		m.state = stateAddProject
+		m.projectInputOverlay.Show()
+		return m, tea.WindowSize()
 	case keys.KeyUp:
 		m.list.Up()
 		return m, m.instanceChanged()
@@ -758,6 +856,11 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("confirmation overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
+	} else if m.state == stateAddProject {
+		if m.projectInputOverlay == nil {
+			log.ErrorLog.Printf("project input overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.projectInputOverlay.View(), mainView, true, true)
 	}
 
 	return mainView

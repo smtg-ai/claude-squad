@@ -51,6 +51,8 @@ type Instance struct {
 	AutoYes bool
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
+	// ProjectID is the ID of the project this instance belongs to
+	ProjectID string
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
@@ -77,6 +79,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 		Width:     i.Width,
 		CreatedAt: i.CreatedAt,
 		UpdatedAt: time.Now(),
+		ProjectID: i.ProjectID,
 		Program:   i.Program,
 		AutoYes:   i.AutoYes,
 	}
@@ -116,6 +119,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		CreatedAt: data.CreatedAt,
 		UpdatedAt: data.UpdatedAt,
 		Program:   data.Program,
+		ProjectID: data.ProjectID,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,

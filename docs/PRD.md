@@ -1,0 +1,321 @@
+# Reduced Product Requirements Document
+## Epic 1 Multi-Project: Focused UX Improvements
+
+### Executive Summary
+
+Based on real user testing feedback, this PRD defines a **minimal scope** to address specific UX pain points identified during Epic 1.1 validation. Focus is on **fixing critical issues** and **improving core usability** rather than adding new features.
+
+**Guiding Principle**: Fix what's broken, polish what's working, defer what's not essential.
+
+---
+
+## Problem Statement
+
+Epic 1.1 delivered functional multi-project support but revealed **4 critical UX issues**:
+
+1. **🔥 CRITICAL**: Tmux session name conflicts causing creation failures
+2. **🎯 UX**: Add Project dialog is not visually centered  
+3. **🎯 UX**: No visual indication of current active project
+4. **🎯 UX**: Project visualization lacks clarity and hierarchy
+
+**Success Criteria**: Address all 4 issues with minimal complexity, no new features.
+
+---
+
+## Scope Definition
+
+### ✅ **IN SCOPE**
+- Fix tmux session name collision errors
+- Center Add Project dialog properly
+- Display current active project clearly
+- Improve project visualization hierarchy
+- Error handling improvements for edge cases
+
+### ❌ **OUT OF SCOPE**
+- New functionality (Epic 2-4 features)
+- Advanced project operations (rename, delete)
+- Keyboard shortcuts beyond existing
+- Project switching mechanisms
+- Performance optimizations
+- Help system updates
+
+---
+
+## User Stories
+
+### **Story 1.2: Fix Session Creation Errors**
+**Priority**: P0 (Critical Bug)
+**User Story**: As a user, when I create a new instance, it should work reliably without tmux session conflicts.
+
+**Current Problem**: `failed to start new session: tmux session already exists: claudesquad_piola`
+
+**Acceptance Criteria**:
+- AC1: Instance creation never fails due to tmux session name conflicts
+- AC2: Clear error messages when tmux operations fail
+- AC3: Automatic session name resolution for conflicts
+- AC4: Graceful fallback when session names are unavailable
+
+**Technical Implementation**:
+- Add unique suffix to session names (timestamp/UUID)
+- Implement session name availability checking
+- Add proper error handling with user-friendly messages
+- Add retry logic for session creation
+
+**Definition of Done**:
+- [ ] Instance creation succeeds 100% of the time when valid
+- [ ] Error messages are clear and actionable
+- [ ] No tmux session name collisions occur
+- [ ] Regression tests cover session name scenarios
+
+---
+
+### **Story 1.3: Center Add Project Dialog**
+**Priority**: P1 (UX Issue)
+**User Story**: As a user, the Add Project dialog should be visually centered and properly positioned.
+
+**Current Problem**: Dialog appears off-center and positioning is inconsistent.
+
+**Acceptance Criteria**:
+- AC1: Add Project dialog is perfectly centered on screen
+- AC2: Dialog positioning is consistent across window sizes
+- AC3: Dialog remains visible and accessible on all screen resolutions
+- AC4: Visual alignment follows design standards
+
+**Technical Implementation**:
+- Fix dialog centering logic in project input overlay
+- Ensure responsive positioning for different screen sizes
+- Add proper padding and margins
+- Validate positioning across resolutions
+
+**Definition of Done**:
+- [ ] Dialog is perfectly centered on all screen sizes
+- [ ] Visual appearance is professional and consistent
+- [ ] Positioning works correctly on resize
+- [ ] No visual glitches or misalignment
+
+---
+
+### **Story 1.4: Display Current Active Project**
+**Priority**: P1 (UX Issue)  
+**User Story**: As a user, I want to clearly see which project is currently active at all times.
+
+**Current Problem**: No visual indication of active project context.
+
+**UX Considerations** (from UX Expert review):
+- **Problem**: Ubicación puede crear visual clutter
+- Poner "Active: ProjectName" cerca de "Instances" puede saturar el header
+- **Recomendación**: Considerar integrar en el título mismo: "Instances (ProjectName)"
+
+**Acceptance Criteria** (Updated):
+- AC1: Current active project is integrated into "Instances" header to avoid clutter
+- AC2: Active project display updates immediately when project changes
+- AC3: Display shows meaningful project name, not technical ID
+- AC4: Visual design is clean and doesn't clutter the interface
+- AC5: Display handles "no active project" state gracefully (shows just "Instances")
+
+**Technical Implementation** (Simplified):
+- Integrate active project name into existing "Instances" header
+- Format: "Instances (ProjectName)" or just "Instances" when no active project
+- Use project name instead of ID for readability
+- Add proper state management for active project changes
+- Avoid separate UI component to prevent visual clutter
+
+**Definition of Done**:
+- [ ] Active project is always visible and clear
+- [ ] Display updates immediately on project changes
+- [ ] Visual design is clean and professional
+- [ ] Handles all edge cases (no project, invalid project)
+- [ ] Doesn't interfere with existing UI elements
+
+---
+
+### **Story 1.5: Enhanced Project Visualization**
+**Priority**: P2 (UX Enhancement)
+**User Story**: As a user, I want the project and instance list to be more visually clear and organized.
+
+**Current Problem**: Project hierarchy is functional but lacks visual clarity and organization.
+
+**UX Considerations** (from UX Expert review):
+- **Riesgo**: Over-engineering la visualización
+- Agregar headers, counts, indentación puede hacer la UI demasiado compleja
+- **Recomendación**: Implementar mínimo viable primero - solo mejor indentación
+- **Terminal Constraint**: Limitaciones de espacios, colores, y typography en terminal apps
+
+**Acceptance Criteria** (Simplified):
+- AC1: Projects and instances are visually grouped with simple indentation
+- AC2: Project names are clearly distinguishable from instances  
+- AC3: Visual hierarchy uses minimal indentation (no complex headers/counts)
+- AC4: Maintains terminal app simplicity and readability
+- AC5: No performance impact from visual improvements
+
+**Technical Implementation** (Minimal Viable):
+- Improve indentation for project-instance hierarchy
+- Use existing styling/colors (no new complex visual elements)
+- Focus on spacing and simple visual grouping
+- Avoid headers, counts, or complex separators initially
+
+**Definition of Done** (Simplified):
+- [ ] Project-instance hierarchy is clear with simple indentation
+- [ ] Visual improvements don't add complexity to terminal UI
+- [ ] Project and instance distinction is clear
+- [ ] No performance impact from visual improvements
+- [ ] Design maintains terminal app simplicity and existing style
+
+---
+
+## Technical Requirements
+
+### **Error Handling Improvements**
+- Implement comprehensive tmux session management
+- Add user-friendly error messages for common scenarios
+- Add logging for debugging session creation issues
+- Implement retry mechanisms for transient failures
+
+### **UI/UX Polish**
+- Fix dialog positioning and centering algorithms
+- Add active project indicator component
+- Enhance visual hierarchy in instance list
+- Maintain existing keyboard shortcuts and functionality
+
+### **Quality Standards**
+- No regressions in existing functionality
+- All new code has test coverage >80%
+- Error scenarios are tested and handled
+- Performance impact is minimal (<50ms for UI updates)
+
+---
+
+## Implementation Plan
+
+### **Phase 1: Critical Bug Fix (Story 1.2)**
+**Timeline**: 1-2 days
+**Priority**: Must complete before other work
+
+**Tasks**:
+1. Investigate tmux session name collision root cause
+2. Implement unique session naming strategy
+3. Add session availability checking
+4. Implement proper error handling and user messages
+5. Add regression tests for session creation scenarios
+
+### **Phase 2: UX Improvements (Stories 1.3, 1.4)**
+**Timeline**: 1-2 days
+**Priority**: High impact, low complexity
+
+**Tasks**:
+1. Fix Add Project dialog centering
+2. Add active project display component
+3. Integrate active project indicator with UI
+4. Test across different screen sizes and resolutions
+
+### **Phase 3: Visual Enhancement (Story 1.5)**
+**Timeline**: 1-2 days
+**Priority**: Polish and finalization
+
+**Tasks**:
+1. Design enhanced visual hierarchy
+2. Implement improved project/instance grouping
+3. Add visual polish and styling improvements
+4. Validate design consistency and usability
+
+---
+
+## Success Metrics
+
+### **Functional Success**
+- **Instance Creation**: 100% success rate (vs current issues)
+- **Error Handling**: 0 unclear error messages
+- **Visual Consistency**: 100% proper dialog positioning
+
+### **Usability Success**
+- **Project Context**: Users immediately understand active project
+- **Visual Clarity**: Improved project/instance distinction
+- **Professional Polish**: No visual glitches or misalignments
+
+### **Technical Success**
+- **Zero Regressions**: All existing functionality preserved
+- **Test Coverage**: >80% for all new/modified code
+- **Performance**: No noticeable UI performance impact
+
+---
+
+## Risk Assessment
+
+### **Low Risk Items**
+- Dialog centering fixes (isolated UI changes)
+- Active project display (additive feature)
+- Visual hierarchy improvements (styling changes)
+
+### **Medium Risk Items**
+- Tmux session name fixes (affects core functionality)
+- Session error handling (requires careful testing)
+
+### **Mitigation Strategies**
+- Comprehensive testing for session management changes
+- Gradual rollout with fallback to previous behavior
+- Extensive manual testing across different scenarios
+
+---
+
+## Definition of Done
+
+### **Story Level**
+- All acceptance criteria met and tested
+- Code review completed and approved
+- Test coverage >80% for modified code
+- Manual testing completed across scenarios
+- No regressions in existing functionality
+
+### **Epic Level**
+- All 4 user stories completed and validated
+- User feedback confirms improved experience
+- Performance benchmarks maintained
+- Documentation updated where necessary
+
+---
+
+## Future Considerations
+
+**Explicitly Deferred**:
+- Project management operations (rename, delete)
+- Advanced keyboard navigation
+- Project switching mechanisms
+- Smart project discovery features
+- Workspace persistence features
+
+**Potential Next Phase** (if validated as valuable):
+- Basic project management (Epic 3.1 subset)
+- Simple project switching improvement
+- Enhanced error recovery mechanisms
+
+---
+
+## Conclusion
+
+This reduced scope focuses on **fixing what's broken** and **polishing what's working** rather than adding complexity. The 4 identified issues directly impact user experience and can be resolved with **minimal risk** and **high impact**.
+
+**Expected Outcome**: A robust, polished multi-project experience that users can rely on and find intuitive, setting the foundation for potential future enhancements based on real usage patterns.
+
+---
+
+## Change Log
+
+### Version 1.1 - UX Expert Review Integration
+**Date**: Current
+**Changes Made**:
+
+#### **Story 1.4 - Simplified Approach**:
+- **Change**: Integrated active project display into "Instances" header instead of separate component
+- **Rationale**: Avoid visual clutter in terminal interface
+- **New Format**: "Instances (ProjectName)" vs separate "Active: ProjectName" label
+
+#### **Story 1.5 - Reduced Scope**:
+- **Change**: Simplified from complex visual hierarchy to minimal indentation improvements
+- **Rationale**: Terminal app constraints - limited colors, typography, and space
+- **Removed**: Project headers, instance counts, complex separators, multiple colors
+- **Kept**: Simple indentation and spacing improvements only
+
+#### **Overall Impact**:
+- **Reduced Implementation Risk**: Simpler changes with lower complexity
+- **Better Terminal UX**: Respects terminal application constraints
+- **Maintained Value**: Core user problems still addressed effectively

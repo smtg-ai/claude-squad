@@ -43,6 +43,10 @@ type State struct {
 	HelpScreensSeen uint32 `json:"help_screens_seen"`
 	// Instances stores the serialized instance data as raw JSON
 	InstancesData json.RawMessage `json:"instances"`
+	// ProjectsData stores the serialized project data as raw JSON
+	ProjectsData json.RawMessage `json:"projects"`
+	// ActiveProject stores the ID of the currently active project
+	ActiveProject string `json:"active_project"`
 }
 
 // DefaultState returns the default state
@@ -50,6 +54,8 @@ func DefaultState() *State {
 	return &State{
 		HelpScreensSeen: 0,
 		InstancesData:   json.RawMessage("[]"),
+		ProjectsData:    json.RawMessage("{}"),
+		ActiveProject:   "",
 	}
 }
 
