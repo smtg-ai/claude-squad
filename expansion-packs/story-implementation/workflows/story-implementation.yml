@@ -120,7 +120,7 @@ workflow:
       inputs:
         - epic_number
       checklist: epic-readiness-checklist.md
-      notes: "BatchTask: Validate epic business readiness and dependencies before story creation"
+      notes: "REQUIRED: Use Task tool for execution - Validate epic business readiness and dependencies before story creation"
       story_status_update: "N/A - No story exists yet"
       
     - step: create_story
@@ -130,7 +130,7 @@ workflow:
       inputs:
         - epic_number
         - story_number
-      notes: "BatchTask: Create comprehensive story from epic context using existing bmad-core task"
+      notes: "REQUIRED: Use Task tool for execution - Create comprehensive story from epic context using existing bmad-core task"
       story_status_update: "Draft"
       
     - step: validate_story_draft
@@ -140,7 +140,7 @@ workflow:
       inputs:
         - story_file
       checklist: story-draft-checklist.md
-      notes: "BatchTask: Validate story draft quality and completeness using bmad-core checklist"
+      notes: "REQUIRED: Use Task tool for execution - Validate story draft quality and completeness using bmad-core checklist"
       checklist_completion_tracking: true
       
     - step: po_approval
@@ -150,7 +150,7 @@ workflow:
       inputs:
         - story_file
         - epic_number
-      notes: "BatchTask: Product Owner validates business value and approves for development"
+      notes: "REQUIRED: Use Task tool for execution - Product Owner validates business value and approves for development"
       story_status_update: "Approved"
       
     - step: environment_setup
@@ -159,7 +159,7 @@ workflow:
       requires: po_approval
       inputs:
         - story_file
-      notes: "BatchTask: Ensure development environment ready for story implementation"
+      notes: "REQUIRED: Use Task tool for execution - Ensure development environment ready for story implementation"
       
     - step: implement_story
       agent: dev
@@ -169,7 +169,7 @@ workflow:
         - story_file
         - epic_number
         - story_number
-      notes: "BatchTask: Complete story implementation with validation (includes project quality gates)"
+      notes: "REQUIRED: Use Task tool for execution - Complete story implementation with validation (includes project quality gates)"
       story_status_update: "In Progress"
       
     - step: pre_review_validation
@@ -179,7 +179,7 @@ workflow:
       inputs:
         - story_file
       checklist: story-dod-checklist.md
-      notes: "BatchTask: Final validation before reviews - ensures project quality gates pass"
+      notes: "REQUIRED: Use Task tool for execution - Final validation before reviews - ensures project quality gates pass"
       story_status_update: "Review"
       checklist_completion_tracking: true
       
@@ -190,7 +190,7 @@ workflow:
       inputs:
         - story_file
       checklist: architect-checklist.md
-      notes: "BatchTask: Round 1 - Architect validates technical design and architecture"
+      notes: "REQUIRED: Use Task tool for execution - Round 1 - Architect validates technical design and architecture"
       checklist_completion_tracking: true
       
     - step: round1_business_review
@@ -200,7 +200,7 @@ workflow:
       inputs:
         - story_file
       checklist: po-master-checklist.md
-      notes: "BatchTask: Round 1 - Product Owner validates business alignment and value"
+      notes: "REQUIRED: Use Task tool for execution - Round 1 - Product Owner validates business alignment and value"
       checklist_completion_tracking: true
       
     - step: round1_process_review
@@ -210,7 +210,7 @@ workflow:
       inputs:
         - story_file
       checklist: story-dod-checklist.md
-      notes: "BatchTask: Round 1 - Scrum Master validates process compliance and DoD"
+      notes: "REQUIRED: Use Task tool for execution - Round 1 - Scrum Master validates process compliance and DoD"
       checklist_completion_tracking: true
       
     - step: round1_qa_review
@@ -220,7 +220,7 @@ workflow:
       inputs:
         - story_file
       checklist: story-dod-checklist.md
-      notes: "BatchTask: Round 1 - QA validates implementation quality and completeness"
+      notes: "REQUIRED: Use Task tool for execution - Round 1 - QA validates implementation quality and completeness"
       checklist_completion_tracking: true
       
     - step: round1_ux_review
@@ -230,7 +230,7 @@ workflow:
       inputs:
         - story_file
       checklist: story-dod-checklist.md
-      notes: "BatchTask: Round 1 - UX Expert validates user experience and accessibility"
+      notes: "REQUIRED: Use Task tool for execution - Round 1 - UX Expert validates user experience and accessibility"
       checklist_completion_tracking: true
       
     - step: consolidate_feedback
@@ -244,7 +244,7 @@ workflow:
         - process_feedback
         - qa_feedback
         - ux_feedback
-      notes: "BatchTask: Architect consolidates all review feedback with REQUIRED-FOR-COMPLETION/QUALITY-STANDARD/IMPROVEMENT classification"
+      notes: "REQUIRED: Use Task tool for execution - Architect consolidates all review feedback with REQUIRED-FOR-COMPLETION/QUALITY-STANDARD/IMPROVEMENT classification"
       
     - step: implement_fixes
       agent: dev
@@ -253,7 +253,7 @@ workflow:
       inputs:
         - story_file
         - consolidated_feedback
-      notes: "BatchTask: Dev implements consolidated fixes and documents in story"
+      notes: "REQUIRED: Use Task tool for execution - Dev implements consolidated fixes and documents in story"
       
     - step: verify_quality_gates
       agent: dev
@@ -262,7 +262,7 @@ workflow:
       inputs:
         - story_file
       checklist: story-dod-checklist.md
-      notes: "BatchTask: Dev verifies all quality gates pass before architect review"
+      notes: "REQUIRED: Use Task tool for execution - Dev verifies all quality gates pass before architect review"
       checklist_completion_tracking: true
       
     - step: validate_fixes
@@ -273,7 +273,7 @@ workflow:
         - story_file
         - original_feedback
         - implemented_fixes
-      notes: "BatchTask: Architect validates fixes using story docs + browser MCP for UX changes"
+      notes: "REQUIRED: Use Task tool for execution - Architect validates fixes using story docs + browser MCP for UX changes"
       story_status_update: "Implementation Validated"
       
     - step: capture_learning_triage
@@ -285,7 +285,7 @@ workflow:
         - review_feedback
         - implementation_fixes
         - quality_metrics
-      notes: "Phase 4: Extract and triage learnings into structured categories with priorities"
+      notes: "REQUIRED: Use Task tool for execution - Extract and triage learnings into structured categories with priorities"
       story_status_update: "Learning Extracted"
       
     - step: party_mode_review
@@ -296,7 +296,7 @@ workflow:
         - story_file
         - learning_triage_items
       collaborators: [po, sm, dev]
-      notes: "Phase 4: Architect-led collaborative team review of learning items with technical categorization consensus"
+      notes: "REQUIRED: Use Task tool for execution - Architect-led collaborative team review of learning items with technical categorization consensus"
       story_status_update: "Learning Reviewed"
       
     - step: commit_and_prepare_pr
@@ -307,7 +307,7 @@ workflow:
         - story_file
         - learning_review_results
         - implementation_changes
-      notes: "Phase 5: Commit implementation with comprehensive context and prepare PR materials"
+      notes: "REQUIRED: Use Task tool for execution - Commit implementation with comprehensive context and prepare PR materials"
       story_status_update: "Changes Committed"
       
     - step: create_comprehensive_pr
@@ -318,7 +318,7 @@ workflow:
         - story_file
         - commit_information
         - pr_context
-      notes: "Phase 6: Create PR with business summary, technical changes, and learning extraction"
+      notes: "REQUIRED: Use Task tool for execution - Create PR with business summary, technical changes, and learning extraction"
       story_status_update: "PR Created"
       
     - step: update_epic_progress
@@ -330,7 +330,7 @@ workflow:
         - epic_number
         - pr_information
         - learning_items
-      notes: "Phase 6: Update epic progress tracking and schedule learning integration"
+      notes: "REQUIRED: Use Task tool for execution - Update epic progress tracking and schedule learning integration"
       story_status_update: "Done - Delivered"
       
     - step: epic_retrospective
@@ -345,7 +345,7 @@ workflow:
         - epic_metrics
       condition: epic_completion_status == "100%"
       collaborators: [architect, po, dev, ux-expert]
-      notes: "MANDATORY: Epic retrospective triggered automatically when epic reaches 100% completion"
+      notes: "REQUIRED: Use Task tool for execution - MANDATORY: Epic retrospective triggered automatically when epic reaches 100% completion"
       story_status_update: "Epic Complete - Retrospective Done"
 
   success_criteria:

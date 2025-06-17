@@ -1,20 +1,17 @@
 name: story-implementation
-version: 2.0.0
+version: 3.0.0
 description: >-
-  Complete story implementation workflow from epic context to PR delivery with comprehensive learning extraction and epic retrospectives.
-  Phase 1: Story Preparation (Epic + Story Number → Story Ready for Development)
-  Phase 2: Implementation (Story Development with Validation)
-  Phase 3: Quality Review (Architecture, Business, and QA Validation)
-  Phase 4: Learning Extraction (Triage + Collaborative Review)
-  Phase 5: Commit and PR Preparation (Context Generation)
-  Phase 6: PR Creation and Epic Progress (Delivery + Tracking)
-  Epic Completion: Multi-agent Epic Retrospective (Strategic Insights + Next Epic Preparation)
+  Dual-variant story implementation system with workflow optimization.
+  Simple: UI/content changes with streamlined validation (9 steps, 2-3 days)
+  Standard: Feature implementation with comprehensive validation (16 steps, 4-5 days)
+  Includes complexity validation warnings and Task tool execution requirements.
 author: BMAD Development Team
 bmad_version: "4.0.0"
 
 # Files included in this expansion pack
 files:
   workflows:
+    - story-simple.yml
     - story-implementation.yml
 
   tasks:
@@ -105,7 +102,15 @@ post_install_message: |
   - Seamless integration with final story PR
   
   Usage:
-    *workflow story-implementation epic_number=1 story_number=2
+    *workflow story-simple epic_number=X story_number=Y        # 9 steps, streamlined for simple changes
+    *workflow story-implementation epic_number=X story_number=Y # 16 steps, comprehensive for features
+  
+  Workflow Selection Guide:
+  - story-simple: UI/UX improvements, content updates, simple bug fixes, minor backend changes
+  - story-implementation: New features, business logic, database changes, cross-system integration
+  
+  ⚠️ Both workflows include complexity validation warnings to ensure appropriate selection.
+  All workflow steps require Task tool execution for proper expansion pack compliance.
   
   Built on core bmad-method components for maximum reliability.
-  Complete end-to-end workflow from Epic validation to PR delivery with comprehensive learning system and epic retrospectives.
+  Complete learning extraction and epic progress tracking in both variants.
