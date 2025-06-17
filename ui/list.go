@@ -237,8 +237,22 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	return text
 }
 
+// generateTitleText creates the dynamic title based on active project state
+func (l *List) generateTitleText() string {
+	// Get active project from project manager
+	if l.renderer.projectManager != nil {
+		if activeProject := l.renderer.projectManager.GetActiveProject(); activeProject != nil {
+			// Format: " Instances (ProjectName) "
+			return fmt.Sprintf(" Instances (%s) ", activeProject.Name)
+		}
+	}
+	// Fallback to default when no active project
+	return " Instances "
+}
+
 func (l *List) String() string {
-	const titleText = " Instances "
+	// Generate dynamic title based on active project
+	titleText := l.generateTitleText()
 	const autoYesText = " auto-yes "
 
 	// Write the title.
