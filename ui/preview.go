@@ -94,9 +94,12 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		return nil
 	}
 
+	// Enhance the content with better prompts
+	enhancedContent := enhanceContent(content, instance)
+
 	// Check if this is new content or instance switch
 	oldContent, contentExists := p.instanceContent[instance]
-	isNewContent := !contentExists || oldContent != content
+	isNewContent := !contentExists || oldContent != enhancedContent
 	isInstanceSwitch := p.activeInstance != instance
 
 	// Get or create viewport for this instance
@@ -104,7 +107,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 	if !exists {
 		// Create new viewport for this instance
 		instanceViewport = viewport.New(p.width, p.height)
-		instanceViewport.SetContent(content)
+		instanceViewport.SetContent(enhancedContent)
 		instanceViewport.GotoBottom() // Position at bottom for new instances
 		p.instancePositions[instance] = instanceViewport
 	} else {
@@ -112,7 +115,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		wasAtBottom := instanceViewport.AtBottom()
 
 		// Update content
-		instanceViewport.SetContent(content)
+		instanceViewport.SetContent(enhancedContent)
 
 		// Auto-scroll behavior:
 		// 1. Always go to bottom when switching to a different instance (show latest activity)
@@ -129,7 +132,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 	}
 
 	// Update content tracking
-	p.instanceContent[instance] = content
+	p.instanceContent[instance] = enhancedContent
 
 	// Update the main viewport to be a reference to this instance's viewport
 	p.viewport = p.instancePositions[instance]
@@ -137,7 +140,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 
 	p.previewState = previewState{
 		fallback: false,
-		text:     content,
+		text:     enhancedContent,
 	}
 
 	return nil

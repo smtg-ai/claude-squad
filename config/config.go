@@ -36,6 +36,8 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// ConsoleShell is the shell command to use in the console tab.
+	ConsoleShell string `json:"console_shell"`
 }
 
 // DefaultConfig returns the default configuration
@@ -44,6 +46,12 @@ func DefaultConfig() *Config {
 	if err != nil {
 		log.ErrorLog.Printf("failed to get claude command: %v", err)
 		program = defaultProgram
+	}
+
+	// Get default shell from environment or fallback to bash
+	defaultShell := os.Getenv("SHELL")
+	if defaultShell == "" {
+		defaultShell = "/bin/bash"
 	}
 
 	return &Config{
@@ -58,6 +66,7 @@ func DefaultConfig() *Config {
 			}
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
+		ConsoleShell: defaultShell,
 	}
 }
 

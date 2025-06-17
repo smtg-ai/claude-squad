@@ -48,6 +48,7 @@ type Menu struct {
 	state         MenuState
 	instance      *session.Instance
 	isInDiffTab   bool
+	isInConsoleTab bool
 
 	// keyDown is the key which is pressed. The default is -1.
 	keyDown keys.KeyName
@@ -59,10 +60,11 @@ var promptMenuOptions = []keys.KeyName{keys.KeySubmitName}
 
 func NewMenu() *Menu {
 	return &Menu{
-		options:     defaultMenuOptions,
-		state:       StateEmpty,
-		isInDiffTab: false,
-		keyDown:     -1,
+		options:        defaultMenuOptions,
+		state:          StateEmpty,
+		isInDiffTab:    false,
+		isInConsoleTab: false,
+		keyDown:        -1,
 	}
 }
 
@@ -97,6 +99,16 @@ func (m *Menu) SetInstance(instance *session.Instance) {
 // SetInDiffTab updates whether we're currently in the diff tab
 func (m *Menu) SetInDiffTab(inDiffTab bool) {
 	m.isInDiffTab = inDiffTab
+	m.isInConsoleTab = false // Only one tab can be active
+	m.updateOptions()
+}
+
+// SetInConsoleTab updates whether we're currently in the console tab
+func (m *Menu) SetInConsoleTab(inConsoleTab bool) {
+	m.isInConsoleTab = inConsoleTab
+	if inConsoleTab {
+		m.isInDiffTab = false // Only one tab can be active
+	}
 	m.updateOptions()
 }
 
@@ -121,6 +133,17 @@ func (m *Menu) updateOptions() {
 }
 
 func (m *Menu) addInstanceOptions() {
+	// Console tab has simplified menu focused on console usage
+	if m.isInConsoleTab {
+		m.options = []keys.KeyName{
+			keys.KeyTab,     // Switch tabs
+			keys.KeyShiftUp, // Scroll (shows as one item representing both up/down)
+			keys.KeyHelp,    // Help
+			keys.KeyQuit,    // Quit
+		}
+		return
+	}
+
 	// Instance management group
 	options := []keys.KeyName{keys.KeyNew, keys.KeyKill}
 
@@ -154,14 +177,31 @@ func (m *Menu) SetSize(width, height int) {
 func (m *Menu) String() string {
 	var s strings.Builder
 
-	// Define group boundaries
-	groups := []struct {
+	// Define group boundaries based on current context
+	var groups []struct {
 		start int
 		end   int
-	}{
-		{0, 2}, // Instance management group (n, d)
-		{2, 5}, // Action group (enter, submit, pause/resume)
-		{6, 8}, // System group (tab, help, q)
+	}
+
+	if m.isInConsoleTab {
+		// Console tab has simpler grouping: navigation | system
+		groups = []struct {
+			start int
+			end   int
+		}{
+			{0, 2}, // Navigation group (tab, scroll)
+			{2, 4}, // System group (help, quit)
+		}
+	} else {
+		// Regular grouping
+		groups = []struct {
+			start int
+			end   int
+		}{
+			{0, 2}, // Instance management group (n, d)
+			{2, 5}, // Action group (enter, submit, pause/resume)
+			{6, 8}, // System group (tab, help, q)
+		}
 	}
 
 	for i, k := range m.options {
@@ -179,13 +219,18 @@ func (m *Menu) String() string {
 		}
 
 		var inActionGroup bool
-		switch m.state {
-		case StateEmpty:
-			// For empty state, the action group is the first group
-			inActionGroup = i <= 1
-		default:
-			// For other states, the action group is the second group
-			inActionGroup = i >= groups[1].start && i < groups[1].end
+		if m.isInConsoleTab {
+			// For console tab, the first group (navigation) is the action group
+			inActionGroup = i >= groups[0].start && i < groups[0].end
+		} else {
+			switch m.state {
+			case StateEmpty:
+				// For empty state, the action group is the first group
+				inActionGroup = i <= 1
+			default:
+				// For other states, the action group is the second group
+				inActionGroup = i >= groups[1].start && i < groups[1].end
+			}
 		}
 
 		if inActionGroup {

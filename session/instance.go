@@ -62,6 +62,8 @@ type Instance struct {
 	tmuxSession *tmux.TmuxSession
 	// gitWorktree is the git worktree for the instance.
 	gitWorktree *git.GitWorktree
+	// consoleTmuxSession is the tmux session for the console tab.
+	consoleTmuxSession *tmux.TmuxSession
 }
 
 // ToInstanceData converts an Instance to its serializable form
@@ -194,6 +196,14 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	tmuxSession := tmux.NewTmuxSession(i.Title, i.Program)
 	i.tmuxSession = tmuxSession
 
+	// Create console session - use shell as program for console
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/bash"
+	}
+	consoleTmuxSession := tmux.NewTmuxSession(i.Title+"-console", shell+" -i")
+	i.consoleTmuxSession = consoleTmuxSession
+
 	if firstTimeSetup {
 		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
 		if err != nil {
@@ -216,10 +226,17 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	}()
 
 	if !firstTimeSetup {
-		// Reuse existing session
+		// Reuse existing sessions
 		if err := tmuxSession.Restore(); err != nil {
 			setupErr = fmt.Errorf("failed to restore existing session: %w", err)
 			return setupErr
+		}
+		if err := i.consoleTmuxSession.Restore(); err != nil {
+			// Console session restore failed, try to create a new one
+			log.WarningLog.Printf("Failed to restore console session for %s: %v, creating new one", i.Title, err)
+			if err := i.consoleTmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+				log.WarningLog.Printf("Failed to start new console session for %s: %v", i.Title, err)
+			}
 		}
 	} else {
 		// Setup git worktree first
@@ -228,7 +245,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 			return setupErr
 		}
 
-		// Create new session
+		// Create new sessions
 		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 			// Cleanup git worktree if tmux session creation fails
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
@@ -236,6 +253,12 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 			}
 			setupErr = fmt.Errorf("failed to start new session: %w", err)
 			return setupErr
+		}
+
+		// Start console session in the same worktree
+		if err := i.consoleTmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+			// Console session failure is not critical, just log it
+			log.WarningLog.Printf("Failed to start console session for %s: %v", i.Title, err)
 		}
 	}
 
@@ -253,11 +276,17 @@ func (i *Instance) Kill() error {
 
 	var errs []error
 
-	// Always try to cleanup both resources, even if one fails
-	// Clean up tmux session first since it's using the git worktree
+	// Always try to cleanup all resources, even if one fails
+	// Clean up tmux sessions first since they're using the git worktree
 	if i.tmuxSession != nil {
 		if err := i.tmuxSession.Close(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to close tmux session: %w", err))
+		}
+	}
+
+	if i.consoleTmuxSession != nil {
+		if err := i.consoleTmuxSession.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close console tmux session: %w", err))
 		}
 	}
 
@@ -269,6 +298,49 @@ func (i *Instance) Kill() error {
 	}
 
 	return i.combineErrors(errs)
+}
+
+// ConsolePreview returns a preview of the console session content
+func (i *Instance) ConsolePreview() (string, error) {
+	if !i.started || i.consoleTmuxSession == nil {
+		return "Console not available", nil
+	}
+
+	// Check if console session exists, if not try to create it
+	if !i.consoleTmuxSession.DoesSessionExist() {
+		log.WarningLog.Printf("Console session for %s doesn't exist, attempting to create", i.Title)
+		if err := i.consoleTmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+			return fmt.Sprintf("Console session unavailable: %v", err), nil
+		}
+	}
+
+	content, err := i.consoleTmuxSession.CapturePaneContent()
+	if err != nil {
+		return fmt.Sprintf("Error getting console content: %v", err), nil
+	}
+
+	if content == "" {
+		return "Console session ready. Press Enter to attach.", nil
+	}
+
+	return content, nil
+}
+
+// AttachToConsole attaches to the console session
+func (i *Instance) AttachToConsole() (<-chan struct{}, error) {
+	if !i.started || i.consoleTmuxSession == nil {
+		return nil, fmt.Errorf("console session not available")
+	}
+
+	return i.consoleTmuxSession.Attach()
+}
+
+// ConsoleAlive checks if the console tmux session is still alive
+func (i *Instance) ConsoleAlive() bool {
+	if !i.started || i.consoleTmuxSession == nil {
+		return false
+	}
+	return i.consoleTmuxSession.DoesSessionExist()
 }
 
 // combineErrors combines multiple errors into a single error

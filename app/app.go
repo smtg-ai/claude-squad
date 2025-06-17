@@ -79,7 +79,7 @@ type home struct {
 	list *ui.List
 	// menu displays the bottom menu
 	menu *ui.Menu
-	// tabbedWindow displays the tabbed window with preview and diff panes
+	// tabbedWindow displays the tabbed window with preview, diff, and console panes
 	tabbedWindow *ui.TabbedWindow
 	// errBox displays error messages
 	errBox *ui.ErrBox
@@ -111,7 +111,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		ctx:          ctx,
 		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewConsolePane()),
 		errBox:       ui.NewErrBox(),
 		storage:      storage,
 		appConfig:    appConfig,
@@ -429,6 +429,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+
 	// Handle quit commands first
 	if msg.String() == "ctrl+c" || msg.String() == "q" {
 		return m.handleQuit()
@@ -504,6 +505,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyTab:
 		m.tabbedWindow.Toggle()
 		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
+		m.menu.SetInConsoleTab(m.tabbedWindow.IsInConsoleTab())
 		return m, m.instanceChanged()
 	case keys.KeyKill:
 		selected := m.list.GetSelectedInstance()
@@ -592,7 +594,30 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		selected := m.list.GetSelectedInstance()
-		if selected == nil || selected.Paused() || !selected.TmuxAlive() {
+		if selected == nil || selected.Paused() {
+			return m, nil
+		}
+
+		// Handle console tab attachment
+		if m.tabbedWindow.IsInConsoleTab() {
+			if !selected.ConsoleAlive() {
+				return m, m.handleError(fmt.Errorf("console session not available"))
+			}
+			// Show help screen before attaching to console
+			m.showHelpScreen(helpTypeInstanceAttach, func() {
+				ch, err := selected.AttachToConsole()
+				if err != nil {
+					m.handleError(err)
+					return
+				}
+				<-ch
+				m.state = stateDefault
+			})
+			return m, nil
+		}
+
+		// Handle regular instance attachment
+		if !selected.TmuxAlive() {
 			return m, nil
 		}
 		// Show help screen before attaching
@@ -611,7 +636,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 }
 
-// instanceChanged updates the preview pane, menu, and diff pane based on the selected instance. It returns an error
+// instanceChanged updates the preview pane, menu, diff pane, and console pane based on the selected instance. It returns an error
 // Cmd if there was any error.
 func (m *home) instanceChanged() tea.Cmd {
 	// selected may be nil
@@ -621,10 +646,16 @@ func (m *home) instanceChanged() tea.Cmd {
 	// Update menu with current instance
 	m.menu.SetInstance(selected)
 
-	// If there's no selected instance, we don't need to update the preview.
+	// Update preview pane
 	if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
 		return m.handleError(err)
 	}
+
+	// Update console pane
+	if err := m.tabbedWindow.UpdateConsole(selected); err != nil {
+		return m.handleError(err)
+	}
+
 	return nil
 }
 
