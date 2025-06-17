@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
@@ -66,26 +67,66 @@ func toClaudeSquadTmuxName(str string) string {
 	return fmt.Sprintf("%s%s", TmuxPrefix, str)
 }
 
+// generateUniqueSessionName creates a unique session name by adding a suffix if needed
+func (t *TmuxSession) generateUniqueSessionName(baseName string) string {
+	// Try the base name first
+	testName := baseName
+	if !t.doesSessionExistByName(testName) {
+		return testName
+	}
+
+	// Try with timestamp suffix
+	timestamp := time.Now().Unix()
+	testName = fmt.Sprintf("%s_%d", baseName, timestamp)
+	if !t.doesSessionExistByName(testName) {
+		return testName
+	}
+
+	// Fallback to timestamp + random number for extreme edge cases
+	for i := 0; i < 10; i++ {
+		randomSuffix := rand.Intn(1000)
+		testName = fmt.Sprintf("%s_%d_%d", baseName, timestamp, randomSuffix)
+		if !t.doesSessionExistByName(testName) {
+			return testName
+		}
+	}
+
+	// Final fallback - this should be extremely rare
+	return fmt.Sprintf("%s_%d_%d", baseName, timestamp, rand.Intn(10000))
+}
+
+// doesSessionExistByName checks if a session exists by name
+func (t *TmuxSession) doesSessionExistByName(sessionName string) bool {
+	existsCmd := exec.Command("tmux", "has-session", fmt.Sprintf("-t=%s", sessionName))
+	return t.cmdExec.Run(existsCmd) == nil
+}
+
 // NewTmuxSession creates a new TmuxSession with the given name and program.
 func NewTmuxSession(name string, program string) *TmuxSession {
 	return newTmuxSession(name, program, MakePtyFactory(), cmd.MakeExecutor())
 }
 
 func newTmuxSession(name string, program string, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
-	return &TmuxSession{
+	session := &TmuxSession{
 		sanitizedName: toClaudeSquadTmuxName(name),
 		program:       program,
 		ptyFactory:    ptyFactory,
 		cmdExec:       cmdExec,
 	}
+	return session
 }
 
 // Start creates and starts a new tmux session, then attaches to it. Program is the command to run in
 // the session (ex. claude). workdir is the git worktree directory.
 func (t *TmuxSession) Start(workDir string) error {
-	// Check if the session already exists
-	if t.DoesSessionExist() {
-		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
+	// Generate unique session name to avoid conflicts
+	baseName := t.sanitizedName
+	uniqueName := t.generateUniqueSessionName(baseName)
+	
+	// Update session name if conflict resolution was needed
+	if uniqueName != baseName {
+		log.InfoLog.Printf("Session name conflict resolved: %s -> %s", baseName, uniqueName)
+		t.sanitizedName = uniqueName
 	}
 
 	// Create a new detached tmux session and start claude in it
@@ -97,10 +138,22 @@ func (t *TmuxSession) Start(workDir string) error {
 		if t.DoesSessionExist() {
 			cleanupCmd := exec.Command("tmux", "kill-session", "-t", t.sanitizedName)
 			if cleanupErr := t.cmdExec.Run(cleanupCmd); cleanupErr != nil {
-				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+				log.ErrorLog.Printf("Failed to cleanup session %s after error: %v", t.sanitizedName, cleanupErr)
 			}
 		}
-		return fmt.Errorf("error starting tmux session: %w", err)
+		
+		// Provide user-friendly error message
+		userMsg := fmt.Sprintf("Failed to create tmux session '%s'", t.sanitizedName)
+		if strings.Contains(err.Error(), "command not found") || strings.Contains(err.Error(), "tmux") {
+			userMsg += ". Please ensure tmux is installed and available in your PATH."
+		} else if strings.Contains(err.Error(), "permission") {
+			userMsg += ". Permission denied - please check your system permissions."
+		} else {
+			userMsg += fmt.Sprintf(". Error: %v", err)
+		}
+		
+		log.ErrorLog.Printf("Tmux session creation failed: %v", err)
+		return fmt.Errorf(userMsg)
 	}
 
 	// We need to close the ptmx, but we shouldn't close it before the command above finishes.
