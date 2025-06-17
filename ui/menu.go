@@ -132,10 +132,8 @@ func (m *Menu) addInstanceOptions() {
 		actionGroup = append(actionGroup, keys.KeyCheckout)
 	}
 
-	// Navigation group (when in diff tab)
-	if m.isInDiffTab {
-		actionGroup = append(actionGroup, keys.KeyShiftUp)
-	}
+	// Navigation group (scroll available in both preview and diff tabs)
+	actionGroup = append(actionGroup, keys.KeyShiftUp)
 
 	// System group
 	systemGroup := []keys.KeyName{keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
