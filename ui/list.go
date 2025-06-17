@@ -248,7 +248,19 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		if err != nil {
 			log.ErrorLog.Printf("could not get repo name in instance renderer: %v", err)
 		} else {
-			branch += fmt.Sprintf(" (%s)", repoName)
+			// Only show repo name if it's different from project name to avoid redundancy
+			showRepoName := true
+			if i.ProjectID != "" && r.projectManager != nil {
+				if project, exists := r.projectManager.GetProject(i.ProjectID); exists {
+					// Don't show repo name if it matches project name
+					if repoName == project.Name {
+						showRepoName = false
+					}
+				}
+			}
+			if showRepoName {
+				branch += fmt.Sprintf(" (%s)", repoName)
+			}
 		}
 	}
 	// Don't show branch if there's no space for it. Or show ellipsis if it's too long.
