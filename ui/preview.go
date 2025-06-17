@@ -110,10 +110,10 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 	} else {
 		// Check if user is currently at the bottom before updating content
 		wasAtBottom := instanceViewport.AtBottom()
-		
+
 		// Update content
 		instanceViewport.SetContent(content)
-		
+
 		// Auto-scroll behavior:
 		// 1. Always go to bottom when switching to a different instance (show latest activity)
 		// 2. Only auto-scroll for new content if user was already at the bottom (terminal behavior)
@@ -124,7 +124,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 			instanceViewport.GotoBottom()
 		}
 		// If user was scrolled up and there's new content, preserve their position
-		
+
 		p.instancePositions[instance] = instanceViewport
 	}
 
@@ -134,12 +134,12 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 	// Update the main viewport to be a reference to this instance's viewport
 	p.viewport = p.instancePositions[instance]
 	p.activeInstance = instance
-	
+
 	p.previewState = previewState{
 		fallback: false,
 		text:     content,
 	}
-	
+
 	return nil
 }
 
