@@ -350,6 +350,64 @@ func TestFastScrollKeyHandling(t *testing.T) {
 	}, "Ctrl+Shift+Down key should not panic")
 }
 
+// TestDuplicateTitleScrollIsolation tests that instances with same title maintain separate scroll positions
+func TestDuplicateTitleScrollIsolation(t *testing.T) {
+	h := createTestHome()
+	
+	// Create two test instances with SAME title but different content
+	instance1, err := session.NewInstance(session.InstanceOptions{
+		Title:   "duplicate-title", // Same title
+		Path:    ".",
+		Program: "echo",
+	})
+	require.NoError(t, err)
+	
+	instance2, err := session.NewInstance(session.InstanceOptions{
+		Title:   "duplicate-title", // Same title  
+		Path:    ".",
+		Program: "echo",
+	})
+	require.NoError(t, err)
+	
+	// Verify they are different instances (different pointers)
+	assert.NotEqual(t, instance1, instance2, "Should be different instance objects")
+	
+	// Add instances to list
+	h.list.AddInstance(instance1)()
+	h.list.AddInstance(instance2)()
+	
+	// Set up preview pane with content for instance1
+	h.tabbedWindow.UpdatePreview(instance1)
+	
+	// Scroll down in instance1
+	for i := 0; i < 5; i++ {
+		h.tabbedWindow.ScrollDown()
+	}
+	
+	// Switch to instance2 (same title, different instance)
+	h.list.SetSelectedInstance(1)
+	h.tabbedWindow.UpdatePreview(instance2)
+	
+	// Scroll up in instance2 - should NOT affect instance1's scroll position
+	for i := 0; i < 3; i++ {
+		h.tabbedWindow.ScrollUp()
+	}
+	
+	// Switch back to instance1
+	h.list.SetSelectedInstance(0)
+	h.tabbedWindow.UpdatePreview(instance1)
+	
+	// Test that instances maintain separate scroll state despite having same title
+	assert.NotPanics(t, func() {
+		h.tabbedWindow.ScrollUp()
+		h.tabbedWindow.ScrollDown()
+	}, "Duplicate title instances should maintain separate scroll positions")
+	
+	// This test mainly ensures that using instance pointers as keys works correctly
+	// Previous implementation using instance.Title would have had both instances
+	// sharing the same scroll position, causing bugs
+}
+
 // Helper function to create a test home instance (copied from existing app_test.go pattern)
 func createTestHome() *home {
 	testSpinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))

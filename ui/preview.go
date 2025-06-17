@@ -17,9 +17,9 @@ type PreviewPane struct {
 	height   int
 
 	previewState      previewState
-	instancePositions map[string]viewport.Model // Track viewport state per instance
-	instanceContent   map[string]string         // Track content hash per instance to detect changes
-	activeInstance    string                    // Track which instance is currently active
+	instancePositions map[*session.Instance]viewport.Model // Track viewport state per instance
+	instanceContent   map[*session.Instance]string         // Track content hash per instance to detect changes
+	activeInstance    *session.Instance                    // Track which instance is currently active
 }
 
 type previewState struct {
@@ -32,8 +32,8 @@ type previewState struct {
 func NewPreviewPane() *PreviewPane {
 	return &PreviewPane{
 		viewport:          viewport.New(0, 0),
-		instancePositions: make(map[string]viewport.Model),
-		instanceContent:   make(map[string]string),
+		instancePositions: make(map[*session.Instance]viewport.Model),
+		instanceContent:   make(map[*session.Instance]string),
 	}
 }
 
@@ -95,18 +95,18 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 	}
 
 	// Check if this is new content or instance switch
-	oldContent, contentExists := p.instanceContent[instance.Title]
+	oldContent, contentExists := p.instanceContent[instance]
 	isNewContent := !contentExists || oldContent != content
-	isInstanceSwitch := p.activeInstance != instance.Title
+	isInstanceSwitch := p.activeInstance != instance
 
 	// Get or create viewport for this instance
-	instanceViewport, exists := p.instancePositions[instance.Title]
+	instanceViewport, exists := p.instancePositions[instance]
 	if !exists {
 		// Create new viewport for this instance
 		instanceViewport = viewport.New(p.width, p.height)
 		instanceViewport.SetContent(content)
 		instanceViewport.GotoBottom() // Position at bottom for new instances
-		p.instancePositions[instance.Title] = instanceViewport
+		p.instancePositions[instance] = instanceViewport
 	} else {
 		// Check if user is currently at the bottom before updating content
 		wasAtBottom := instanceViewport.AtBottom()
@@ -125,15 +125,15 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		}
 		// If user was scrolled up and there's new content, preserve their position
 		
-		p.instancePositions[instance.Title] = instanceViewport
+		p.instancePositions[instance] = instanceViewport
 	}
 
 	// Update content tracking
-	p.instanceContent[instance.Title] = content
+	p.instanceContent[instance] = content
 
 	// Update the main viewport to be a reference to this instance's viewport
-	p.viewport = p.instancePositions[instance.Title]
-	p.activeInstance = instance.Title
+	p.viewport = p.instancePositions[instance]
+	p.activeInstance = instance
 	
 	p.previewState = previewState{
 		fallback: false,
@@ -177,7 +177,7 @@ func (p *PreviewPane) FastScrollDown() {
 
 // syncViewportToMap updates the instance map with current viewport state
 func (p *PreviewPane) syncViewportToMap() {
-	if p.activeInstance != "" {
+	if p.activeInstance != nil {
 		p.instancePositions[p.activeInstance] = p.viewport
 	}
 }
