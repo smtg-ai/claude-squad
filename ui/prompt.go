@@ -13,21 +13,21 @@ import (
 var (
 	// Enhanced prompt styles
 	promptUserStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "#22c55e", Dark: "#22c55e"}).
-		Bold(true)
+			Foreground(lipgloss.AdaptiveColor{Light: "#22c55e", Dark: "#22c55e"}).
+			Bold(true)
 	promptPathStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "#3b82f6", Dark: "#60a5fa"}).
-		Bold(true)
+			Foreground(lipgloss.AdaptiveColor{Light: "#3b82f6", Dark: "#60a5fa"}).
+			Bold(true)
 	promptGitStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "#f59e0b", Dark: "#fbbf24"})
+			Foreground(lipgloss.AdaptiveColor{Light: "#f59e0b", Dark: "#fbbf24"})
 	promptArrowStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "#6b7280", Dark: "#9ca3af"})
+				Foreground(lipgloss.AdaptiveColor{Light: "#6b7280", Dark: "#9ca3af"})
 	promptErrorStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "#ef4444", Dark: "#f87171"}).
-		Bold(true)
+				Foreground(lipgloss.AdaptiveColor{Light: "#ef4444", Dark: "#f87171"}).
+				Bold(true)
 	promptSuccessStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "#22c55e", Dark: "#4ade80"}).
-		Bold(true)
+				Foreground(lipgloss.AdaptiveColor{Light: "#22c55e", Dark: "#4ade80"}).
+				Bold(true)
 )
 
 type promptInfo struct {
@@ -61,7 +61,7 @@ func buildEnhancedPrompt(instance *session.Instance) string {
 
 	// Join parts with spaces
 	promptLine := strings.Join(parts, " ")
-	
+
 	// Add arrow and final prompt symbol
 	if promptLine != "" {
 		promptLine += " "
@@ -89,10 +89,10 @@ func getPromptInfo(instance *session.Instance) promptInfo {
 	if instance.Started() {
 		if worktree, err := instance.GetGitWorktree(); err == nil {
 			info.directory = worktree.GetWorktreePath()
-			
+
 			// Get git branch
 			info.gitBranch = worktree.GetBranchName()
-			
+
 			// Check if git repo is dirty
 			if dirty, err := worktree.IsDirty(); err == nil {
 				info.gitDirty = dirty
@@ -116,12 +116,12 @@ func enhanceContent(content string, instance *session.Instance) string {
 		trimmed := strings.TrimSpace(line)
 		// More precise prompt detection: look for user@host pattern followed by $ or %
 		isPromptLine := false
-		
+
 		// Pattern 1: user@host ... $ or %
 		if strings.Contains(line, "@") && (strings.HasSuffix(trimmed, "$") || strings.HasSuffix(trimmed, "%")) {
 			isPromptLine = true
 		}
-		
+
 		// Pattern 2: lines that end with " $ " or " % " (with trailing space)
 		if strings.HasSuffix(line, " $ ") || strings.HasSuffix(line, " % ") {
 			isPromptLine = true

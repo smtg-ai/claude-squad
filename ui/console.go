@@ -64,7 +64,7 @@ func (c *ConsolePane) setFallbackState(message string) {
 // setFallbackStateWithPrompt sets fallback state with enhanced prompt context
 func (c *ConsolePane) setFallbackStateWithPrompt(message string, instance *session.Instance) {
 	var content string
-	
+
 	if instance != nil && instance.Started() {
 		// Show prompt preview
 		prompt := buildEnhancedPrompt(instance)
@@ -73,9 +73,9 @@ func (c *ConsolePane) setFallbackStateWithPrompt(message string, instance *sessi
 			c.height,
 			lipgloss.Center,
 			lipgloss.Center,
-			lipgloss.JoinVertical(lipgloss.Center, 
-				FallBackText, 
-				"", 
+			lipgloss.JoinVertical(lipgloss.Center,
+				FallBackText,
+				"",
 				message,
 				"",
 				"Preview prompt:",
@@ -91,7 +91,7 @@ func (c *ConsolePane) setFallbackStateWithPrompt(message string, instance *sessi
 			lipgloss.JoinVertical(lipgloss.Center, FallBackText, "", message),
 		)
 	}
-	
+
 	c.previewState = consolePreviewState{
 		fallback: true,
 		text:     content,
@@ -171,7 +171,6 @@ func (c *ConsolePane) UpdateContent(instance *session.Instance) error {
 	return nil
 }
 
-
 // ScrollUp scrolls the viewport up
 func (c *ConsolePane) ScrollUp() {
 	c.viewport.LineUp(1)
@@ -206,7 +205,6 @@ func (c *ConsolePane) syncViewportToMap() {
 		c.instancePositions[c.activeInstance] = c.viewport
 	}
 }
-
 
 func (c *ConsolePane) String() string {
 	return c.viewport.View()

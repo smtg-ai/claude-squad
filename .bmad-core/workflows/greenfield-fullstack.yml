@@ -1,0 +1,177 @@
+workflow:
+  id: greenfield-fullstack
+  name: Greenfield Full-Stack Application Development
+  description: >-
+    Agent workflow for building full-stack applications from concept to development.
+    Supports both comprehensive planning for complex projects and rapid prototyping for simple ones.
+  type: greenfield
+  project_types:
+    - web-app
+    - saas
+    - enterprise-app
+    - prototype
+    - mvp
+
+  # For Complex Projects (Production-Ready, Multiple Features)
+  complex_project_sequence:
+    - agent: analyst
+      creates: project-brief.md
+      optional_steps:
+        - brainstorming_session
+        - market_research_prompt
+      notes: "Can do brainstorming first, then optional deep research before creating project brief. SAVE OUTPUT: Copy final project-brief.md to your project's docs/ folder."
+
+    - agent: pm
+      creates: prd.md
+      requires: project-brief.md
+      notes: "Creates PRD from project brief using prd-tmpl. SAVE OUTPUT: Copy final prd.md to your project's docs/ folder."
+
+    - agent: ux-expert
+      creates: front-end-spec.md
+      requires: prd.md
+      optional_steps:
+        - user_research_prompt
+      notes: "Creates UI/UX specification using front-end-spec-tmpl. SAVE OUTPUT: Copy final front-end-spec.md to your project's docs/ folder."
+
+    - agent: ux-expert
+      creates: v0_prompt (optional)
+      requires: front-end-spec.md
+      condition: user_wants_ai_generation
+      notes: "OPTIONAL BUT RECOMMENDED: Generate AI UI prompt for tools like v0, Lovable, etc. Use the generate-ai-frontend-prompt task. User can then generate UI in external tool and download project structure."
+
+    - agent: architect
+      creates: fullstack-architecture.md
+      requires:
+        - prd.md
+        - front-end-spec.md
+      optional_steps:
+        - technical_research_prompt
+        - review_generated_ui_structure
+      notes: "Creates comprehensive architecture using fullstack-architecture-tmpl. If user generated UI with v0/Lovable, can incorporate the project structure into architecture. May suggest changes to PRD stories or new stories. SAVE OUTPUT: Copy final fullstack-architecture.md to your project's docs/ folder."
+
+    - agent: pm
+      updates: prd.md (if needed)
+      requires: fullstack-architecture.md
+      condition: architecture_suggests_prd_changes
+      notes: "If architect suggests story changes, update PRD and re-export the complete unredacted prd.md to docs/ folder."
+
+    - agent: po
+      validates: all_artifacts
+      uses: po-master-checklist
+      notes: "Validates all documents for consistency and completeness. May require updates to any document."
+
+    - agent: various
+      updates: any_flagged_documents
+      condition: po_checklist_issues
+      notes: "If PO finds issues, return to relevant agent to fix and re-export updated documents to docs/ folder."
+
+    - project_setup_guidance:
+      action: guide_project_structure
+      condition: user_has_generated_ui
+      notes: "If user generated UI with v0/Lovable: For polyrepo setup, place downloaded project in separate frontend repo alongside backend repo. For monorepo, place in apps/web or packages/frontend directory. Review architecture document for specific guidance."
+
+    - development_order_guidance:
+      action: guide_development_sequence
+      notes: "Based on PRD stories: If stories are frontend-heavy, start with frontend project/directory first. If backend-heavy or API-first, start with backend. For tightly coupled features, follow story sequence in monorepo setup. Reference sharded PRD epics for development order."
+
+    - workflow_end:
+      action: move_to_ide
+      notes: "All planning artifacts complete. Move to IDE environment to begin development. Explain to the user the IDE Development Workflow next steps: data#bmad-kb:IDE Development Workflow"
+
+  # For Simple Projects (Prototypes, MVPs, Quick Experiments)
+  simple_project_sequence:
+    - step: project_scope
+      action: assess complexity
+      notes: "First, assess if this needs full planning (use complex_project_sequence) or can be a simple prototype/MVP."
+
+    - agent: analyst
+      creates: project-brief.md
+      optional_steps:
+        - brainstorming_session
+      notes: "Creates focused project brief for simple project. SAVE OUTPUT: Copy final project-brief.md to your project's docs/ folder."
+
+    - agent: pm
+      creates: simple-project-prd.md
+      uses: create doc simple-project-prd OR create-epic OR create-story
+      requires: project-brief.md
+      notes: "Create simple prd, simple epic or story instead of full PRD for rapid development. Choose based on scope."
+
+    - workflow_end:
+      action: move_to_ide
+      notes: "Simple project defined. Move to IDE environment to begin development. Explain to the user the IDE Development Workflow next steps: data#bmad-kb:IDE Development Workflow"
+
+  flow_diagram: |
+    ```mermaid
+    graph TD
+        A[Start: Greenfield Project] --> B{Project Complexity?}
+        B -->|Complex/Production| C[analyst: project-brief.md]
+        B -->|Simple/Prototype| D[analyst: focused project-brief.md]
+
+        C --> E[pm: prd.md]
+        E --> F[ux-expert: front-end-spec.md]
+        F --> F2{Generate v0 prompt?}
+        F2 -->|Yes| F3[ux-expert: create v0 prompt]
+        F2 -->|No| G[architect: fullstack-architecture.md]
+        F3 --> F4[User: generate UI in v0/Lovable]
+        F4 --> G
+        G --> H{Architecture suggests PRD changes?}
+        H -->|Yes| I[pm: update prd.md]
+        H -->|No| J[po: validate all artifacts]
+        I --> J
+        J --> K{PO finds issues?}
+        K -->|Yes| L[Return to relevant agent for fixes]
+        K -->|No| M[Move to IDE Environment]
+        L --> J
+
+        D --> N[pm: simple epic or story]
+        N --> O[Move to IDE Environment]
+
+        C -.-> C1[Optional: brainstorming]
+        C -.-> C2[Optional: market research]
+        F -.-> F1[Optional: user research]
+        G -.-> G1[Optional: technical research]
+        D -.-> D1[Optional: brainstorming]
+
+        style M fill:#90EE90
+        style O fill:#90EE90
+        style F3 fill:#E6E6FA
+        style F4 fill:#E6E6FA
+        style C fill:#FFE4B5
+        style E fill:#FFE4B5
+        style F fill:#FFE4B5
+        style G fill:#FFE4B5
+        style D fill:#FFB6C1
+        style N fill:#FFB6C1
+    ```
+
+  decision_guidance:
+    use_complex_sequence_when:
+      - Building production-ready applications
+      - Multiple team members will be involved
+      - Complex feature requirements (4+ stories)
+      - Need comprehensive documentation
+      - Long-term maintenance expected
+      - Enterprise or customer-facing applications
+
+    use_simple_sequence_when:
+      - Building prototypes or MVPs
+      - Solo developer or small team
+      - Simple requirements (1-3 stories)
+      - Quick experiments or proof-of-concepts
+      - Short-term or throwaway projects
+      - Learning or educational projects
+
+  handoff_prompts:
+    # Complex sequence prompts
+    analyst_to_pm: "Project brief is complete. Save it as docs/project-brief.md in your project, then create the PRD."
+    pm_to_ux: "PRD is ready. Save it as docs/prd.md in your project, then create the UI/UX specification."
+    ux_to_architect: "UI/UX spec complete. Save it as docs/front-end-spec.md in your project, then create the fullstack architecture."
+    architect_review: "Architecture complete. Save it as docs/fullstack-architecture.md. Do you suggest any changes to the PRD stories or need new stories added?"
+    architect_to_pm: "Please update the PRD with the suggested story changes, then re-export the complete prd.md to docs/."
+    updated_to_po: "All documents ready in docs/ folder. Please validate all artifacts for consistency."
+    po_issues: "PO found issues with [document]. Please return to [agent] to fix and re-save the updated document."
+    complex_complete: "All planning artifacts validated and saved in docs/ folder. Move to IDE environment to begin development."
+
+    # Simple sequence prompts
+    simple_analyst_to_pm: "Focused project brief complete. Save it as docs/project-brief.md, then create simple epic or story for rapid development."
+    simple_complete: "Simple project defined. Move to IDE environment to begin development."

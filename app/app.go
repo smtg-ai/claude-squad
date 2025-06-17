@@ -483,17 +483,16 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				// Success - hide overlay and return to default state
 				m.state = stateDefault
 				m.projectInputOverlay.Hide()
-				
+
 				// Optional: Set the new project as active
 				m.projectManager.SetActiveProject(project.ID)
-				
+
 				return m, tea.WindowSize()
 			}
 		}
 
 		return m, cmd
 	}
-
 
 	// Handle quit commands first
 	if msg.String() == "ctrl+c" || msg.String() == "q" {

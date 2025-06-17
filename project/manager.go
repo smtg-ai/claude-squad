@@ -29,23 +29,23 @@ func NewProjectManager(storage ProjectStorage) (*ProjectManager, error) {
 	if storage == nil {
 		return nil, fmt.Errorf("storage cannot be nil")
 	}
-	
+
 	pm := &ProjectManager{
 		projects: make(map[string]*Project),
 		storage:  storage,
 	}
-	
+
 	// Load existing projects from storage
 	if err := pm.loadProjects(); err != nil {
 		return nil, fmt.Errorf("failed to load projects: %w", err)
 	}
-	
+
 	// Set active project if one was stored
 	activeProjectID := storage.GetActiveProject()
 	if activeProjectID != "" {
 		pm.setActiveProjectByID(activeProjectID)
 	}
-	
+
 	return pm, nil
 }
 
@@ -56,34 +56,34 @@ func (pm *ProjectManager) AddProject(path, name string) (*Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create project: %w", err)
 	}
-	
+
 	// Check if project with same path already exists
 	for _, existing := range pm.projects {
 		if existing.Path == project.Path {
 			return nil, fmt.Errorf("project with path already exists: %s", path)
 		}
 	}
-	
+
 	// Validate path exists
 	if _, err := os.Stat(project.Path); os.IsNotExist(err) {
 		return nil, fmt.Errorf("project path does not exist: %s", project.Path)
 	}
-	
+
 	// Add to manager
 	pm.projects[project.ID] = project
-	
+
 	// If this is the first project, make it active
 	if len(pm.projects) == 1 {
 		pm.SetActiveProject(project.ID)
 	}
-	
+
 	// Save to storage
 	if err := pm.saveProjects(); err != nil {
 		// Remove from memory if save failed
 		delete(pm.projects, project.ID)
 		return nil, fmt.Errorf("failed to save project: %w", err)
 	}
-	
+
 	return project, nil
 }
 
@@ -104,21 +104,21 @@ func (pm *ProjectManager) SetActiveProject(projectID string) error {
 	if !exists {
 		return fmt.Errorf("project not found: %s", projectID)
 	}
-	
+
 	// Deactivate current active project
 	if pm.activeProject != nil {
 		pm.activeProject.SetInactive()
 	}
-	
+
 	// Set new active project
 	pm.activeProject = project
 	project.SetActive()
-	
+
 	// Save to storage
 	if err := pm.storage.SetActiveProject(projectID); err != nil {
 		return fmt.Errorf("failed to save active project: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -139,12 +139,12 @@ func (pm *ProjectManager) ListProjects() []*Project {
 	for _, project := range pm.projects {
 		projects = append(projects, project)
 	}
-	
+
 	// Sort by last accessed time (most recent first)
 	sort.Slice(projects, func(i, j int) bool {
 		return projects[i].LastAccessed.After(projects[j].LastAccessed)
 	})
-	
+
 	return projects
 }
 
@@ -154,30 +154,30 @@ func (pm *ProjectManager) RemoveProject(projectID string) error {
 	if !exists {
 		return fmt.Errorf("project not found: %s", projectID)
 	}
-	
+
 	// If this is the active project, clear active state
 	if pm.activeProject != nil && pm.activeProject.ID == projectID {
 		pm.activeProject = nil
 		pm.storage.SetActiveProject("")
 	}
-	
+
 	// Remove from memory
 	delete(pm.projects, projectID)
-	
+
 	// Remove from storage
 	if err := pm.storage.DeleteProject(projectID); err != nil {
 		// Re-add to memory if storage delete failed
 		pm.projects[projectID] = project
 		return fmt.Errorf("failed to delete project from storage: %w", err)
 	}
-	
+
 	// Save updated projects
 	if err := pm.saveProjects(); err != nil {
 		// Re-add to memory if save failed
 		pm.projects[projectID] = project
 		return fmt.Errorf("failed to save projects after deletion: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -186,24 +186,24 @@ func (pm *ProjectManager) ValidateProjectPath(path string) error {
 	if path == "" {
 		return fmt.Errorf("project path cannot be empty")
 	}
-	
+
 	cleanPath := filepath.Clean(path)
 	if !filepath.IsAbs(cleanPath) {
 		return fmt.Errorf("project path must be absolute: %s", path)
 	}
-	
+
 	// Check if path exists
 	if _, err := os.Stat(cleanPath); os.IsNotExist(err) {
 		return fmt.Errorf("project path does not exist: %s", cleanPath)
 	}
-	
+
 	// Check if project with same path already exists
 	for _, existing := range pm.projects {
 		if existing.Path == cleanPath {
 			return fmt.Errorf("project with path already exists: %s", cleanPath)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -213,7 +213,7 @@ func (pm *ProjectManager) GetProjectInstances(projectID string) ([]string, error
 	if !exists {
 		return nil, fmt.Errorf("project not found: %s", projectID)
 	}
-	
+
 	// Return a copy to prevent external modification
 	instances := make([]string, len(project.Instances))
 	copy(instances, project.Instances)
@@ -226,9 +226,9 @@ func (pm *ProjectManager) AddInstanceToProject(projectID, instanceID string) err
 	if !exists {
 		return fmt.Errorf("project not found: %s", projectID)
 	}
-	
+
 	project.AddInstance(instanceID)
-	
+
 	// Save to storage
 	return pm.saveProjects()
 }
@@ -239,11 +239,11 @@ func (pm *ProjectManager) RemoveInstanceFromProject(projectID, instanceID string
 	if !exists {
 		return fmt.Errorf("project not found: %s", projectID)
 	}
-	
+
 	if !project.RemoveInstance(instanceID) {
 		return fmt.Errorf("instance not found in project: %s", instanceID)
 	}
-	
+
 	// Save to storage
 	return pm.saveProjects()
 }
@@ -258,21 +258,21 @@ func (pm *ProjectManager) loadProjects() error {
 	projectsJSON := pm.storage.GetProjects()
 	if len(projectsJSON) == 0 {
 		pm.projects = make(map[string]*Project) // Initialize empty map
-		return nil // No projects to load
+		return nil                              // No projects to load
 	}
-	
+
 	var projects map[string]*Project
 	if err := json.Unmarshal(projectsJSON, &projects); err != nil {
 		return fmt.Errorf("failed to unmarshal projects: %w", err)
 	}
-	
+
 	// Validate loaded projects
 	for id, project := range projects {
 		if err := project.Validate(); err != nil {
 			return fmt.Errorf("invalid project %s: %w", id, err)
 		}
 	}
-	
+
 	pm.projects = projects
 	return nil
 }
@@ -283,6 +283,6 @@ func (pm *ProjectManager) saveProjects() error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal projects: %w", err)
 	}
-	
+
 	return pm.storage.SaveProjects(projectsJSON)
 }

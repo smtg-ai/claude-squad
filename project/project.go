@@ -23,13 +23,13 @@ func NewProject(path, name string) (*Project, error) {
 	if path == "" {
 		return nil, fmt.Errorf("project path cannot be empty")
 	}
-	
+
 	// Clean and validate the path
 	cleanPath := filepath.Clean(path)
 	if !filepath.IsAbs(cleanPath) {
 		return nil, fmt.Errorf("project path must be absolute: %s", path)
 	}
-	
+
 	// Generate project name from path if not provided
 	if name == "" {
 		name = filepath.Base(cleanPath)
@@ -37,10 +37,10 @@ func NewProject(path, name string) (*Project, error) {
 			return nil, fmt.Errorf("could not determine project name from path: %s", path)
 		}
 	}
-	
+
 	// Generate unique ID from path
 	id := generateProjectID(cleanPath)
-	
+
 	now := time.Now()
 	return &Project{
 		ID:           id,
@@ -69,14 +69,14 @@ func (p *Project) AddInstance(instanceID string) {
 	if instanceID == "" {
 		return
 	}
-	
+
 	// Check if instance already exists
 	for _, existing := range p.Instances {
 		if existing == instanceID {
 			return
 		}
 	}
-	
+
 	p.Instances = append(p.Instances, instanceID)
 	p.LastAccessed = time.Now()
 }

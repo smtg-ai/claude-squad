@@ -1,0 +1,143 @@
+workflow:
+  id: greenfield-service
+  name: Greenfield Service/API Development
+  description: >-
+    Agent workflow for building backend services from concept to development.
+    Supports both comprehensive planning for complex services and rapid prototyping for simple APIs.
+  type: greenfield
+  project_types:
+    - rest-api
+    - graphql-api
+    - microservice
+    - backend-service
+    - api-prototype
+    - simple-service
+
+  # For Complex Services (Production APIs, Multiple Endpoints)
+  complex_service_sequence:
+    - agent: analyst
+      creates: project-brief.md
+      optional_steps:
+        - brainstorming_session
+        - market_research_prompt
+      notes: "Can do brainstorming first, then optional deep research before creating project brief. SAVE OUTPUT: Copy final project-brief.md to your project's docs/ folder."
+
+    - agent: pm
+      creates: prd.md
+      requires: project-brief.md
+      notes: "Creates PRD from project brief using prd-tmpl, focused on API/service requirements. SAVE OUTPUT: Copy final prd.md to your project's docs/ folder."
+
+    - agent: architect
+      creates: architecture.md
+      requires: prd.md
+      optional_steps:
+        - technical_research_prompt
+      notes: "Creates backend/service architecture using architecture-tmpl. May suggest changes to PRD stories or new stories. SAVE OUTPUT: Copy final architecture.md to your project's docs/ folder."
+
+    - agent: pm
+      updates: prd.md (if needed)
+      requires: architecture.md
+      condition: architecture_suggests_prd_changes
+      notes: "If architect suggests story changes, update PRD and re-export the complete unredacted prd.md to docs/ folder."
+
+    - agent: po
+      validates: all_artifacts
+      uses: po-master-checklist
+      notes: "Validates all documents for consistency and completeness. May require updates to any document."
+
+    - agent: various
+      updates: any_flagged_documents
+      condition: po_checklist_issues
+      notes: "If PO finds issues, return to relevant agent to fix and re-export updated documents to docs/ folder."
+
+    - workflow_end:
+      action: move_to_ide
+      notes: "All planning artifacts complete. Move to IDE environment to begin development. Explain to the user the IDE Development Workflow next steps: data#bmad-kb:IDE Development Workflow"
+
+  # For Simple Services (Simple APIs, Single Purpose Services)
+  simple_service_sequence:
+    - step: service_scope
+      action: assess complexity
+      notes: "First, assess if this needs full planning (use complex_service_sequence) or can be a simple API/service."
+
+    - agent: analyst
+      creates: project-brief.md
+      optional_steps:
+        - brainstorming_session
+      notes: "Creates focused project brief for simple service. SAVE OUTPUT: Copy final project-brief.md to your project's docs/ folder."
+
+    - agent: pm
+      creates: simple_epic OR single_story
+      uses: create-epic OR create-story
+      requires: project-brief.md
+      notes: "Create simple epic or story for API endpoints instead of full PRD for rapid development."
+
+    - workflow_end:
+      action: move_to_ide
+      notes: "Simple service defined. Move to IDE environment to begin development. Explain to the user the IDE Development Workflow next steps: data#bmad-kb:IDE Development Workflow"
+
+  flow_diagram: |
+    ```mermaid
+    graph TD
+        A[Start: Service Development] --> B{Service Complexity?}
+        B -->|Complex/Production| C[analyst: project-brief.md]
+        B -->|Simple/Prototype| D[analyst: focused project-brief.md]
+
+        C --> E[pm: prd.md]
+        E --> F[architect: architecture.md]
+        F --> G{Architecture suggests PRD changes?}
+        G -->|Yes| H[pm: update prd.md]
+        G -->|No| I[po: validate all artifacts]
+        H --> I
+        I --> J{PO finds issues?}
+        J -->|Yes| K[Return to relevant agent for fixes]
+        J -->|No| L[Move to IDE Environment]
+        K --> I
+
+        D --> M[pm: simple epic or story]
+        M --> N[Move to IDE Environment]
+
+        C -.-> C1[Optional: brainstorming]
+        C -.-> C2[Optional: market research]
+        F -.-> F1[Optional: technical research]
+        D -.-> D1[Optional: brainstorming]
+
+        style L fill:#90EE90
+        style N fill:#90EE90
+        style C fill:#FFE4B5
+        style E fill:#FFE4B5
+        style F fill:#FFE4B5
+        style D fill:#FFB6C1
+        style M fill:#FFB6C1
+    ```
+
+  decision_guidance:
+    use_complex_sequence_when:
+      - Building production APIs or microservices
+      - Multiple endpoints and complex business logic
+      - Need comprehensive documentation and testing
+      - Multiple team members will be involved
+      - Long-term maintenance expected
+      - Enterprise or external-facing APIs
+
+    use_simple_sequence_when:
+      - Building simple APIs or single-purpose services
+      - Few endpoints with straightforward logic
+      - Prototyping or proof-of-concept APIs
+      - Solo developer or small team
+      - Internal tools or utilities
+      - Learning or experimental projects
+
+  handoff_prompts:
+    # Complex sequence prompts
+    analyst_to_pm: "Project brief is complete. Save it as docs/project-brief.md in your project, then create the PRD."
+    pm_to_architect: "PRD is ready. Save it as docs/prd.md in your project, then create the service architecture."
+    architect_review: "Architecture complete. Save it as docs/architecture.md. Do you suggest any changes to the PRD stories or need new stories added?"
+    architect_to_pm: "Please update the PRD with the suggested story changes, then re-export the complete prd.md to docs/."
+    updated_to_po: "All documents ready in docs/ folder. Please validate all artifacts for consistency."
+    po_issues: "PO found issues with [document]. Please return to [agent] to fix and re-save the updated document."
+    complex_complete: "All planning artifacts validated and saved in docs/ folder. Move to IDE environment to begin development."
+
+    # Simple sequence prompts
+    simple_analyst_to_pm: "Focused project brief complete. Save it as docs/project-brief.md, then create simple epic or story for API development."
+    simple_complete: "Simple service defined. Move to IDE environment to begin development."

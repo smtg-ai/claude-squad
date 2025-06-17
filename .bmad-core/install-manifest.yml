@@ -1,0 +1,372 @@
+{
+  "version": "4.4.2",
+  "installed_at": "2025-06-17T07:30:10.297Z",
+  "install_type": "full",
+  "agent": null,
+  "ide_setup": null,
+  "ides_setup": [
+    "claude-code"
+  ],
+  "files": [
+    {
+      "path": ".bmad-core/bmad-core-config.yml",
+      "hash": "82ed4160979472f0",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/workflows/greenfield-ui.yml",
+      "hash": "9bfdd429a747b22c",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/workflows/greenfield-service.yml",
+      "hash": "d34859ef9bcb3be2",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/workflows/greenfield-fullstack.yml",
+      "hash": "bb60834994be300c",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/workflows/brownfield-ui.yml",
+      "hash": "af601939b9f07b66",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/workflows/brownfield-service.yml",
+      "hash": "8ba0d1b746f9a1b8",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/workflows/brownfield-fullstack.yml",
+      "hash": "9ac4eeb48096eb08",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/web-bundles/agents/ux-expert.txt",
+      "hash": "af99dce0d71cb920",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/web-bundles/agents/sm.txt",
+      "hash": "899b255a5fca18ce",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/web-bundles/agents/qa.txt",
+      "hash": "6fe146dd97b0c341",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/web-bundles/agents/po.txt",
+      "hash": "bd3ecc45c14c1b5d",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/web-bundles/agents/pm.txt",
+      "hash": "fe529e1cd0bfa1e0",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/web-bundles/agents/dev.txt",
+      "hash": "22eed654cf87c575",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/web-bundles/agents/bmad-orchestrator.txt",
+      "hash": "3fe98187c5b3f58d",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/web-bundles/agents/bmad-master.txt",
+      "hash": "20f0339521e39cef",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/web-bundles/agents/architect.txt",
+      "hash": "ef52197938caf757",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/web-bundles/agents/analyst.txt",
+      "hash": "91e6264ded1ef53c",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/utils/workflow-management.md",
+      "hash": "4bd85c41642ba4d1",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/utils/template-format.md",
+      "hash": "c91208908af1dc78",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/utils/agent-switcher.ide.md",
+      "hash": "df8949bde08230d7",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/web-agent-startup-instructions-template.md",
+      "hash": "27ee619b1a953aa6",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/story-tmpl.md",
+      "hash": "34166cb0ff8434db",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/simple-project-prd-tmpl.md",
+      "hash": "240adcc137f45f9b",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/project-brief-tmpl.md",
+      "hash": "bcb4dfa9f54e65c2",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/prd-tmpl.md",
+      "hash": "7276846bc1a903ad",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/market-research-tmpl.md",
+      "hash": "009c29005a5ea75f",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/fullstack-architecture-tmpl.md",
+      "hash": "00ce9435f992dd1f",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/front-end-spec-tmpl.md",
+      "hash": "1f37d98fbbc46eb1",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/front-end-architecture-tmpl.md",
+      "hash": "15d9ae7c1d2289d8",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/expansion-pack-plan-tmpl.md",
+      "hash": "64e45fc281a96560",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/competitor-analysis-tmpl.md",
+      "hash": "f3b2b63e5307e340",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/brownfield-prd-tmpl.md",
+      "hash": "aac8a1350c4f0cfc",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/brownfield-architecture-tmpl.md",
+      "hash": "b3575bf54ef4c29b",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/architecture-tmpl.md",
+      "hash": "bfc2cd7ffc935ac5",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/templates/agent-tmpl.md",
+      "hash": "63c104d6bd527c75",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/shard-doc.md",
+      "hash": "aea5b8bc7136e5f6",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/index-docs.md",
+      "hash": "9e9379fa34e5f8c4",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/generate-ai-frontend-prompt.md",
+      "hash": "1298309d4e874b0b",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/execute-checklist.md",
+      "hash": "e83f4ae155bb5db8",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/document-project.md",
+      "hash": "ca98763e814b6f75",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/doc-migration-task.md",
+      "hash": "5615598b5ae4eaea",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/create-next-story.md",
+      "hash": "00f8ce119ac10a79",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/create-doc.md",
+      "hash": "63ef4f97bfd66c1b",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/create-deep-research-prompt.md",
+      "hash": "a104cb9b17cde3b7",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/correct-course.md",
+      "hash": "4da2f889fbc8b457",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/core-dump.md",
+      "hash": "44ac4d753c5ff573",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/brownfield-create-story.md",
+      "hash": "6e5cd0247836c4de",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/brownfield-create-epic.md",
+      "hash": "1b2b6c8b67a176ee",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/brainstorming-techniques.md",
+      "hash": "075818b207444cb2",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/tasks/advanced-elicitation.md",
+      "hash": "0950e5318989db16",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/data/technical-preferences.md",
+      "hash": "6530bed845540b0d",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/data/bmad-kb.md",
+      "hash": "b6362f739308a463",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/checklists/story-draft-checklist.md",
+      "hash": "28d5c2d3e9088320",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/checklists/story-dod-checklist.md",
+      "hash": "06ab7e73a69f930a",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/checklists/po-master-checklist.md",
+      "hash": "89d2dc785aa0e8a7",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/checklists/pm-checklist.md",
+      "hash": "139209e205a92628",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/checklists/change-checklist.md",
+      "hash": "5f2e21564d452d35",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/checklists/architect-checklist.md",
+      "hash": "99f4655b9ff99dd1",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agents/ux-expert.md",
+      "hash": "63342cea2d315828",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agents/sm.md",
+      "hash": "e14444b32c11a232",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agents/qa.md",
+      "hash": "e07de7e0950f28f3",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agents/po.md",
+      "hash": "1cf851d9fa7cb8bd",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agents/pm.md",
+      "hash": "8916fcac1757ac6f",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agents/dev.md",
+      "hash": "d26d603f85bef785",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agents/bmad-orchestrator.md",
+      "hash": "2b381f16ab00c9b7",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agents/bmad-master.md",
+      "hash": "4102fb9d1369ae51",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agents/architect.md",
+      "hash": "e2cb21ea21490f2d",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agents/analyst.md",
+      "hash": "3739e32170df4195",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agent-teams/team-no-ui.yml",
+      "hash": "db791eaa9b060ad3",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agent-teams/team-ide-minimal.yml",
+      "hash": "600b6795116fd74e",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agent-teams/team-fullstack.yml",
+      "hash": "8adda579fff343cd",
+      "modified": false
+    },
+    {
+      "path": ".bmad-core/agent-teams/team-all.yml",
+      "hash": "788067c0fd19c76d",
+      "modified": false
+    }
+  ]
+}

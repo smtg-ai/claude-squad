@@ -1,0 +1,111 @@
+name: story-implementation
+version: 2.0.0
+description: >-
+  Complete story implementation workflow from epic context to PR delivery with comprehensive learning extraction and epic retrospectives.
+  Phase 1: Story Preparation (Epic + Story Number → Story Ready for Development)
+  Phase 2: Implementation (Story Development with Validation)
+  Phase 3: Quality Review (Architecture, Business, and QA Validation)
+  Phase 4: Learning Extraction (Triage + Collaborative Review)
+  Phase 5: Commit and PR Preparation (Context Generation)
+  Phase 6: PR Creation and Epic Progress (Delivery + Tracking)
+  Epic Completion: Multi-agent Epic Retrospective (Strategic Insights + Next Epic Preparation)
+author: BMAD Development Team
+bmad_version: "4.0.0"
+
+# Files included in this expansion pack
+files:
+  workflows:
+    - story-implementation.yml
+
+  tasks:
+    - approve-story-for-development.md
+    - setup-development-environment.md
+    - implement-story-development.md
+    - consolidate-review-feedback.md
+    - implement-consolidated-fixes.md
+    - validate-consolidated-fixes.md
+    - capture-learning-triage.md
+    - party-mode-learning-review.md
+    - commit-and-prepare-pr.md
+    - create-comprehensive-pr.md
+    - update-epic-progress.md
+    - epic-party-mode-retrospective.md
+
+  checklists:
+    - story-approval-checklist.md
+    - epic-readiness-checklist.md
+
+# Dependencies on core BMAD components
+dependencies:
+  core_agents:
+    - sm
+    - po
+    - infra-devops-platform
+    - dev
+    - architect
+    - qa
+    - ux-expert
+  core_tasks:
+    - create-next-story
+    - execute-checklist
+    - implement-story-development
+  core_checklists:
+    - story-draft-checklist.md
+    - architect-checklist.md
+    - po-master-checklist.md
+    - story-dod-checklist.md
+  core_templates:
+    - story-tmpl.md
+
+# No additional data files required from user
+required_data: []
+
+# No template variables needed - core tasks handle validation
+
+# Post-install message
+post_install_message: |
+  Story Implementation Pack (Phase 1-6) ready!
+  
+  Phase 1: Story Preparation (Epic → Story Ready for Development)
+  Phase 2: Implementation (Story Development with Validation)
+  Phase 3: Quality Review (Comprehensive Round 1 + Efficient Round 2+)
+  Phase 4: Learning Extraction (Triage + Collaborative Review)
+  Phase 5: Commit and PR Preparation (Context Generation)
+  Phase 6: PR Creation and Epic Progress (Delivery + Tracking)
+  
+  Features:
+  - Epic validation before story creation
+  - Project-agnostic code generation and build tool integration
+  - Round 1: Comprehensive reviews (Architecture, Business, Process, QA, UX)
+  - Feedback consolidation with REQUIRED-FOR-COMPLETION/QUALITY-STANDARD/IMPROVEMENT classification
+  - Round 2+: Efficient architect-only validation with browser MCP testing
+  - Story status tracking throughout workflow (Draft → Approved → In Progress → Review → Done → Delivered)
+  - Story-based documentation for evidence and tracking
+  - Learning extraction with structured triage system (6 categories)
+  - Party mode collaborative learning review with team consensus
+  - Comprehensive PR creation with business context and learning insights
+  - Epic progress tracking with learning integration
+  - LLM-optimized documentation with token limits and structured brevity
+  
+  Learning Categories:
+  - ARCH_CHANGE: Architecture improvements and technical debt
+  - FUTURE_EPIC: Epic candidates and feature opportunities
+  - URGENT_FIX: Critical issues requiring immediate attention
+  - PROCESS_IMPROVEMENT: Development workflow enhancements
+  - TOOLING: Infrastructure and automation improvements
+  - KNOWLEDGE_GAP: Team training and skill development needs
+  
+  Epic Retrospective Features:
+  - Automatic trigger when epic reaches 100% completion
+  - Multi-agent collaborative analysis (SM, Architect, PO, Dev, UX-Expert)
+  - Party mode consensus building for epic insights
+  - Strategic pattern identification across all epic stories
+  - Action items for next epic with clear ownership
+  - Epic knowledge base creation for future reference
+  - Seamless integration with final story PR
+  
+  Usage:
+    *workflow story-implementation epic_number=1 story_number=2
+  
+  Built on core bmad-method components for maximum reliability.
+  Complete end-to-end workflow from Epic validation to PR delivery with comprehensive learning system and epic retrospectives.

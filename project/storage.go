@@ -44,21 +44,21 @@ func (s *StateProjectStorage) DeleteProject(projectID string) error {
 	if len(projectsJSON) == 0 {
 		return nil // No projects to delete from
 	}
-	
+
 	var projects map[string]*Project
 	if err := json.Unmarshal(projectsJSON, &projects); err != nil {
 		return fmt.Errorf("failed to unmarshal projects: %w", err)
 	}
-	
+
 	// Remove the project
 	delete(projects, projectID)
-	
+
 	// Save back to storage
 	updatedJSON, err := json.Marshal(projects)
 	if err != nil {
 		return fmt.Errorf("failed to marshal updated projects: %w", err)
 	}
-	
+
 	return s.SaveProjects(updatedJSON)
 }
 

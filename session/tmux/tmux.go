@@ -122,7 +122,7 @@ func (t *TmuxSession) Start(workDir string) error {
 	// Generate unique session name to avoid conflicts
 	baseName := t.sanitizedName
 	uniqueName := t.generateUniqueSessionName(baseName)
-	
+
 	// Update session name if conflict resolution was needed
 	if uniqueName != baseName {
 		log.InfoLog.Printf("Session name conflict resolved: %s -> %s", baseName, uniqueName)
@@ -141,7 +141,7 @@ func (t *TmuxSession) Start(workDir string) error {
 				log.ErrorLog.Printf("Failed to cleanup session %s after error: %v", t.sanitizedName, cleanupErr)
 			}
 		}
-		
+
 		// Provide user-friendly error message
 		userMsg := fmt.Sprintf("Failed to create tmux session '%s'", t.sanitizedName)
 		if strings.Contains(err.Error(), "command not found") || strings.Contains(err.Error(), "tmux") {
@@ -151,7 +151,7 @@ func (t *TmuxSession) Start(workDir string) error {
 		} else {
 			userMsg += fmt.Sprintf(". Error: %v", err)
 		}
-		
+
 		log.ErrorLog.Printf("Tmux session creation failed: %v", err)
 		return fmt.Errorf(userMsg)
 	}

@@ -1,0 +1,60 @@
+agent_file_references:
+  core_docs:
+    - docs/index.md
+    - docs/prd.md
+    - docs/architecture.md
+    - docs/architecture/index.md
+    - 'docs/architecture/coding-standards.md # Required by DEV at startup'
+    - 'docs/architecture/tech-stack.md # Technology stack reference'
+    - 'docs/architecture/unified-project-structure.md # Project structure guide'
+    - 'docs/architecture/testing-strategy.md # Testing requirements'
+  story_files:
+    - 'docs/stories/ # Stories directory (pattern: {epicNum}.{storyNum}.story.md)'
+  epic_locations:
+    primary: docs/
+    secondary: docs/prd/
+  architecture_shards:
+    backend:
+      - 'docs/architecture/backend-architecture.md # Backend service patterns'
+      - 'docs/architecture/rest-api-spec.md # API endpoint specifications'
+      - 'docs/architecture/data-models.md # Data structures and validation'
+      - 'docs/architecture/database-schema.md # Database design'
+      - 'docs/architecture/external-apis.md # Third-party integrations'
+    frontend:
+      - 'docs/architecture/frontend-architecture.md # Frontend patterns'
+      - docs/architecture/components.md
+      - 'docs/architecture/core-workflows.md # User interaction flows'
+      - 'docs/architecture/ui-ux-spec.md # UI/UX specifications'
+    shared:
+      - 'docs/architecture/tech-stack.md # Technology constraints'
+      - 'docs/architecture/unified-project-structure.md # Code organization'
+      - 'docs/architecture/coding-standards.md # Project conventions'
+      - 'docs/architecture/testing-strategy.md # Testing requirements'
+  additional_docs:
+    - 'docs/tech-stack.md # Technology stack (if separate)'
+    - 'docs/data-models.md # Data models (if separate)'
+    - 'docs/api-reference.md # API reference (if separate)'
+    - 'docs/frontend-architecture.md # Frontend arch (if separate)'
+bmad_core_dependencies:
+  tasks:
+    - .bmad-core/tasks/create-next-story.md
+    - .bmad-core/tasks/execute-checklist.md
+    - .bmad-core/tasks/correct-course.md
+    - .bmad-core/tasks/shard-doc.md
+    - .bmad-core/tasks/index-docs.md
+  templates:
+    - .bmad-core/templates/story-tmpl.md
+  checklists:
+    - .bmad-core/checklists/story-draft-checklist.md
+    - .bmad-core/checklists/story-dod-checklist.md
+  utils:
+    - .bmad-core/utils/template-format.md
+file_patterns:
+  story_files: '{epicNum}.{storyNum}.story.md'
+  epic_files: epic-{n}-{description}.md
+story_statuses:
+  - Draft
+  - Approved
+  - In Progress
+  - Review
+  - Done

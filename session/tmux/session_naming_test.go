@@ -124,13 +124,13 @@ func TestGenerateUniqueSessionNameEdgeCases(t *testing.T) {
 	t.Run("Extreme conflict scenario", func(t *testing.T) {
 		// Create many existing sessions to test fallback logic
 		existingSessions := []string{"claudesquad_test"}
-		
+
 		// Add timestamp-based conflicts (simulate rapid creation)
 		timestamp := time.Now().Unix()
 		for i := 0; i < 5; i++ {
 			existingSessions = append(existingSessions, fmt.Sprintf("claudesquad_test_%d", timestamp))
 		}
-		
+
 		// Add timestamp + random conflicts
 		for i := 0; i < 10; i++ {
 			existingSessions = append(existingSessions, fmt.Sprintf("claudesquad_test_%d_%d", timestamp, i))
@@ -217,26 +217,26 @@ func TestTmuxSessionStartWithConflictResolution(t *testing.T) {
 		// Mock existing session
 		existingSessions := []string{"claudesquad_myproject"}
 		mockExec := newMockExecutor(existingSessions)
-		
+
 		// Mock PTY factory that doesn't actually create PTY
 		mockPtyFactory := &mockPtyFactory{}
-		
+
 		session := newTmuxSession("myproject", "claude", mockPtyFactory, mockExec)
-		
+
 		// Before start, session name should be base name
 		if session.sanitizedName != "claudesquad_myproject" {
 			t.Errorf("Expected base name, got: %s", session.sanitizedName)
 		}
-		
+
 		// Note: We can't fully test Start() without mocking more components,
 		// but we can test the name generation logic which is the core functionality
 		uniqueName := session.generateUniqueSessionName(session.sanitizedName)
-		
+
 		// Should generate a different name due to conflict
 		if uniqueName == "claudesquad_myproject" {
 			t.Errorf("Expected unique name due to conflict, got same name: %s", uniqueName)
 		}
-		
+
 		// Should start with base name
 		if !strings.HasPrefix(uniqueName, "claudesquad_myproject") {
 			t.Errorf("Generated name should start with base name, got: %s", uniqueName)

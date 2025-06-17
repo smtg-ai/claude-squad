@@ -15,17 +15,18 @@ var (
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(lipgloss.Color("240")).
 				Padding(1, 2).
-				Width(60)
-	
+				Width(70).   // Increased width for better visual presence
+				MaxWidth(80) // Maximum width constraint for very wide terminals
+
 	projectInputTitleStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("205")).
 				Bold(true).
 				Margin(0, 0, 1, 0)
-	
+
 	projectInputHelpStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("243")).
 				Margin(1, 0, 0, 0)
-	
+
 	projectInputErrorStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("196")).
 				Margin(1, 0, 0, 0)
@@ -46,8 +47,8 @@ func NewProjectInputOverlay() *ProjectInputOverlay {
 	ti.Placeholder = "Enter absolute project path (e.g., /path/to/project)"
 	ti.Focus()
 	ti.CharLimit = 256
-	ti.Width = 50
-	
+	ti.Width = 60 // Match the dialog width better
+
 	return &ProjectInputOverlay{
 		textInput: ti,
 		visible:   false,
@@ -92,30 +93,55 @@ func (p *ProjectInputOverlay) ClearError() {
 // ValidatePath validates the entered path
 func (p *ProjectInputOverlay) ValidatePath() error {
 	path := strings.TrimSpace(p.textInput.Value())
-	
+
 	if path == "" {
 		return fmt.Errorf("project path cannot be empty")
 	}
-	
+
 	// Check if path is absolute
 	if !filepath.IsAbs(path) {
 		return fmt.Errorf("project path must be absolute (start with /)")
 	}
-	
+
 	// Clean the path
 	cleanPath := filepath.Clean(path)
 	if cleanPath != path {
 		// Update the input with the cleaned path
 		p.textInput.SetValue(cleanPath)
 	}
-	
+
 	return nil
 }
 
-// SetSize sets the dimensions for proper centering
+// SetSize sets the dimensions for proper centering and responsive sizing
 func (p *ProjectInputOverlay) SetSize(width, height int) {
 	p.width = width
 	p.height = height
+
+	// Responsive sizing: adjust dialog width based on terminal size
+	// For small terminals, use a smaller dialog; for large terminals, keep reasonable max
+	dialogWidth := 70
+	inputWidth := 60
+
+	if width < 90 {
+		// Small terminal: reduce dialog size
+		dialogWidth = int(float32(width) * 0.8)
+		if dialogWidth < 50 {
+			dialogWidth = 50 // Minimum usable width
+		}
+		inputWidth = dialogWidth - 10 // Account for padding and borders
+		if inputWidth < 40 {
+			inputWidth = 40 // Minimum input width
+		}
+	} else if width > 120 {
+		// Large terminal: cap at reasonable size for readability
+		dialogWidth = 80
+		inputWidth = 70
+	}
+
+	// Update styles with responsive dimensions
+	projectInputStyle = projectInputStyle.Width(dialogWidth)
+	p.textInput.Width = inputWidth
 }
 
 // Update handles input events
@@ -123,7 +149,7 @@ func (p *ProjectInputOverlay) Update(msg tea.Msg) (*ProjectInputOverlay, tea.Cmd
 	if !p.visible {
 		return p, nil
 	}
-	
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -140,7 +166,7 @@ func (p *ProjectInputOverlay) Update(msg tea.Msg) (*ProjectInputOverlay, tea.Cmd
 			return p, nil
 		}
 	}
-	
+
 	// Clear error when user starts typing
 	if p.error != "" {
 		switch msg := msg.(type) {
@@ -150,7 +176,7 @@ func (p *ProjectInputOverlay) Update(msg tea.Msg) (*ProjectInputOverlay, tea.Cmd
 			}
 		}
 	}
-	
+
 	var cmd tea.Cmd
 	p.textInput, cmd = p.textInput.Update(msg)
 	return p, cmd
@@ -161,77 +187,27 @@ func (p *ProjectInputOverlay) View() string {
 	if !p.visible {
 		return ""
 	}
-	
+
 	var content strings.Builder
-	
+
 	// Title
 	content.WriteString(projectInputTitleStyle.Render("Add Project"))
 	content.WriteString("\n")
-	
+
 	// Input field
 	content.WriteString(p.textInput.View())
 	content.WriteString("\n")
-	
+
 	// Error message if present
 	if p.error != "" {
 		content.WriteString(projectInputErrorStyle.Render("Error: " + p.error))
 		content.WriteString("\n")
 	}
-	
+
 	// Help text
 	helpText := "Enter absolute path • Press Enter to add • Press Esc to cancel"
 	content.WriteString(projectInputHelpStyle.Render(helpText))
-	
-	// Wrap in styled container
-	overlay := projectInputStyle.Render(content.String())
-	
-	// Center the overlay
-	if p.width > 0 && p.height > 0 {
-		return CenterOverlay(overlay, p.width, p.height)
-	}
-	
-	return overlay
-}
 
-// CenterOverlay centers content within the given dimensions
-func CenterOverlay(content string, width, height int) string {
-	lines := strings.Split(content, "\n")
-	contentHeight := len(lines)
-	contentWidth := 0
-	
-	// Find the widest line
-	for _, line := range lines {
-		if lineWidth := lipgloss.Width(line); lineWidth > contentWidth {
-			contentWidth = lineWidth
-		}
-	}
-	
-	// Calculate vertical offset
-	verticalOffset := (height - contentHeight) / 2
-	if verticalOffset < 0 {
-		verticalOffset = 0
-	}
-	
-	// Calculate horizontal offset
-	horizontalOffset := (width - contentWidth) / 2
-	if horizontalOffset < 0 {
-		horizontalOffset = 0
-	}
-	
-	// Add vertical padding
-	var result strings.Builder
-	for i := 0; i < verticalOffset; i++ {
-		result.WriteString("\n")
-	}
-	
-	// Add content with horizontal padding
-	for _, line := range lines {
-		for j := 0; j < horizontalOffset; j++ {
-			result.WriteString(" ")
-		}
-		result.WriteString(line)
-		result.WriteString("\n")
-	}
-	
-	return result.String()
+	// Wrap in styled container - this returns the content ready for overlay placement
+	return projectInputStyle.Render(content.String())
 }

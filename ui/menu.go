@@ -43,11 +43,11 @@ const (
 )
 
 type Menu struct {
-	options       []keys.KeyName
-	height, width int
-	state         MenuState
-	instance      *session.Instance
-	isInDiffTab   bool
+	options        []keys.KeyName
+	height, width  int
+	state          MenuState
+	instance       *session.Instance
+	isInDiffTab    bool
 	isInConsoleTab bool
 
 	// keyDown is the key which is pressed. The default is -1.
