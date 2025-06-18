@@ -130,41 +130,34 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("error restoring tmux session: %w", err)
 	}
 
-	var searchString string
+	var searchPatterns []string
 	var tapFunc func() error
-	var iterations int
+	var maxRetries int
 	switch {
 	case strings.HasSuffix(t.program, ProgramClaude):
-		searchString = "Do you trust the files in this folder?"
+		// Multiple patterns to match different variations of the trust prompt
+		searchPatterns = []string{
+			"Do you trust the files in this folder?",
+			"trust the files",
+			"files in this folder",
+		}
 		tapFunc = t.TapEnter
-		iterations = 5
+		maxRetries = 6
 	case strings.HasPrefix(t.program, ProgramAider):
-		searchString = "Open documentation url for more info"
+		searchPatterns = []string{
+			"Open documentation url for more info",
+			"documentation url",
+		}
 		tapFunc = t.TapDAndEnter
-		iterations = 10
+		maxRetries = 8
 	default:
-		iterations = 0
+		maxRetries = 0
 	}
 
-	// Deal with "do you trust the files" screen by sending an enter keystroke.
-	for i := 0; i < iterations; i++ {
-		time.Sleep(200 * time.Millisecond)
-
-		// Check if session exists before trying to capture pane content
-		if !t.DoesSessionExist() {
-			continue
-		}
-
-		content, err := t.CapturePaneContent(false)
-		if err != nil {
-			log.ErrorLog.Printf("could not check 'do you trust the files screen': %v", err)
-			continue // Continue trying instead of potentially breaking
-		}
-		if strings.Contains(content, searchString) {
-			if err := tapFunc(); err != nil {
-				log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
-			}
-			break
+	// Deal with trust prompts using improved detection and retry logic
+	if maxRetries > 0 {
+		if err := t.handleTrustPrompt(searchPatterns, tapFunc, maxRetries); err != nil {
+			log.ErrorLog.Printf("failed to handle trust prompt: %v", err)
 		}
 	}
 
@@ -229,6 +222,76 @@ func (t *TmuxSession) SendKeys(keys string) error {
 	}
 	_, err := t.ptmx.Write([]byte(keys))
 	return err
+}
+
+// handleTrustPrompt attempts to detect and handle trust prompts with improved reliability
+func (t *TmuxSession) handleTrustPrompt(searchPatterns []string, tapFunc func() error, maxRetries int) error {
+	const initialDelay = 100 * time.Millisecond
+	const fastCheckAttempts = 3 // First 3 attempts use shorter delays
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Fast initial checks, then slower retries
+		var delay time.Duration
+		if attempt < fastCheckAttempts {
+			delay = initialDelay
+		} else {
+			delay = 200 * time.Millisecond * time.Duration(attempt-fastCheckAttempts+1)
+		}
+		time.Sleep(delay)
+
+		// Validate session exists
+		if !t.DoesSessionExist() {
+			continue
+		}
+
+		// Capture pane content
+		content, err := t.CapturePaneContent(false)
+		if err != nil {
+			continue
+		}
+
+		// Quick check if any pattern matches (case-insensitive)
+		contentLower := strings.ToLower(content)
+		var matchedPattern string
+		for _, pattern := range searchPatterns {
+			if strings.Contains(contentLower, strings.ToLower(pattern)) {
+				matchedPattern = pattern
+				break
+			}
+		}
+
+		if matchedPattern != "" {
+			// Send the response immediately
+			if err := tapFunc(); err != nil {
+				log.ErrorLog.Printf("trust prompt handler: failed to send response: %v", err)
+				continue
+			}
+
+			// Quick verification - only wait if we're in the first few attempts
+			if attempt < fastCheckAttempts {
+				time.Sleep(150 * time.Millisecond)
+				verifyContent, err := t.CapturePaneContent(false)
+				if err == nil {
+					verifyLower := strings.ToLower(verifyContent)
+					for _, pattern := range searchPatterns {
+						if strings.Contains(verifyLower, strings.ToLower(pattern)) {
+							continue // Prompt still there, try again
+						}
+					}
+				}
+			}
+			return nil // Success
+		}
+
+		// Early exit optimization: if we've tried a few times and no prompt appears,
+		// likely there's no trust prompt to handle
+		if attempt >= 2 && len(strings.TrimSpace(content)) > 0 {
+			// Content exists but no trust prompt detected after multiple attempts
+			return nil
+		}
+	}
+
+	return nil // Don't error out, just continue - this is not critical
 }
 
 // HasUpdated checks if the tmux pane content has changed since the last tick. It also returns true if

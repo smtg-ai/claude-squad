@@ -139,7 +139,7 @@ func (l *List) Up() {
 
 // GetSelectedInstance returns the currently selected instance
 func (l *List) GetSelectedInstance() instance.Instance {
-	if len(*l.items) == 0 {
+	if len(*l.items) == 0 || l.selectedIdx >= len(*l.items) {
 		return nil
 	}
 	return (*l.items)[l.selectedIdx]
@@ -151,6 +151,11 @@ func (l *List) SetSelectedInstance(idx int) {
 		return
 	}
 	l.selectedIdx = idx
+}
+
+// GetSelectedIndex returns the current selected index
+func (l *List) GetSelectedIndex() int {
+	return l.selectedIdx
 }
 
 // GetInstances returns all instances in the list
@@ -197,5 +202,7 @@ func (l *List) String() string {
 			b.WriteString("\n\n")
 		}
 	}
-	return lipgloss.Place(l.width, l.height, lipgloss.Left, lipgloss.Top, b.String())
+	listContent := b.String()
+	listWithRightPadding := lipgloss.NewStyle().PaddingRight(2).Render(listContent)
+	return lipgloss.Place(l.width+2, l.height, lipgloss.Left, lipgloss.Top, listWithRightPadding)
 }

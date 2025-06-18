@@ -3,6 +3,7 @@ package task
 import (
 	"claude-squad/instance/task/git"
 	"claude-squad/instance/task/tmux"
+	"claude-squad/log"
 	"encoding/json"
 	"time"
 )
@@ -95,9 +96,21 @@ func FromInstanceData(data TaskData) (*Task, error) {
 		instance.started = true
 	}
 
+	// Always create tmux session object first
+	instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program)
+
 	if instance.Paused() {
-		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program)
+		// For paused instances, try to restore the session if it exists, but don't fail if it doesn't
+		if instance.tmuxSession.DoesSessionExist() {
+			if err := instance.tmuxSession.Restore(); err != nil {
+				// Log the error but don't fail - the session will be recreated when resumed
+				// This prevents the app from failing to start if there are orphaned sessions
+				// that can't be restored properly
+				log.ErrorLog.Printf("failed to restore tmux session for paused task '%s': %v", instance.Title, err)
+			}
+		}
 	} else {
+		// For running instances, start the task which will handle session restoration
 		if err := instance.Start(false); err != nil {
 			return nil, err
 		}

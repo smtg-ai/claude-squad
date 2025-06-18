@@ -177,10 +177,13 @@ func (m *Model) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 
 	// Set sizes for instance mode components
 	if m.controller != nil {
+		// Account for 8 units of horizontal padding (4 left + 4 right)
+		availableWidth := msg.Width - 8
+
 		// Split the content width between list and preview
-		// List takes ~40% of width, preview takes ~60%
-		listWidth := int(float32(msg.Width) * 0.4)
-		previewWidth := msg.Width - listWidth
+		// List takes ~20% of width, preview takes ~80%
+		listWidth := int(float32(availableWidth) * 0.3)
+		previewWidth := availableWidth - listWidth
 
 		m.controller.list.SetSize(listWidth, contentHeight)
 		m.controller.tabbedWindow.SetSize(previewWidth, contentHeight)

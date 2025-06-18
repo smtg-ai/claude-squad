@@ -136,10 +136,11 @@ func (t *Task) Start(firstTimeSetup bool) error {
 		return fmt.Errorf("instance title cannot be empty")
 	}
 
-	tmuxSession := tmux.NewTmuxSession(t.Title, t.Program)
-	tmuxSession.OnUserInput = t.resetCompletionSubscribers
-
-	t.tmuxSession = tmuxSession
+	// Create tmux session if it doesn't exist, otherwise use existing one
+	if t.tmuxSession == nil {
+		t.tmuxSession = tmux.NewTmuxSession(t.Title, t.Program)
+	}
+	t.tmuxSession.OnUserInput = t.resetCompletionSubscribers
 
 	if firstTimeSetup {
 		gitWorktree, branchName, err := git.NewGitWorktree(t.Path, t.Title)
@@ -163,10 +164,33 @@ func (t *Task) Start(firstTimeSetup bool) error {
 	}()
 
 	if !firstTimeSetup {
-		// Reuse existing session
-		if err := tmuxSession.Restore(); err != nil {
-			setupErr = fmt.Errorf("failed to restore existing session: %w", err)
-			return setupErr
+		// Check if the tmux session exists before trying to restore
+		if t.tmuxSession.DoesSessionExist() {
+			// Reuse existing session
+			if err := t.tmuxSession.Restore(); err != nil {
+				setupErr = fmt.Errorf("failed to restore existing session: %w", err)
+				return setupErr
+			}
+		} else {
+			// Session doesn't exist, treat this as a first-time setup
+			// This can happen if sessions were cleaned up externally
+			log.InfoLog.Printf("tmux session for task '%s' doesn't exist, creating new session", t.Title)
+
+			// Setup git worktree first
+			if err := t.gitWorktree.Setup(); err != nil {
+				setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
+				return setupErr
+			}
+
+			// Create new session
+			if err := t.tmuxSession.Start(t.gitWorktree.GetWorktreePath()); err != nil {
+				// Cleanup git worktree if tmux session creation fails
+				if cleanupErr := t.gitWorktree.Cleanup(); cleanupErr != nil {
+					err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+				}
+				setupErr = fmt.Errorf("failed to start new session: %w", err)
+				return setupErr
+			}
 		}
 	} else {
 		// Setup git worktree first

@@ -60,6 +60,7 @@ func (l *List) RenderTask(t *task.Task, idx int, selected bool) string {
 	case task.Paused:
 		join = pausedStyle.Render(pausedIcon)
 	default:
+		join = "  "
 	}
 
 	// Cut the title if it's too long

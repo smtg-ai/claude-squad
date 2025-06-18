@@ -57,8 +57,8 @@ func NewController(spinner *spinner.Model, autoYes bool) *Controller {
 
 // Render returns the rendered UI
 func (c *Controller) Render(model *Model) string {
-	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(c.list.String())
-	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(c.tabbedWindow.String())
+	listWithPadding := lipgloss.NewStyle().PaddingTop(1).PaddingLeft(4).Render(c.list.String())
+	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).MarginRight(4).Render(c.tabbedWindow.String())
 	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, listWithPadding, previewWithPadding)
 
 	mainView := lipgloss.JoinVertical(
@@ -178,20 +178,6 @@ func (c *Controller) handlePromptKeyEvent(model *Model, msg tea.KeyMsg) (tea.Mod
 		return model, nil
 	}
 
-	if c.textInputOverlay.IsSubmitted() {
-		// Handle regular prompt for selected instance
-		selected := c.list.GetSelectedInstance()
-		if selected != nil {
-			taskInstance := selected.(*task.Task)
-			if err := taskInstance.SendPrompt(c.textInputOverlay.GetValue()); err != nil {
-				return model, model.handleError(err)
-			}
-		}
-	}
-
-	// Close the overlay and reset state
-	c.textInputOverlay = nil
-	model.state = tuiStateDefault
 	return model, tea.Sequence(
 		tea.WindowSize(),
 		func() tea.Msg {
@@ -299,8 +285,21 @@ func (c *Controller) addInstance(instance instance.Instance) {
 func (c *Controller) removeInstance(title string) {
 	for i, inst := range c.instances {
 		if inst.(*task.Task).Title == title {
+			currentSelectedIdx := c.list.GetSelectedIndex()
 			c.instances = slices.Delete(c.instances, i, i+1)
-			// c.instances = append(c.instances[:i], c.instances[i+1:]...)
+
+			// Adjust selectedIdx to maintain proper selection after deletion
+			if len(c.instances) == 0 {
+				c.list.SetSelectedInstance(0)
+			} else if currentSelectedIdx >= len(c.instances) {
+				// If we deleted the last item or an item that caused selectedIdx to be out of bounds,
+				// select the previous item (which is now the last item)
+				c.list.SetSelectedInstance(len(c.instances) - 1)
+			} else if i < currentSelectedIdx {
+				// If we deleted an item before the selected index, the selected item shifted down
+				// but we want to keep the same item selected, so we need to decrement selectedIdx
+				c.list.SetSelectedInstance(currentSelectedIdx - 1)
+			}
 			break
 		}
 	}
