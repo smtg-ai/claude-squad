@@ -55,6 +55,9 @@ var autoYesStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("#dde4f0")).
 	Foreground(lipgloss.Color("#1a1a1a"))
 
+var mcpStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.AdaptiveColor{Light: "#7D56F4", Dark: "#BD93F9"})
+
 type List struct {
 	items         []*session.Instance
 	selectedIdx   int
@@ -67,10 +70,10 @@ type List struct {
 	repos map[string]int
 }
 
-func NewList(spinner *spinner.Model, autoYes bool, projectManager *project.ProjectManager) *List {
+func NewList(spinner *spinner.Model, autoYes bool, projectManager *project.ProjectManager, cfg *config.Config) *List {
 	return &List{
 		items:    []*session.Instance{},
-		renderer: &InstanceRenderer{spinner: spinner, projectManager: projectManager},
+		renderer: &InstanceRenderer{spinner: spinner, projectManager: projectManager, config: cfg},
 		repos:    make(map[string]int),
 		autoyes:  autoYes,
 	}
@@ -151,10 +154,26 @@ type InstanceRenderer struct {
 	spinner        *spinner.Model
 	width          int
 	projectManager *project.ProjectManager
+	config         *config.Config
 }
 
 func (r *InstanceRenderer) setWidth(width int) {
 	r.width = AdjustPreviewWidth(width)
+}
+
+// getInstanceMCPs returns the MCP server names assigned to this instance's worktree
+func (r *InstanceRenderer) getInstanceMCPs(i *session.Instance) []string {
+	if r.config == nil || !i.Started() {
+		return nil
+	}
+
+	worktree, err := i.GetGitWorktree()
+	if err != nil {
+		return nil
+	}
+
+	worktreePath := worktree.GetWorktreePath()
+	return r.config.GetWorktreeMCPs(worktreePath)
 }
 
 // ɹ and ɻ are other options.
@@ -263,12 +282,39 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 
 	branchLine := fmt.Sprintf("%s %s-%s%s%s", strings.Repeat(" ", len(prefix)), branchIcon, branch, spaces, diff)
 
-	// join title and subtitle
-	text := lipgloss.JoinVertical(
-		lipgloss.Left,
+	// Get assigned MCPs for this instance
+	mcps := r.getInstanceMCPs(i)
+	
+	// Prepare lines for vertical joining
+	lines := []string{
 		title,
 		descS.Render(branchLine),
-	)
+	}
+	
+	// Add MCP line if there are assigned MCPs
+	if len(mcps) > 0 {
+		mcpCSV := strings.Join(mcps, ", ")
+		mcpIcon := "⚙"
+		
+		// Calculate available width for MCP display
+		mcpPrefixLength := len(prefix) + 1 + len(mcpIcon) + len(" MCPs: ")
+		availableWidth := r.width - mcpPrefixLength
+		
+		// Truncate MCP list if it's too long
+		if len(mcpCSV) > availableWidth {
+			if availableWidth > 3 {
+				mcpCSV = mcpCSV[:availableWidth-3] + "..."
+			} else {
+				mcpCSV = "..."
+			}
+		}
+		
+		mcpLine := fmt.Sprintf("%s %s MCPs: %s", strings.Repeat(" ", len(prefix)), mcpIcon, mcpCSV)
+		lines = append(lines, mcpStyle.Background(descS.GetBackground()).Render(mcpLine))
+	}
+
+	// join title, subtitle, and optional MCP line
+	text := lipgloss.JoinVertical(lipgloss.Left, lines...)
 
 	return text
 }
