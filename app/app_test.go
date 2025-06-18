@@ -110,7 +110,7 @@ func TestConfirmationModalStateTransitions(t *testing.T) {
 func TestConfirmationModalKeyHandling(t *testing.T) {
 	// Import needed packages
 	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
-	list := ui.NewList(&spinner, false, nil)
+	list := ui.NewList(&spinner, false, nil, config.DefaultConfig())
 
 	// Create enough of home struct to test handleKeyPress in confirmation state
 	h := &home{
@@ -231,7 +231,7 @@ func TestConfirmationMessageFormatting(t *testing.T) {
 func TestConfirmationFlowSimulation(t *testing.T) {
 	// Create a minimal setup
 	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
-	list := ui.NewList(&spinner, false, nil)
+	list := ui.NewList(&spinner, false, nil, config.DefaultConfig())
 
 	// Add test instance
 	instance, err := session.NewInstance(session.InstanceOptions{
@@ -872,7 +872,7 @@ func createTestHome() *home {
 		ctx:          context.Background(),
 		state:        stateDefault,
 		appConfig:    config.DefaultConfig(),
-		list:         ui.NewList(&testSpinner, false, nil),
+		list:         ui.NewList(&testSpinner, false, nil, config.DefaultConfig()),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewConsolePane()),
 		menu:         ui.NewMenu(),
 		spinner:      testSpinner,

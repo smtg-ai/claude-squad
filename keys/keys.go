@@ -55,6 +55,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"r":               KeyResume,
 	"p":               KeySubmit,
 	"P":               KeyAddProject,
+	"m":               KeyMCPManage,
 	"?":               KeyHelp,
 }
 
@@ -127,6 +128,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyAddProject: key.NewBinding(
 		key.WithKeys("P"),
 		key.WithHelp("P", "add project"),
+	),
+	KeyMCPManage: key.NewBinding(
+		key.WithKeys("m"),
+		key.WithHelp("m", "manage MCP servers"),
 	),
 
 	// -- Special keybindings --

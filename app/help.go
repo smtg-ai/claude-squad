@@ -67,6 +67,9 @@ func (h helpType) ToContent(instance *session.Instance) string {
 			keyStyle.Render("ctrl+c")+descStyle.Render("    - Cancel current command"),
 			keyStyle.Render("ctrl+l")+descStyle.Render("    - Clear console"),
 			"",
+			headerStyle.Render("MCP Management:"),
+			keyStyle.Render("m")+descStyle.Render("         - Manage MCP servers (add, edit, delete)"),
+			"",
 			headerStyle.Render("Other:"),
 			keyStyle.Render("q")+descStyle.Render("         - Quit the application"),
 		)

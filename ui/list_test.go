@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"claude-squad/config"
 	"claude-squad/project"
+	"claude-squad/session"
 	"encoding/json"
 	"testing"
 
@@ -82,15 +84,96 @@ func TestList_generateTitleText(t *testing.T) {
 					}
 				}
 
-				list = NewList(spinner, false, pm)
+				list = NewList(spinner, false, pm, config.DefaultConfig())
 			} else {
-				list = NewList(spinner, false, nil)
+				list = NewList(spinner, false, nil, config.DefaultConfig())
 			}
 
 			// Test the generateTitleText method
 			result := list.generateTitleText()
 			if result != tt.expected {
 				t.Errorf("generateTitleText() = %q, expected %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestInstanceRenderer_getInstanceMCPs(t *testing.T) {
+	// Create a test config with MCP assignments
+	cfg := config.DefaultConfig()
+	cfg.WorktreeMCPs = map[string][]string{
+		"/test/worktree/path": {"mcp-server1", "mcp-server2"},
+		"/another/path":       {"filesystem", "github"},
+	}
+
+	// Create renderer with config
+	spinner := &spinner.Model{}
+	renderer := &InstanceRenderer{
+		spinner: spinner,
+		config:  cfg,
+	}
+
+	tests := []struct {
+		name           string
+		setupInstance  func() *session.Instance
+		expectedMCPs   []string
+		expectedNil    bool
+	}{
+		{
+			name: "instance not started",
+			setupInstance: func() *session.Instance {
+				// Create instance that hasn't been started
+				instance, _ := session.NewInstance(session.InstanceOptions{
+					Title:   "test",
+					Path:    "/tmp",
+					Program: "echo",
+				})
+				return instance
+			},
+			expectedMCPs: nil,
+			expectedNil:  true,
+		},
+		{
+			name: "no config",
+			setupInstance: func() *session.Instance {
+				instance, _ := session.NewInstance(session.InstanceOptions{
+					Title:   "test",
+					Path:    "/tmp", 
+					Program: "echo",
+				})
+				return instance
+			},
+			expectedMCPs: nil,
+			expectedNil:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			instance := tt.setupInstance()
+			
+			// For the no config test, set renderer config to nil
+			if tt.name == "no config" {
+				renderer.config = nil
+			} else {
+				renderer.config = cfg
+			}
+			
+			result := renderer.getInstanceMCPs(instance)
+			
+			if tt.expectedNil {
+				if result != nil {
+					t.Errorf("Expected nil, got %v", result)
+				}
+			} else {
+				if len(result) != len(tt.expectedMCPs) {
+					t.Errorf("Expected %d MCPs, got %d", len(tt.expectedMCPs), len(result))
+				}
+				for i, expected := range tt.expectedMCPs {
+					if i >= len(result) || result[i] != expected {
+						t.Errorf("Expected MCP %s at index %d, got %s", expected, i, result[i])
+					}
+				}
 			}
 		})
 	}

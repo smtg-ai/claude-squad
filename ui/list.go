@@ -86,6 +86,11 @@ func (l *List) SetSize(width, height int) {
 	l.renderer.setWidth(width)
 }
 
+// UpdateConfig refreshes the configuration for MCP display
+func (l *List) UpdateConfig() {
+	l.renderer.config = config.LoadConfig()
+}
+
 // TruncateBranchName truncates a branch name using suffix-preserving logic
 // This ensures the most specific part (suffix) of the branch name remains visible
 func TruncateBranchName(branchName string, maxWidth int) string {
@@ -163,7 +168,7 @@ func (r *InstanceRenderer) setWidth(width int) {
 
 // getInstanceMCPs returns the MCP server names assigned to this instance's worktree
 func (r *InstanceRenderer) getInstanceMCPs(i *session.Instance) []string {
-	if r.config == nil || !i.Started() {
+	if r.config == nil {
 		return nil
 	}
 
@@ -297,7 +302,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		mcpIcon := "⚙"
 		
 		// Calculate available width for MCP display
-		mcpPrefixLength := len(prefix) + 1 + len(mcpIcon) + len(" MCPs: ")
+		mcpPrefixLength := 5 + 1 + len(mcpIcon) + len(" MCPs: ") // 5 spaces + icon + text
 		availableWidth := r.width - mcpPrefixLength
 		
 		// Truncate MCP list if it's too long
@@ -309,8 +314,8 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 			}
 		}
 		
-		mcpLine := fmt.Sprintf("%s %s MCPs: %s", strings.Repeat(" ", len(prefix)), mcpIcon, mcpCSV)
-		lines = append(lines, mcpStyle.Background(descS.GetBackground()).Render(mcpLine))
+		mcpLine := fmt.Sprintf("     %s MCPs: %s", mcpIcon, mcpCSV)
+		lines = append(lines, mcpStyle.Render(mcpLine))
 	}
 
 	// join title, subtitle, and optional MCP line

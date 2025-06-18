@@ -623,6 +623,11 @@ func (i *Instance) Restart() error {
 	// Update program command with new MCP configuration for this worktree
 	cfg := config.LoadConfig()
 	i.Program = config.ModifyCommandWithMCPForWorktree(i.Program, cfg, worktreePath)
+	
+	// Add --continue for restart to maintain session context
+	if !strings.Contains(i.Program, "--continue") {
+		i.Program += " --continue"
+	}
 
 	// Close existing tmux sessions (but keep worktree)
 	var errs []error
@@ -644,7 +649,7 @@ func (i *Instance) Restart() error {
 		return i.combineErrors(errs)
 	}
 
-	// Create new tmux sessions with updated configuration
+	// Create new tmux sessions with updated configuration (including --continue)
 	i.tmuxSession = tmux.NewTmuxSession(i.Title, i.Program)
 	
 	// Create new console session
@@ -654,7 +659,7 @@ func (i *Instance) Restart() error {
 	}
 	i.consoleTmuxSession = tmux.NewTmuxSession(i.Title+"-console", shell+" -i")
 
-	// Start the new tmux session with updated MCP configuration
+	// Start the new tmux session with updated MCP configuration and --continue
 	if err := i.tmuxSession.Start(worktreePath); err != nil {
 		// If restart fails, try to restore original session if possible
 		log.ErrorLog.Printf("Failed to start new tmux session for %s: %v", i.Title, err)
@@ -680,6 +685,6 @@ func (i *Instance) Restart() error {
 	}
 
 	i.SetStatus(Running)
-	log.InfoLog.Printf("Successfully restarted Claude instance %s with new MCP configuration", i.Title)
+	log.InfoLog.Printf("Successfully restarted Claude instance %s with new MCP configuration and --continue", i.Title)
 	return nil
 }

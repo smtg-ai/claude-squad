@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -45,6 +46,8 @@ const (
 	stateConfirm
 	// stateAddProject is the state when the user is adding a new project.
 	stateAddProject
+	// stateMCPManage is the state when the MCP management overlay is displayed.
+	stateMCPManage
 )
 
 type home struct {
@@ -98,6 +101,8 @@ type home struct {
 	projectManager *project.ProjectManager
 	// projectInputOverlay handles project input
 	projectInputOverlay *ui.ProjectInputOverlay
+	// mcpOverlay handles MCP server management
+	mcpOverlay *overlay.MCPOverlay
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -137,7 +142,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		projectManager:      projectManager,
 		projectInputOverlay: ui.NewProjectInputOverlay(),
 	}
-	h.list = ui.NewList(&h.spinner, autoYes, projectManager)
+	h.list = ui.NewList(&h.spinner, autoYes, projectManager, appConfig)
 
 	// Load saved instances
 	instances, err := storage.LoadInstances()
@@ -181,6 +186,9 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	}
 	if m.projectInputOverlay != nil {
 		m.projectInputOverlay.SetSize(msg.Width, msg.Height)
+	}
+	if m.mcpOverlay != nil {
+		m.mcpOverlay.SetSize(int(float32(msg.Width)*0.8), int(float32(msg.Height)*0.8))
 	}
 
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
@@ -285,7 +293,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateAddProject {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateAddProject || m.state == stateMCPManage {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -494,6 +502,53 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, cmd
 	}
 
+	// Handle MCP management state
+	if m.state == stateMCPManage {
+		// Handle escape to cancel
+		if msg.String() == "ctrl+c" || msg.Type == tea.KeyEsc {
+			m.state = stateDefault
+			m.mcpOverlay = nil
+			m.list.UpdateConfig() // Refresh MCP config for display
+			return m, tea.WindowSize()
+		}
+
+		// Let the MCP overlay handle the key press
+		if m.mcpOverlay != nil {
+			shouldClose := m.mcpOverlay.HandleKeyPress(msg)
+			if shouldClose || m.mcpOverlay.IsSubmitted() || m.mcpOverlay.IsCanceled() {
+				// Check if we need to restart Claude due to MCP changes
+				if m.mcpOverlay.IsSubmitted() && m.mcpOverlay.AssignmentsChanged() {
+					instance := m.mcpOverlay.GetInstance()
+					if instance != nil && instance.Started() && !instance.Paused() {
+						// Check if this is a Claude instance (only Claude needs restart for MCP changes)
+						if isClaudeInstance(instance) {
+							// Create restart command
+							restartCmd := func() tea.Msg {
+								if err := instance.Restart(); err != nil {
+									return fmt.Errorf("failed to restart Claude with new MCP configuration: %w", err)
+								}
+								return instanceChangedMsg{}
+							}
+							
+							// Auto-restart without confirmation using --continue
+							m.state = stateDefault
+							m.mcpOverlay = nil
+							m.list.UpdateConfig() // Refresh MCP config for display
+							return m, func() tea.Msg { return restartCmd() }
+						}
+					}
+				}
+				
+				m.state = stateDefault
+				m.mcpOverlay = nil
+				m.list.UpdateConfig() // Refresh MCP config for display
+				return m, tea.WindowSize()
+			}
+		}
+
+		return m, nil
+	}
+
 	// Handle quit commands first
 	if msg.String() == "ctrl+c" || msg.String() == "q" {
 		return m.handleQuit()
@@ -580,6 +635,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Show project input overlay
 		m.state = stateAddProject
 		m.projectInputOverlay.Show()
+		return m, tea.WindowSize()
+	case keys.KeyMCPManage:
+		// Show MCP management overlay for selected instance
+		selectedInstance := m.list.GetSelectedInstance()
+		m.state = stateMCPManage
+		m.mcpOverlay = overlay.NewMCPOverlay(selectedInstance)
 		return m, tea.WindowSize()
 	case keys.KeyUp:
 		m.list.Up()
@@ -753,6 +814,11 @@ func (m *home) instanceChanged() tea.Cmd {
 		return m.handleError(err)
 	}
 
+	// Save instances after changes (including restart/MCP updates)
+	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+		return m.handleError(err)
+	}
+
 	return nil
 }
 
@@ -801,6 +867,17 @@ func (m *home) handleError(err error) tea.Cmd {
 
 		return hideErrMsg{}
 	}
+}
+
+// isClaudeInstance checks if the given instance is running Claude
+func isClaudeInstance(instance *session.Instance) bool {
+	if instance == nil {
+		return false
+	}
+	
+	// Check if the program contains "claude" (case-insensitive)
+	program := strings.ToLower(instance.Program)
+	return strings.Contains(program, "claude")
 }
 
 // confirmAction shows a confirmation modal and stores the action to execute on confirm
@@ -860,6 +937,11 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("project input overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.projectInputOverlay.View(), mainView, true, true)
+	} else if m.state == stateMCPManage {
+		if m.mcpOverlay == nil {
+			log.ErrorLog.Printf("MCP overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.mcpOverlay.Render(), mainView, true, true)
 	}
 
 	return mainView

@@ -1,6 +1,7 @@
 package git
 
 import (
+	"claude-squad/config"
 	"claude-squad/log"
 	"fmt"
 	"os"
@@ -153,6 +154,14 @@ func (g *GitWorktree) cleanupExistingWorktreeForBranch() error {
 func (g *GitWorktree) Cleanup() error {
 	var errs []error
 
+	// Clean up MCP assignments first (before removing the worktree)
+	cfg := config.LoadConfig()
+	cfg.CleanupWorktreeMCPs(g.worktreePath)
+	if err := config.SaveConfig(cfg); err != nil {
+		log.ErrorLog.Printf("Failed to cleanup MCP assignments for worktree %s: %v", g.worktreePath, err)
+		// Don't treat this as a fatal error, continue with worktree cleanup
+	}
+
 	// Check if worktree path exists before attempting removal
 	if _, err := os.Stat(g.worktreePath); err == nil {
 		// Remove the worktree using git command
@@ -196,6 +205,14 @@ func (g *GitWorktree) Cleanup() error {
 
 // Remove removes the worktree but keeps the branch
 func (g *GitWorktree) Remove() error {
+	// Clean up MCP assignments when removing worktree (even if keeping branch)
+	cfg := config.LoadConfig()
+	cfg.CleanupWorktreeMCPs(g.worktreePath)
+	if err := config.SaveConfig(cfg); err != nil {
+		log.ErrorLog.Printf("Failed to cleanup MCP assignments for worktree %s: %v", g.worktreePath, err)
+		// Don't treat this as a fatal error, continue with worktree removal
+	}
+
 	// Remove the worktree using git command
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath); err != nil {
 		return fmt.Errorf("failed to remove worktree: %w", err)

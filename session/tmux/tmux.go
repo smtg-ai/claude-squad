@@ -133,8 +133,8 @@ func (t *TmuxSession) Start(workDir string) error {
 	// Get config for potential MCP integration
 	cfg := config.LoadConfig()
 
-	// Apply MCP configuration if program is Claude
-	program := config.ModifyCommandWithMCP(t.program, cfg)
+	// Apply worktree-specific MCP configuration if program is Claude
+	program := config.ModifyCommandWithMCPForWorktree(t.program, cfg, workDir)
 
 	// Create a new detached tmux session and start claude in it
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, program)
