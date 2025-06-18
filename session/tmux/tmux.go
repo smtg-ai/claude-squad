@@ -3,6 +3,7 @@ package tmux
 import (
 	"bytes"
 	"claude-squad/cmd"
+	"claude-squad/config"
 	"claude-squad/log"
 	"context"
 	"crypto/sha256"
@@ -129,8 +130,14 @@ func (t *TmuxSession) Start(workDir string) error {
 		t.sanitizedName = uniqueName
 	}
 
+	// Get config for potential MCP integration
+	cfg := config.LoadConfig()
+
+	// Apply MCP configuration if program is Claude
+	program := config.ModifyCommandWithMCP(t.program, cfg)
+
 	// Create a new detached tmux session and start claude in it
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
+	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, program)
 
 	ptmx, err := t.ptyFactory.Start(cmd)
 	if err != nil {

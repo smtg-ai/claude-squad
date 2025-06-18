@@ -1,0 +1,6 @@
+mcp[cli]==0.3.0
+pexpect==4.9.0
+pyte==0.8.2
+asyncio-timeout==4.0.3
+psutil==5.9.8
+typing-extensions==4.9.0

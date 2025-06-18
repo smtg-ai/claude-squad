@@ -31,6 +31,7 @@ const (
 	KeyCtrlShiftUp   // Fast scroll up (10 lines)
 	KeyCtrlShiftDown // Fast scroll down (10 lines)
 	KeyAddProject    // Key for adding a new project
+	KeyMCPManage     // Key for MCP management
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
