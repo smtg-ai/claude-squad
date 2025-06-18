@@ -17,12 +17,14 @@ type MockProjectStorage struct {
 	saveError      error
 	deleteError    error
 	setActiveError error
+	history        *ProjectHistory
 }
 
 func NewMockProjectStorage() *MockProjectStorage {
 	return &MockProjectStorage{
 		projects:      json.RawMessage("{}"),
 		activeProject: "",
+		history:       NewProjectHistory(),
 	}
 }
 
@@ -74,6 +76,20 @@ func (m *MockProjectStorage) SetActiveError(err error) {
 // SetProjects sets the projects JSON data
 func (m *MockProjectStorage) SetProjects(projectsJSON json.RawMessage) {
 	m.projects = projectsJSON
+}
+
+// SaveProjectHistory saves the project history
+func (m *MockProjectStorage) SaveProjectHistory(history *ProjectHistory) error {
+	if m.saveError != nil {
+		return m.saveError
+	}
+	m.history = history
+	return nil
+}
+
+// GetProjectHistory returns the project history
+func (m *MockProjectStorage) GetProjectHistory() *ProjectHistory {
+	return m.history
 }
 
 func TestNewProjectManager(t *testing.T) {

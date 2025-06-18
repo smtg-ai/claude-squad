@@ -114,10 +114,10 @@ func TestInstanceRenderer_getInstanceMCPs(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		setupInstance  func() *session.Instance
-		expectedMCPs   []string
-		expectedNil    bool
+		name          string
+		setupInstance func() *session.Instance
+		expectedMCPs  []string
+		expectedNil   bool
 	}{
 		{
 			name: "instance not started",
@@ -138,7 +138,7 @@ func TestInstanceRenderer_getInstanceMCPs(t *testing.T) {
 			setupInstance: func() *session.Instance {
 				instance, _ := session.NewInstance(session.InstanceOptions{
 					Title:   "test",
-					Path:    "/tmp", 
+					Path:    "/tmp",
 					Program: "echo",
 				})
 				return instance
@@ -151,16 +151,16 @@ func TestInstanceRenderer_getInstanceMCPs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			instance := tt.setupInstance()
-			
+
 			// For the no config test, set renderer config to nil
 			if tt.name == "no config" {
 				renderer.config = nil
 			} else {
 				renderer.config = cfg
 			}
-			
+
 			result := renderer.getInstanceMCPs(instance)
-			
+
 			if tt.expectedNil {
 				if result != nil {
 					t.Errorf("Expected nil, got %v", result)

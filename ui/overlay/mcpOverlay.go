@@ -4,9 +4,9 @@ import (
 	"claude-squad/config"
 	"claude-squad/session"
 	"fmt"
+	"sort"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -29,28 +29,33 @@ func (i MCPAssignmentItem) Title() string {
 	return title
 }
 func (i MCPAssignmentItem) Description() string {
-	desc := fmt.Sprintf("Command: %s", i.config.Command)
-	if len(i.config.Args) > 0 {
-		desc += fmt.Sprintf(" %s", strings.Join(i.config.Args, " "))
-	}
-	if i.assigned {
-		desc += " (assigned to this worktree)"
-	}
-	return desc
+	// Compact view - no description for cleaner UI
+	return ""
 }
 
 // MCPOverlay represents a worktree-specific MCP assignment overlay
 type MCPOverlay struct {
-	config            *config.Config
-	list              list.Model
-	instance          *session.Instance
-	worktreePath      string
-	submitted         bool
-	canceled          bool
-	width, height     int
-	assignments       map[string]bool // MCP name -> assigned status
+	config              *config.Config
+	instance            *session.Instance
+	worktreePath        string
+	submitted           bool
+	canceled            bool
+	width, height       int
+	assignments         map[string]bool // MCP name -> assigned status
 	originalAssignments map[string]bool // Original assignments to detect changes
-	assignmentsChanged bool            // Flag to track if assignments have changed
+	assignmentsChanged  bool            // Flag to track if assignments have changed
+
+	// Grid navigation
+	mcpNames       []string // Sorted list of MCP names
+	filteredNames  []string // Filtered list for search
+	selectedRow    int
+	selectedCol    int
+	columns        int
+	itemsPerColumn int
+
+	// Search functionality
+	searchMode  bool
+	searchQuery string
 }
 
 // NewMCPOverlay creates a new MCP assignment overlay for a specific instance
@@ -73,44 +78,39 @@ func NewMCPOverlay(instance *session.Instance) *MCPOverlay {
 		originalAssignments[mcpName] = true
 	}
 
-	// Create list items from available MCP servers
-	items := make([]list.Item, 0, len(cfg.MCPServers))
-	for name, mcpConfig := range cfg.MCPServers {
-		assigned := assignments[name]
-		items = append(items, MCPAssignmentItem{
-			name:     name,
-			config:   mcpConfig,
-			assigned: assigned,
-		})
+	// Create sorted list of MCP names for consistent ordering
+	var mcpNames []string
+	for name := range cfg.MCPServers {
+		mcpNames = append(mcpNames, name)
 	}
+	sort.Strings(mcpNames)
 
-	l := list.New(items, list.NewDefaultDelegate(), 0, 0)
-	
-	title := "Select MCPs for Current Worktree"
-	if worktreePath != "" {
-		title = fmt.Sprintf("Select MCPs for: %s", worktreePath)
-	}
-	l.Title = title
-	l.SetShowStatusBar(false)
-	l.SetFilteringEnabled(false)
-	l.SetShowHelp(true)
-
-	return &MCPOverlay{
+	overlay := &MCPOverlay{
 		config:              cfg,
-		list:                l,
 		instance:            instance,
 		worktreePath:        worktreePath,
 		assignments:         assignments,
 		originalAssignments: originalAssignments,
 		assignmentsChanged:  false,
+		mcpNames:            mcpNames,
+		filteredNames:       mcpNames, // Initially show all
+		selectedRow:         0,
+		selectedCol:         0,
+		columns:             3,
+		searchMode:          false,
+		searchQuery:         "",
 	}
+
+	// Calculate items per column based on total items and columns
+	totalItems := len(mcpNames)
+	overlay.itemsPerColumn = (totalItems + overlay.columns - 1) / overlay.columns
+
+	return overlay
 }
 
 func (m *MCPOverlay) SetSize(width, height int) {
 	m.width = width
 	m.height = height
-	m.list.SetWidth(width - 4)
-	m.list.SetHeight(height - 8)
 }
 
 // Init initializes the MCP overlay model
@@ -125,16 +125,49 @@ func (m *MCPOverlay) View() string {
 
 // HandleKeyPress processes key presses
 func (m *MCPOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
+	// Handle search mode
+	if m.searchMode {
+		switch msg.Type {
+		case tea.KeyEsc:
+			// Exit search mode and clear filter
+			m.searchMode = false
+			m.searchQuery = ""
+			m.filteredNames = m.mcpNames
+			m.selectedRow = 0
+			m.selectedCol = 0
+			return false
+		case tea.KeyEnter:
+			// Exit search mode but keep filter
+			m.searchMode = false
+			return false
+		case tea.KeyBackspace:
+			if len(m.searchQuery) > 0 {
+				m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+				m.filterMCPs()
+			}
+			return false
+		case tea.KeyRunes:
+			m.searchQuery += string(msg.Runes)
+			m.filterMCPs()
+			return false
+		default:
+			return false
+		}
+	}
+
+	// Normal navigation mode
 	switch msg.String() {
 	case "esc", "q":
 		m.canceled = true
 		return true
+	case "/":
+		// Enter search mode
+		m.searchMode = true
+		return false
 	case " ", "enter":
 		// Toggle assignment for selected item
-		if len(m.list.Items()) > 0 {
-			selectedItem := m.list.SelectedItem().(MCPAssignmentItem)
-			m.toggleAssignment(selectedItem.name)
-			m.refreshList()
+		if m.getSelectedMCPName() != "" {
+			m.toggleAssignment(m.getSelectedMCPName())
 		}
 		return false
 	case "s":
@@ -142,8 +175,19 @@ func (m *MCPOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 		m.saveAssignments()
 		m.submitted = true
 		return true
+	case "up", "k":
+		m.moveUp()
+		return false
+	case "down", "j":
+		m.moveDown()
+		return false
+	case "left", "h":
+		m.moveLeft()
+		return false
+	case "right", "l":
+		m.moveRight()
+		return false
 	default:
-		m.list, _ = m.list.Update(msg)
 		return false
 	}
 }
@@ -159,25 +203,25 @@ func (m *MCPOverlay) checkForChanges() {
 	// Check if the number of assigned MCPs has changed
 	originalCount := 0
 	currentCount := 0
-	
+
 	for _, assigned := range m.originalAssignments {
 		if assigned {
 			originalCount++
 		}
 	}
-	
+
 	for _, assigned := range m.assignments {
 		if assigned {
 			currentCount++
 		}
 	}
-	
+
 	// If counts differ, assignments have definitely changed
 	if originalCount != currentCount {
 		m.assignmentsChanged = true
 		return
 	}
-	
+
 	// If counts are the same, check if the specific assignments match
 	for mcpName, originalAssigned := range m.originalAssignments {
 		currentAssigned := m.assignments[mcpName]
@@ -186,7 +230,7 @@ func (m *MCPOverlay) checkForChanges() {
 			return
 		}
 	}
-	
+
 	// Also check for new MCPs that weren't in original assignments
 	for mcpName, currentAssigned := range m.assignments {
 		_, existedBefore := m.originalAssignments[mcpName]
@@ -195,25 +239,73 @@ func (m *MCPOverlay) checkForChanges() {
 			return
 		}
 	}
-	
+
 	m.assignmentsChanged = false
 }
 
-// refreshList updates the list items with current assignment status
-func (m *MCPOverlay) refreshList() {
-	items := make([]list.Item, 0, len(m.config.MCPServers))
-	for name, mcpConfig := range m.config.MCPServers {
-		assigned := m.assignments[name]
-		items = append(items, MCPAssignmentItem{
-			name:     name,
-			config:   mcpConfig,
-			assigned: assigned,
-		})
+// filterMCPs filters the MCP list based on search query
+func (m *MCPOverlay) filterMCPs() {
+	if m.searchQuery == "" {
+		m.filteredNames = m.mcpNames
+	} else {
+		var filtered []string
+		query := strings.ToLower(m.searchQuery)
+		for _, name := range m.mcpNames {
+			if strings.Contains(strings.ToLower(name), query) {
+				filtered = append(filtered, name)
+			}
+		}
+		m.filteredNames = filtered
 	}
-	selectedIndex := m.list.Index()
-	m.list.SetItems(items)
-	if selectedIndex < len(items) {
-		m.list.Select(selectedIndex)
+	// Reset selection to first item
+	m.selectedRow = 0
+	m.selectedCol = 0
+}
+
+// getSelectedMCPName returns the currently selected MCP name
+func (m *MCPOverlay) getSelectedMCPName() string {
+	// Convert grid position to alphabetical index
+	itemsPerColumn := (len(m.filteredNames) + m.columns - 1) / m.columns
+	index := m.selectedCol*itemsPerColumn + m.selectedRow
+	if index >= 0 && index < len(m.filteredNames) {
+		return m.filteredNames[index]
+	}
+	return ""
+}
+
+// moveUp moves selection up in the grid
+func (m *MCPOverlay) moveUp() {
+	if m.selectedRow > 0 {
+		m.selectedRow--
+	}
+}
+
+// moveDown moves selection down in the grid
+func (m *MCPOverlay) moveDown() {
+	itemsPerColumn := (len(m.filteredNames) + m.columns - 1) / m.columns
+	if m.selectedRow < itemsPerColumn-1 {
+		newIndex := m.selectedCol*itemsPerColumn + (m.selectedRow + 1)
+		if newIndex < len(m.filteredNames) {
+			m.selectedRow++
+		}
+	}
+}
+
+// moveLeft moves selection left in the grid
+func (m *MCPOverlay) moveLeft() {
+	if m.selectedCol > 0 {
+		m.selectedCol--
+	}
+}
+
+// moveRight moves selection right in the grid
+func (m *MCPOverlay) moveRight() {
+	if m.selectedCol < m.columns-1 {
+		itemsPerColumn := (len(m.filteredNames) + m.columns - 1) / m.columns
+		newIndex := (m.selectedCol+1)*itemsPerColumn + m.selectedRow
+		if newIndex < len(m.filteredNames) {
+			m.selectedCol++
+		}
 	}
 }
 
@@ -264,7 +356,7 @@ func (m *MCPOverlay) Render() string {
 		Padding(1, 2)
 
 	var content string
-	
+
 	if len(m.config.MCPServers) == 0 {
 		content = "No MCP servers configured.\n\nMCP servers should be configured in your Claude configuration.\nThis overlay allows you to assign existing MCPs to worktrees."
 		helpText := "\nPress 'q' or 'esc' to cancel"
@@ -273,8 +365,32 @@ func (m *MCPOverlay) Render() string {
 			MarginTop(1)
 		content += helpStyle.Render(helpText)
 	} else {
-		content = m.list.View()
-		
+		// Create header with shorter worktree path
+		headerText := "Select MCPs"
+		if m.worktreePath != "" {
+			// Extract just the worktree name (last part of path)
+			parts := strings.Split(m.worktreePath, "/")
+			worktreeName := parts[len(parts)-1]
+			headerText = fmt.Sprintf("Select MCPs: %s", worktreeName)
+		}
+
+		content = headerText + "\n"
+
+		// Show search info if in search mode or filter is active
+		if m.searchMode {
+			searchText := fmt.Sprintf("Search: %s_", m.searchQuery)
+			searchStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("33"))
+			content += searchStyle.Render(searchText) + "\n"
+		} else if m.searchQuery != "" {
+			filterText := fmt.Sprintf("Filter: %s [Showing %d of %d]", m.searchQuery, len(m.filteredNames), len(m.mcpNames))
+			filterStyle := lipgloss.NewStyle().
+				Foreground(lipgloss.Color("241"))
+			content += filterStyle.Render(filterText) + "\n"
+		}
+
+		content += "\n" + m.renderGrid()
+
 		// Show assignment summary
 		assignedCount := 0
 		for _, assigned := range m.assignments {
@@ -282,14 +398,20 @@ func (m *MCPOverlay) Render() string {
 				assignedCount++
 			}
 		}
-		
-		summaryText := fmt.Sprintf("\nAssigned MCPs: %d of %d", assignedCount, len(m.config.MCPServers))
+
+		summaryText := fmt.Sprintf("\nAssigned MCPs: %d of %d", assignedCount, len(m.mcpNames))
 		summaryStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("33")).
 			MarginTop(1)
 		content += summaryStyle.Render(summaryText)
-		
-		helpText := "\nCommands: (space)toggle, (s)ave and exit, (q)uit/esc"
+
+		// Dynamic help text based on mode
+		var helpText string
+		if m.searchMode {
+			helpText = "\nSearch: (esc)clear filter, (enter)keep filter"
+		} else {
+			helpText = "\nCommands: (/)search, (space)toggle, (s)ave, (q)uit/esc"
+		}
 		helpStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241")).
 			MarginTop(1)
@@ -297,4 +419,68 @@ func (m *MCPOverlay) Render() string {
 	}
 
 	return style.Render(content)
+}
+
+// renderGrid renders the 3-column grid of MCPs
+func (m *MCPOverlay) renderGrid() string {
+	if len(m.filteredNames) == 0 {
+		return "No MCPs match your search"
+	}
+
+	var rows []string
+	columnWidth := 35 // ~35 characters per column for full names
+
+	// Calculate number of rows needed - fill columns first for proper alphabetical order
+	itemsPerColumn := (len(m.filteredNames) + m.columns - 1) / m.columns
+	numRows := itemsPerColumn
+
+	for row := 0; row < numRows; row++ {
+		var columns []string
+
+		for col := 0; col < m.columns; col++ {
+			// For proper alphabetical order: fill columns first
+			index := col*itemsPerColumn + row
+			if index >= len(m.filteredNames) {
+				// Empty cell
+				columns = append(columns, strings.Repeat(" ", columnWidth))
+				continue
+			}
+
+			mcpName := m.filteredNames[index]
+			assigned := m.assignments[mcpName]
+
+			// Check if this is the selected cell
+			selected := (row == m.selectedRow && col == m.selectedCol)
+
+			// Format the cell
+			var cellContent string
+			if assigned {
+				cellContent = "✓ " + mcpName
+			} else {
+				cellContent = "  " + mcpName
+			}
+
+			// Truncate if too long
+			if len(cellContent) > columnWidth {
+				cellContent = cellContent[:columnWidth-3] + "..."
+			}
+
+			// Pad to column width
+			cellContent += strings.Repeat(" ", columnWidth-len(cellContent))
+
+			// Apply selection styling
+			if selected {
+				cellStyle := lipgloss.NewStyle().
+					Background(lipgloss.Color("62")).
+					Foreground(lipgloss.Color("15"))
+				cellContent = cellStyle.Render(cellContent)
+			}
+
+			columns = append(columns, cellContent)
+		}
+
+		rows = append(rows, strings.Join(columns, ""))
+	}
+
+	return strings.Join(rows, "\n")
 }

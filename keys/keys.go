@@ -28,10 +28,11 @@ const (
 	// Scroll keybindings (work in both preview and diff panels)
 	KeyShiftUp
 	KeyShiftDown
-	KeyCtrlShiftUp   // Fast scroll up (10 lines)
-	KeyCtrlShiftDown // Fast scroll down (10 lines)
-	KeyAddProject    // Key for adding a new project
-	KeyMCPManage     // Key for MCP management
+	KeyCtrlShiftUp    // Fast scroll up (10 lines)
+	KeyCtrlShiftDown  // Fast scroll down (10 lines)
+	KeyAddProject     // Key for adding a new project
+	KeyMCPManage      // Key for MCP management
+	KeyProjectHistory // Key for project history selection
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
@@ -56,6 +57,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"p":               KeySubmit,
 	"P":               KeyAddProject,
 	"m":               KeyMCPManage,
+	"R":               KeyProjectHistory,
 	"?":               KeyHelp,
 }
 
@@ -132,6 +134,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyMCPManage: key.NewBinding(
 		key.WithKeys("m"),
 		key.WithHelp("m", "manage MCP servers"),
+	),
+	KeyProjectHistory: key.NewBinding(
+		key.WithKeys("R"),
+		key.WithHelp("R", "recent projects"),
 	),
 
 	// -- Special keybindings --

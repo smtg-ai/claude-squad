@@ -166,7 +166,7 @@ func TestGetWorktreeMCPConfigs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := config.GetWorktreeMCPConfigs(tt.worktreePath)
-			
+
 			if len(result) != tt.expectedLen {
 				t.Errorf("GetWorktreeMCPConfigs() returned %d configs, expected %d", len(result), tt.expectedLen)
 				return
@@ -238,14 +238,14 @@ func TestModifyCommandWithMCPForWorktree(t *testing.T) {
 
 			if tt.expected != "" {
 				if result != tt.expected {
-					t.Errorf("ModifyCommandWithMCPForWorktree(%q, %q) = %q, expected %q", 
+					t.Errorf("ModifyCommandWithMCPForWorktree(%q, %q) = %q, expected %q",
 						tt.command, tt.worktreePath, result, tt.expected)
 				}
 			}
 
 			if tt.contains != "" {
 				if !strings.Contains(result, tt.contains) {
-					t.Errorf("ModifyCommandWithMCPForWorktree(%q, %q) = %q, expected to contain %q", 
+					t.Errorf("ModifyCommandWithMCPForWorktree(%q, %q) = %q, expected to contain %q",
 						tt.command, tt.worktreePath, result, tt.contains)
 				}
 
@@ -255,7 +255,7 @@ func TestModifyCommandWithMCPForWorktree(t *testing.T) {
 					if part == "--mcp-config" && i+1 < len(parts) {
 						configFile := parts[i+1]
 						defer CleanupMCPConfigFile(configFile)
-						
+
 						// Verify file exists
 						if _, err := os.Stat(configFile); os.IsNotExist(err) {
 							t.Errorf("ModifyCommandWithMCPForWorktree() MCP config file does not exist: %s", configFile)
@@ -306,7 +306,7 @@ func TestCleanupWorktreeMCPs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config.CleanupWorktreeMCPs(tt.worktreePath)
-			
+
 			// Check that the entry was removed
 			result := config.GetWorktreeMCPs(tt.worktreePath)
 			if tt.shouldExist && result == nil {
@@ -315,7 +315,7 @@ func TestCleanupWorktreeMCPs(t *testing.T) {
 			if !tt.shouldExist && result != nil {
 				t.Errorf("CleanupWorktreeMCPs() did not remove entry: %s, still has %v", tt.worktreePath, result)
 			}
-			
+
 			// Check that the map has the expected number of entries
 			if len(config.WorktreeMCPs) != tt.expectedLen {
 				t.Errorf("CleanupWorktreeMCPs() left %d entries, expected %d", len(config.WorktreeMCPs), tt.expectedLen)
@@ -392,12 +392,12 @@ func TestLoadConfigDefensiveInitialization(t *testing.T) {
 	// Test LoadConfig with a config that doesn't have WorktreeMCPs
 	// Since we can't easily override GetConfigDir, we'll test the defensive
 	// initialization by creating a config manually and checking the result
-	
+
 	// Create config struct without WorktreeMCPs initialized
 	testConfig := Config{
-		DefaultProgram:     "claude",
-		MCPServers:         map[string]MCPServerConfig{},
-		WorktreeMCPs:       nil, // This should be initialized
+		DefaultProgram: "claude",
+		MCPServers:     map[string]MCPServerConfig{},
+		WorktreeMCPs:   nil, // This should be initialized
 	}
 
 	// Simulate what LoadConfig does for defensive initialization

@@ -15,6 +15,9 @@ type ProjectStorage interface {
 	DeleteProject(projectID string) error
 	SetActiveProject(projectID string) error
 	GetActiveProject() string
+	// Project history methods
+	SaveProjectHistory(history *ProjectHistory) error
+	GetProjectHistory() *ProjectHistory
 }
 
 // ProjectManager manages multiple projects and their state
@@ -22,6 +25,7 @@ type ProjectManager struct {
 	projects      map[string]*Project
 	activeProject *Project
 	storage       ProjectStorage
+	history       *ProjectHistory
 }
 
 // NewProjectManager creates a new project manager with the given storage backend
@@ -33,6 +37,7 @@ func NewProjectManager(storage ProjectStorage) (*ProjectManager, error) {
 	pm := &ProjectManager{
 		projects: make(map[string]*Project),
 		storage:  storage,
+		history:  storage.GetProjectHistory(),
 	}
 
 	// Load existing projects from storage
@@ -285,4 +290,69 @@ func (pm *ProjectManager) saveProjects() error {
 	}
 
 	return pm.storage.SaveProjects(projectsJSON)
+}
+
+// Project History Management Methods
+
+// GetProjectHistory returns the project history
+func (pm *ProjectManager) GetProjectHistory() *ProjectHistory {
+	return pm.history
+}
+
+// UpdateProjectHistory adds a project path to the history and saves it
+func (pm *ProjectManager) UpdateProjectHistory(projectPath string) error {
+	if pm.history == nil {
+		pm.history = NewProjectHistory()
+	}
+
+	pm.history.AddProject(projectPath)
+	return pm.storage.SaveProjectHistory(pm.history)
+}
+
+// ClearProjectHistory removes all but the last N projects from history
+func (pm *ProjectManager) ClearProjectHistory(keepLast int) error {
+	if pm.history == nil {
+		pm.history = NewProjectHistory()
+		return nil
+	}
+
+	pm.history.ClearHistory(keepLast)
+	return pm.storage.SaveProjectHistory(pm.history)
+}
+
+// GetRecentProjectPaths returns recent project paths for the UI
+func (pm *ProjectManager) GetRecentProjectPaths() []string {
+	if pm.history == nil {
+		return []string{}
+	}
+	return pm.history.GetRecentProjects()
+}
+
+// GetTopProjectPaths returns the first N recent project paths (for quick select)
+func (pm *ProjectManager) GetTopProjectPaths(count int) []string {
+	if pm.history == nil {
+		return []string{}
+	}
+	return pm.history.GetTopProjects(count)
+}
+
+// FilterProjectPaths returns project paths that match the search query
+func (pm *ProjectManager) FilterProjectPaths(query string) []string {
+	if pm.history == nil {
+		return []string{}
+	}
+	return pm.history.FilterProjects(query)
+}
+
+// CleanupNonExistentProjects removes project paths that no longer exist
+func (pm *ProjectManager) CleanupNonExistentProjects() error {
+	if pm.history == nil {
+		return nil
+	}
+
+	removedCount := pm.history.RemoveNonExistentPaths()
+	if removedCount > 0 {
+		return pm.storage.SaveProjectHistory(pm.history)
+	}
+	return nil
 }

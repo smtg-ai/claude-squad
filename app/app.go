@@ -48,6 +48,8 @@ const (
 	stateAddProject
 	// stateMCPManage is the state when the MCP management overlay is displayed.
 	stateMCPManage
+	// stateProjectHistory is the state when the project history overlay is displayed.
+	stateProjectHistory
 )
 
 type home struct {
@@ -103,6 +105,8 @@ type home struct {
 	projectInputOverlay *ui.ProjectInputOverlay
 	// mcpOverlay handles MCP server management
 	mcpOverlay *overlay.MCPOverlay
+	// projectHistoryOverlay handles project history selection
+	projectHistoryOverlay *overlay.ProjectHistoryOverlay
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -189,6 +193,9 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	}
 	if m.mcpOverlay != nil {
 		m.mcpOverlay.SetSize(int(float32(msg.Width)*0.8), int(float32(msg.Height)*0.8))
+	}
+	if m.projectHistoryOverlay != nil {
+		m.projectHistoryOverlay.SetSize(int(float32(msg.Width)*0.8), int(float32(msg.Height)*0.8))
 	}
 
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
@@ -293,7 +300,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateAddProject || m.state == stateMCPManage {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateAddProject || m.state == stateMCPManage || m.state == stateProjectHistory {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -488,6 +495,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					return m, cmd
 				}
 
+				// Update project history
+				if err := m.projectManager.UpdateProjectHistory(path); err != nil {
+					log.WarningLog.Printf("Failed to update project history: %v", err)
+				}
+
 				// Success - hide overlay and return to default state
 				m.state = stateDefault
 				m.projectInputOverlay.Hide()
@@ -529,7 +541,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 								}
 								return instanceChangedMsg{}
 							}
-							
+
 							// Auto-restart without confirmation using --continue
 							m.state = stateDefault
 							m.mcpOverlay = nil
@@ -538,10 +550,61 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						}
 					}
 				}
-				
+
 				m.state = stateDefault
 				m.mcpOverlay = nil
 				m.list.UpdateConfig() // Refresh MCP config for display
+				return m, tea.WindowSize()
+			}
+		}
+
+		return m, nil
+	}
+
+	// Handle project history state
+	if m.state == stateProjectHistory {
+		// Handle escape to cancel
+		if msg.String() == "ctrl+c" || msg.Type == tea.KeyEsc {
+			m.state = stateDefault
+			m.projectHistoryOverlay = nil
+			return m, tea.WindowSize()
+		}
+
+		// Let the project history overlay handle the key press
+		if m.projectHistoryOverlay != nil {
+			shouldClose := m.projectHistoryOverlay.HandleKeyPress(msg)
+			if shouldClose || m.projectHistoryOverlay.IsSubmitted() || m.projectHistoryOverlay.IsCanceled() {
+				selectedPath := m.projectHistoryOverlay.GetSelectedPath()
+
+				m.state = stateDefault
+				m.projectHistoryOverlay = nil
+
+				// Handle the selected path
+				if m.projectHistoryOverlay.IsSubmitted() && selectedPath != "" {
+					if selectedPath == "NEW_MANUAL" {
+						// User chose "new manual" - show the add project overlay
+						m.state = stateAddProject
+						m.projectInputOverlay.Show()
+						return m, tea.WindowSize()
+					} else {
+						// User selected an existing project path
+						// Update history to move this to the front
+						m.projectManager.UpdateProjectHistory(selectedPath)
+
+						// Try to add as a project if not already added
+						projectName := "" // Let NewProject generate name from path
+						if project, err := m.projectManager.AddProject(selectedPath, projectName); err == nil {
+							// Set as active project
+							m.projectManager.SetActiveProject(project.ID)
+						} else {
+							// Project might already exist, just update history
+							log.InfoLog.Printf("Project already exists or error adding: %v", err)
+						}
+
+						return m, tea.WindowSize()
+					}
+				}
+
 				return m, tea.WindowSize()
 			}
 		}
@@ -573,6 +636,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if activeProject := m.projectManager.GetActiveProject(); activeProject != nil {
 			projectPath = activeProject.Path
 			projectID = activeProject.ID
+			// Update project history when using active project
+			if err := m.projectManager.UpdateProjectHistory(projectPath); err != nil {
+				log.WarningLog.Printf("Failed to update project history: %v", err)
+			}
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:   "",
@@ -608,6 +675,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if activeProject := m.projectManager.GetActiveProject(); activeProject != nil {
 			projectPath = activeProject.Path
 			projectID = activeProject.ID
+			// Update project history when using active project
+			if err := m.projectManager.UpdateProjectHistory(projectPath); err != nil {
+				log.WarningLog.Printf("Failed to update project history: %v", err)
+			}
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:   "",
@@ -641,6 +712,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		selectedInstance := m.list.GetSelectedInstance()
 		m.state = stateMCPManage
 		m.mcpOverlay = overlay.NewMCPOverlay(selectedInstance)
+		return m, tea.WindowSize()
+	case keys.KeyProjectHistory:
+		// Show project history overlay
+		m.state = stateProjectHistory
+		m.projectHistoryOverlay = overlay.NewProjectHistoryOverlay(m.projectManager)
 		return m, tea.WindowSize()
 	case keys.KeyUp:
 		m.list.Up()
@@ -874,7 +950,7 @@ func isClaudeInstance(instance *session.Instance) bool {
 	if instance == nil {
 		return false
 	}
-	
+
 	// Check if the program contains "claude" (case-insensitive)
 	program := strings.ToLower(instance.Program)
 	return strings.Contains(program, "claude")
@@ -942,6 +1018,11 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("MCP overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.mcpOverlay.Render(), mainView, true, true)
+	} else if m.state == stateProjectHistory {
+		if m.projectHistoryOverlay == nil {
+			log.ErrorLog.Printf("project history overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.projectHistoryOverlay.Render(), mainView, true, true)
 	}
 
 	return mainView

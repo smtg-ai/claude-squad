@@ -289,22 +289,22 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 
 	// Get assigned MCPs for this instance
 	mcps := r.getInstanceMCPs(i)
-	
+
 	// Prepare lines for vertical joining
 	lines := []string{
 		title,
 		descS.Render(branchLine),
 	}
-	
+
 	// Add MCP line if there are assigned MCPs
 	if len(mcps) > 0 {
 		mcpCSV := strings.Join(mcps, ", ")
 		mcpIcon := "⚙"
-		
+
 		// Calculate available width for MCP display
 		mcpPrefixLength := 5 + 1 + len(mcpIcon) + len(" MCPs: ") // 5 spaces + icon + text
 		availableWidth := r.width - mcpPrefixLength
-		
+
 		// Truncate MCP list if it's too long
 		if len(mcpCSV) > availableWidth {
 			if availableWidth > 3 {
@@ -313,7 +313,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 				mcpCSV = "..."
 			}
 		}
-		
+
 		mcpLine := fmt.Sprintf("     %s MCPs: %s", mcpIcon, mcpCSV)
 		lines = append(lines, mcpStyle.Render(mcpLine))
 	}

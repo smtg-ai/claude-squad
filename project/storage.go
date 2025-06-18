@@ -78,3 +78,34 @@ func (s *StateProjectStorage) GetActiveProject() string {
 	}
 	return ""
 }
+
+// SaveProjectHistory saves the project history to state
+func (s *StateProjectStorage) SaveProjectHistory(history *ProjectHistory) error {
+	historyJSON, err := json.Marshal(history)
+	if err != nil {
+		return fmt.Errorf("failed to marshal project history: %w", err)
+	}
+
+	if state, ok := s.state.(*config.State); ok {
+		state.ProjectHistoryData = historyJSON
+		return config.SaveState(state)
+	}
+	return fmt.Errorf("state is not of type *config.State")
+}
+
+// GetProjectHistory returns the project history from state
+func (s *StateProjectStorage) GetProjectHistory() *ProjectHistory {
+	if state, ok := s.state.(*config.State); ok {
+		if len(state.ProjectHistoryData) == 0 {
+			return NewProjectHistory()
+		}
+
+		var history ProjectHistory
+		if err := json.Unmarshal(state.ProjectHistoryData, &history); err != nil {
+			// Return new history if unmarshal fails
+			return NewProjectHistory()
+		}
+		return &history
+	}
+	return NewProjectHistory()
+}

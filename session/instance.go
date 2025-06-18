@@ -260,10 +260,18 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 			return setupErr
 		}
 
+		// Wait for worktree to be fully ready before starting console session
+		time.Sleep(100 * time.Millisecond) // Allow worktree filesystem operations to settle
+
 		// Start console session in the same worktree
 		if err := i.consoleTmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
-			// Console session failure is not critical, just log it
-			log.WarningLog.Printf("Failed to start console session for %s: %v", i.Title, err)
+			// Console session failure should be more critical - at least warn properly
+			log.ErrorLog.Printf("Failed to start console session for %s: %v", i.Title, err)
+			// Retry once after a brief delay
+			time.Sleep(200 * time.Millisecond)
+			if retryErr := i.consoleTmuxSession.Start(i.gitWorktree.GetWorktreePath()); retryErr != nil {
+				log.ErrorLog.Printf("Console session retry also failed for %s: %v", i.Title, retryErr)
+			}
 		}
 	}
 
@@ -619,11 +627,11 @@ func (i *Instance) Restart() error {
 
 	// Store current worktree path before closing sessions
 	worktreePath := i.gitWorktree.GetWorktreePath()
-	
+
 	// Update program command with new MCP configuration for this worktree
 	cfg := config.LoadConfig()
 	i.Program = config.ModifyCommandWithMCPForWorktree(i.Program, cfg, worktreePath)
-	
+
 	// Add --continue for restart to maintain session context
 	if !strings.Contains(i.Program, "--continue") {
 		i.Program += " --continue"
@@ -651,7 +659,7 @@ func (i *Instance) Restart() error {
 
 	// Create new tmux sessions with updated configuration (including --continue)
 	i.tmuxSession = tmux.NewTmuxSession(i.Title, i.Program)
-	
+
 	// Create new console session
 	shell := os.Getenv("SHELL")
 	if shell == "" {
@@ -663,7 +671,7 @@ func (i *Instance) Restart() error {
 	if err := i.tmuxSession.Start(worktreePath); err != nil {
 		// If restart fails, try to restore original session if possible
 		log.ErrorLog.Printf("Failed to start new tmux session for %s: %v", i.Title, err)
-		
+
 		// Create a new session with original program (fallback)
 		fallbackSession := tmux.NewTmuxSession(i.Title, i.Program)
 		if startErr := fallbackSession.Start(worktreePath); startErr == nil {
@@ -672,13 +680,13 @@ func (i *Instance) Restart() error {
 			i.SetStatus(Running)
 			return fmt.Errorf("restart failed but fallback session started: %w", err)
 		}
-		
+
 		// If both restart and fallback fail, mark as paused
 		i.SetStatus(Paused)
 		return fmt.Errorf("failed to restart tmux session and could not start fallback: %w", err)
 	}
 
-	// Start new console session  
+	// Start new console session
 	if err := i.consoleTmuxSession.Start(worktreePath); err != nil {
 		// Console session failure is not critical, just log it
 		log.WarningLog.Printf("Failed to start new console session for %s: %v", i.Title, err)

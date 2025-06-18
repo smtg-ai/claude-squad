@@ -261,7 +261,7 @@ func normalizeMCPServerConfig(config MCPServerConfig) MCPServerConfig {
 		config.Args = []string{}
 	}
 
-	// Ensure Env is never nil 
+	// Ensure Env is never nil
 	if config.Env == nil {
 		config.Env = make(map[string]string)
 	}
@@ -360,7 +360,7 @@ func (c *Config) GetWorktreeMCPConfigs(worktreePath string) map[string]MCPServer
 	if len(assignedMCPs) == 0 {
 		return nil
 	}
-	
+
 	configs := make(map[string]MCPServerConfig)
 	for _, mcpName := range assignedMCPs {
 		if mcpConfig, exists := c.MCPServers[mcpName]; exists {
