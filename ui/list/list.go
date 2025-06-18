@@ -55,14 +55,14 @@ var autoYesStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("#1a1a1a"))
 
 type List struct {
-	items         []instance.Instance
+	items         *[]instance.Instance
 	selectedIdx   int
 	height, width int
 	autoyes       bool
 	spinner       *spinner.Model
 }
 
-func NewList(items []instance.Instance, spinner *spinner.Model, autoYes bool) *List {
+func NewList(items *[]instance.Instance, spinner *spinner.Model, autoYes bool) *List {
 	return &List{
 		items:   items,
 		autoyes: autoYes,
@@ -79,7 +79,7 @@ func (l *List) SetSize(width, height int) {
 // SetSessionPreviewSize sets the height and width for the tmux sessions. This makes the stdout line have the correct
 // width and height.
 func (l *List) SetSessionPreviewSize(width, height int) (err error) {
-	for i, item := range l.items {
+	for i, item := range *l.items {
 		if !item.IsRunning() {
 			continue
 		}
@@ -93,7 +93,7 @@ func (l *List) SetSessionPreviewSize(width, height int) (err error) {
 }
 
 func (l *List) NumInstances() int {
-	return len(l.items)
+	return len(*l.items)
 }
 
 // ɹ and ɻ are other options.
@@ -101,10 +101,10 @@ const branchIcon = "Ꮧ"
 
 // Down selects the next item in the list.
 func (l *List) Down() {
-	if len(l.items) == 0 {
+	if len(*l.items) == 0 {
 		return
 	}
-	if l.selectedIdx < len(l.items)-1 {
+	if l.selectedIdx < len(*l.items)-1 {
 		l.selectedIdx++
 	}
 }
@@ -112,10 +112,10 @@ func (l *List) Down() {
 // Kill kills the selected instance's tmux session
 // Note: The actual removal from the list happens via observer pattern
 func (l *List) Kill() {
-	if len(l.items) == 0 {
+	if len(*l.items) == 0 {
 		return
 	}
-	targetInstance := (l.items)[l.selectedIdx]
+	targetInstance := (*l.items)[l.selectedIdx]
 
 	// Kill the tmux session
 	if err := targetInstance.Kill(); err != nil {
@@ -124,13 +124,13 @@ func (l *List) Kill() {
 }
 
 func (l *List) Attach() (chan struct{}, error) {
-	targetInstance := (l.items)[l.selectedIdx]
+	targetInstance := (*l.items)[l.selectedIdx]
 	return targetInstance.Attach()
 }
 
 // Up selects the prev item in the list.
 func (l *List) Up() {
-	if len(l.items) == 0 {
+	if len(*l.items) == 0 {
 		return
 	}
 	if l.selectedIdx > 0 {
@@ -140,15 +140,15 @@ func (l *List) Up() {
 
 // GetSelectedInstance returns the currently selected instance
 func (l *List) GetSelectedInstance() instance.Instance {
-	if len(l.items) == 0 {
+	if len(*l.items) == 0 {
 		return nil
 	}
-	return (l.items)[l.selectedIdx]
+	return (*l.items)[l.selectedIdx]
 }
 
 // SetSelectedInstance sets the selected index. Noop if the index is out of bounds.
 func (l *List) SetSelectedInstance(idx int) {
-	if idx >= len(l.items) {
+	if idx >= len(*l.items) {
 		return
 	}
 	l.selectedIdx = idx
@@ -156,7 +156,7 @@ func (l *List) SetSelectedInstance(idx int) {
 
 // GetInstances returns all instances in the list
 func (l *List) GetInstances() []instance.Instance {
-	return l.items
+	return *l.items
 }
 
 func (l *List) String() string {
@@ -187,14 +187,14 @@ func (l *List) String() string {
 	b.WriteString("\n")
 
 	// Render the list.
-	for i := range l.items {
-		log.InfoLog.Printf("Rendering %d items", len(l.items))
-		item := (l.items)[i]
+	for i := range *l.items {
+		log.InfoLog.Printf("Rendering %d items", len(*l.items))
+		item := (*l.items)[i]
 
 		if t, ok := item.(*task.Task); ok {
 			b.WriteString(l.RenderTask(t, i+1, i == l.selectedIdx))
 		}
-		if i != len(l.items)-1 {
+		if i != len(*l.items)-1 {
 			b.WriteString("\n\n")
 		}
 	}

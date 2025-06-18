@@ -48,14 +48,13 @@ func (c *Controller) handleNewTask(model *Model, promptAfter bool) (tea.Model, t
 	c.list.SetSelectedInstance(len(c.instances) - 1)
 	log.InfoLog.Printf("DEBUG: Created instance %d, %v", len(c.instances), c.list.GetSelectedInstance())
 
-	c.newInstanceFinalizer = func() {
-		err := newTask.Start(true)
-		if err != nil {
-			log.ErrorLog.Printf("Failed to start instance: %s", err)
-		}
+	c.newInstanceFinalizer = nil
+
+	action := func() tea.Msg {
+		return instanceChangedMsg{}
 	}
 
-	return model, tea.WindowSize()
+	return model, action
 }
 
 // handleNewInstanceState handles the state when a new instance is being created

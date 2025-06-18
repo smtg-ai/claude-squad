@@ -47,12 +47,12 @@ type Controller struct {
 
 // NewController creates a new controller
 func NewController(spinner *spinner.Model, autoYes bool) *Controller {
-	instances := make([]instance.Instance, 0)
-	return &Controller{
-		instances:    instances,
-		list:         list.NewList(instances, spinner, autoYes),
+	controller := &Controller{
+		instances:    make([]instance.Instance, 0),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
 	}
+	controller.list = list.NewList(&controller.instances, spinner, autoYes)
+	return controller
 }
 
 // Render returns the rendered UI

@@ -64,13 +64,14 @@ func (l *List) RenderTask(t *task.Task, idx int, selected bool) string {
 
 	// Cut the title if it's too long
 	titleText := t.Title
-	widthAvail := l.width - 3 - len(prefix) - 1
+	listWidth := int(float64(l.width) * 0.4) // List takes about 40% of width
+	widthAvail := listWidth - 3 - len(prefix) - 1
 	if widthAvail > 0 && widthAvail < len(titleText) && len(titleText) >= widthAvail-3 {
 		titleText = titleText[:widthAvail-3] + "..."
 	}
 	title := titleS.Render(lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		lipgloss.Place(l.width-3, 1, lipgloss.Left, lipgloss.Center, fmt.Sprintf("%s %s", prefix, titleText)),
+		lipgloss.Place(listWidth-3, 1, lipgloss.Left, lipgloss.Center, fmt.Sprintf("%s %s", prefix, titleText)),
 		" ",
 		join,
 	))
@@ -95,7 +96,7 @@ func (l *List) RenderTask(t *task.Task, idx int, selected bool) string {
 		)
 	}
 
-	remainingWidth := l.width
+	remainingWidth := listWidth
 	remainingWidth -= len(prefix)
 	remainingWidth -= len(branchIcon)
 
