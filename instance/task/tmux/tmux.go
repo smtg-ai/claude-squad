@@ -20,7 +20,6 @@ import (
 )
 
 const ProgramClaude = "claude"
-
 const ProgramAider = "aider"
 
 // TmuxSession represents a managed tmux session
@@ -131,37 +130,44 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("error restoring tmux session: %w", err)
 	}
 
-	if t.program == ProgramClaude || strings.HasPrefix(t.program, ProgramAider) {
-		searchString := "Do you trust the files in this folder?"
-		tapFunc := t.TapEnter
-		iterations := 5
-		if t.program != ProgramClaude {
-			searchString = "Open documentation url for more info"
-			tapFunc = t.TapDAndEnter
-			iterations = 10 // Aider takes longer to start :/
+	var searchString string
+	var tapFunc func() error
+	var iterations int
+	switch {
+	case strings.HasSuffix(t.program, ProgramClaude):
+		searchString = "Do you trust the files in this folder?"
+		tapFunc = t.TapEnter
+		iterations = 5
+	case strings.HasPrefix(t.program, ProgramAider):
+		searchString = "Open documentation url for more info"
+		tapFunc = t.TapDAndEnter
+		iterations = 10
+	default:
+		iterations = 0
+	}
+
+	// Deal with "do you trust the files" screen by sending an enter keystroke.
+	for i := 0; i < iterations; i++ {
+		time.Sleep(200 * time.Millisecond)
+
+		// Check if session exists before trying to capture pane content
+		if !t.DoesSessionExist() {
+			continue
 		}
-		// Deal with "do you trust the files" screen by sending an enter keystroke.
-		for i := 0; i < iterations; i++ {
-			time.Sleep(200 * time.Millisecond)
 
-			// Check if session exists before trying to capture pane content
-			if !t.DoesSessionExist() {
-				continue
+		content, err := t.CapturePaneContent(false)
+		if err != nil {
+			log.ErrorLog.Printf("could not check 'do you trust the files screen': %v", err)
+			continue // Continue trying instead of potentially breaking
+		}
+		if strings.Contains(content, searchString) {
+			if err := tapFunc(); err != nil {
+				log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
 			}
-
-			content, err := t.CapturePaneContent(false)
-			if err != nil {
-				log.ErrorLog.Printf("could not check 'do you trust the files screen': %v", err)
-				continue // Continue trying instead of potentially breaking
-			}
-			if strings.Contains(content, searchString) {
-				if err := tapFunc(); err != nil {
-					log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
-				}
-				break
-			}
+			break
 		}
 	}
+
 	return nil
 }
 

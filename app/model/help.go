@@ -133,10 +133,12 @@ func (m *Model) showHelpScreen(helpType helpType, task *task.Task, textOverlay *
 
 		content := helpType.ToContent(task)
 
-		textOverlay.Content = content
-		textOverlay.OnDismiss = onDismiss
-		m.state = tuiStateHelp
-		return m, nil
+		if textOverlay != nil {
+			textOverlay.Content = content
+			textOverlay.OnDismiss = onDismiss
+			m.state = tuiStateHelp
+			return m, nil
+		}
 	}
 
 	// Skip displaying the help screen

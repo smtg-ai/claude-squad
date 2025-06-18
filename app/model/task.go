@@ -170,6 +170,11 @@ func (c *Controller) finalizeNewInstance(model *Model, instance *task.Task) (tea
 		c.newInstanceFinalizer = nil
 	}
 
+	// Save instances to storage immediately after starting
+	if err := model.storage.SaveInstances(c.instances); err != nil {
+		log.WarningLog.Printf("Failed to save instances to storage: %v", err)
+	}
+
 	// If we should prompt after creating the instance, do so
 	if c.promptAfterName {
 		c.textInputOverlay = overlay.NewTextInputOverlay("Enter a prompt for the new instance", "")
@@ -221,13 +226,13 @@ func (c *Controller) handleKillInstance(model *Model) (tea.Model, tea.Cmd) {
 				return fmt.Errorf("instance %s is currently checked out", taskInstance.Title)
 			}
 
-			// Delete from storage first (only if started)
+			// Kill the tmux session
+			c.list.Kill()
+
+			// Delete from storage (only started instances are in storage)
 			if err := model.storage.DeleteInstance(taskInstance.Title); err != nil {
 				return err
 			}
-
-			// Kill the tmux session first
-			c.list.Kill()
 		}
 
 		// Remove from our instances slice and notify observers
