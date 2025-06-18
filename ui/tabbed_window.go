@@ -70,7 +70,7 @@ func AdjustPreviewWidth(width int) int {
 }
 
 func (w *TabbedWindow) SetSize(width, height int) {
-	w.width = AdjustPreviewWidth(width)
+	w.width = width
 	w.height = height
 
 	// Calculate the content height by subtracting:

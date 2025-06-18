@@ -4,7 +4,6 @@ import (
 	"claude-squad/instance"
 	"claude-squad/instance/task"
 	"claude-squad/log"
-	"claude-squad/ui"
 	"errors"
 	"fmt"
 	"strings"
@@ -170,7 +169,7 @@ func (l *List) String() string {
 
 	// Write title line
 	// add padding of 2 because the border on list items adds some extra characters
-	titleWidth := ui.AdjustPreviewWidth(l.width) + 2
+	titleWidth := l.width + 2
 	if !l.autoyes {
 		b.WriteString(lipgloss.Place(
 			titleWidth, 1, lipgloss.Left, lipgloss.Bottom, mainTitle.Render(titleText)))
