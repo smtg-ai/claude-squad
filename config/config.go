@@ -469,9 +469,6 @@ func cleanMCPConfigFromCommand(command string) string {
 		if parts[i] == "--mcp-config" {
 			// Skip this flag and its argument (next part)
 			i += 2 // Skip both "--mcp-config" and the config file path
-		} else if parts[i] == "--continue" {
-			// Skip --continue flag to avoid duplicates
-			i++
 		} else {
 			cleanParts = append(cleanParts, parts[i])
 			i++
