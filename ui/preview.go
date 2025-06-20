@@ -70,8 +70,12 @@ func (p *PreviewPane) UpdateContent(instance *task.Task) error {
 		return err
 	}
 
-	if len(content) == 0 && !instance.Started() {
-		p.setFallbackState("Please enter a name for the instance.")
+	if len(content) == 0 {
+		if !instance.Started() {
+			p.setFallbackState("Please enter a name for the instance.")
+		} else {
+			p.setFallbackState("Loading session content...")
+		}
 		return nil
 	}
 

@@ -130,6 +130,14 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("error restoring tmux session: %w", err)
 	}
 
+	// Wait for session to be ready for capture commands before proceeding
+	if err := t.waitForSessionReady(); err != nil {
+		if cleanupErr := t.Close(); cleanupErr != nil {
+			err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+		}
+		return fmt.Errorf("session not ready for capture: %w", err)
+	}
+
 	var searchPatterns []string
 	var tapFunc func() error
 	var maxRetries int
@@ -435,7 +443,21 @@ func (t *TmuxSession) Detach() {
 
 	// Cancel goroutines created by Attach.
 	t.cancel()
-	t.wg.Wait()
+
+	// Wait for goroutines to finish with a timeout to prevent hanging
+	done := make(chan struct{})
+	go func() {
+		t.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Goroutines finished cleanly
+	case <-time.After(500 * time.Millisecond):
+		// Timeout waiting for goroutines - they should have finished by now
+		log.ErrorLog.Printf("timeout waiting for goroutines to finish during detach")
+	}
 }
 
 // Close terminates the tmux session and cleans up resources
@@ -490,36 +512,101 @@ func (t *TmuxSession) DoesSessionExist() bool {
 	return t.cmdExec.Run(existsCmd) == nil
 }
 
+// waitForSessionReady waits for the tmux session to be ready to accept capture commands
+func (t *TmuxSession) waitForSessionReady() error {
+	const maxRetries = 20
+	const retryDelay = 50 * time.Millisecond
+
+	for i := 0; i < maxRetries; i++ {
+		if !t.DoesSessionExist() {
+			return fmt.Errorf("session no longer exists")
+		}
+
+		// Try to capture pane content to test if session is ready
+		cmd := exec.Command("tmux", "capture-pane", "-p", "-t", t.sanitizedName)
+		if err := t.cmdExec.Run(cmd); err == nil {
+			// Session is ready for capture commands
+			return nil
+		}
+
+		// Session exists but not ready yet, wait and retry
+		time.Sleep(retryDelay)
+	}
+
+	return fmt.Errorf("session not ready for capture after %d retries", maxRetries)
+}
+
 // CapturePaneContent captures the content of the tmux pane
 func (t *TmuxSession) CapturePaneContent(full bool) (string, error) {
-	if !full {
-		// Add -e flag to preserve escape sequences (ANSI color codes)
-		cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-t", t.sanitizedName)
-		output, err := t.cmdExec.Output(cmd)
-		if err != nil {
-			return "", fmt.Errorf("error capturing pane content: %v", err)
+	return t.capturePaneContentWithRetry(full, 3)
+}
+
+// capturePaneContentWithRetry captures pane content with retry logic for robustness
+func (t *TmuxSession) capturePaneContentWithRetry(full bool, maxRetries int) (string, error) {
+	var lastErr error
+
+	for i := 0; i < maxRetries; i++ {
+		// Check session exists before attempting capture
+		if !t.DoesSessionExist() {
+			return "", fmt.Errorf("tmux session no longer exists")
 		}
-		return string(output), nil
+
+		var cmd *exec.Cmd
+		if !full {
+			// Add -e flag to preserve escape sequences (ANSI color codes)
+			cmd = exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-t", t.sanitizedName)
+		} else {
+			// Capture the entire pane content with scrollback
+			cmd = exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-S", "-", "-t", t.sanitizedName)
+		}
+
+		output, err := t.cmdExec.Output(cmd)
+		if err == nil {
+			return string(output), nil
+		}
+
+		lastErr = err
+
+		// Don't retry if it's the last attempt
+		if i < maxRetries-1 {
+			time.Sleep(25 * time.Millisecond)
+		}
 	}
-	// Capture the entire pane content with scrollback
-	cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-S", "-", "-t", t.sanitizedName)
-	output, err := t.cmdExec.Output(cmd)
-	if err != nil {
-		return "", fmt.Errorf("error capturing full pane content with scrollback: %v", err)
+
+	if full {
+		return "", fmt.Errorf("error capturing full pane content with scrollback after %d retries: %v", maxRetries, lastErr)
 	}
-	return string(output), nil
+	return "", fmt.Errorf("error capturing pane content after %d retries: %v", maxRetries, lastErr)
 }
 
 // CapturePaneContentWithOptions captures the pane content with additional options
 // start and end specify the starting and ending line numbers (use "-" for the start/end of history)
 func (t *TmuxSession) CapturePaneContentWithOptions(start, end string) (string, error) {
-	// Add -e flag to preserve escape sequences (ANSI color codes)
-	cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-S", start, "-E", end, "-t", t.sanitizedName)
-	output, err := t.cmdExec.Output(cmd)
-	if err != nil {
-		return "", fmt.Errorf("failed to capture tmux pane content with options: %v", err)
+	const maxRetries = 3
+	var lastErr error
+
+	for i := 0; i < maxRetries; i++ {
+		// Check session exists before attempting capture
+		if !t.DoesSessionExist() {
+			return "", fmt.Errorf("tmux session no longer exists")
+		}
+
+		// Add -e flag to preserve escape sequences (ANSI color codes)
+		cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-S", start, "-E", end, "-t", t.sanitizedName)
+		output, err := t.cmdExec.Output(cmd)
+		if err == nil {
+			return string(output), nil
+		}
+
+		lastErr = err
+
+		// Don't retry if it's the last attempt
+		if i < maxRetries-1 {
+			time.Sleep(25 * time.Millisecond)
+		}
 	}
-	return string(output), nil
+
+	return "", fmt.Errorf("failed to capture tmux pane content with options after %d retries: %v", maxRetries, lastErr)
 }
 
 // CleanupSessions kills all tmux sessions that start with "session-"

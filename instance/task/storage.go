@@ -165,5 +165,8 @@ func (t *Task) Deserialize(data []byte) error {
 	t.UpdatedAt = newTask.UpdatedAt
 	t.AutoYes = newTask.AutoYes
 	t.DiffStats = newTask.DiffStats
+	t.tmuxSession = newTask.tmuxSession
+	t.started = newTask.started
+	t.gitWorktree = newTask.gitWorktree
 	return nil
 }

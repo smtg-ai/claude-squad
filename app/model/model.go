@@ -141,6 +141,10 @@ func (m *Model) Init() tea.Cmd {
 			return previewTickMsg{}
 		},
 		tickUpdateMetadataCmd,
+		// Immediately update UI components with loaded instances
+		func() tea.Msg {
+			return instanceChangedMsg{}
+		},
 	)
 }
 

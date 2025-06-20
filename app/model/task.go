@@ -22,6 +22,11 @@ func (c *Controller) LoadExistingInstances(storage *instance.Storage[instance.In
 
 	c.instances = instances
 
+	// Select the first instance if any exist, so the UI shows content immediately
+	if len(c.instances) > 0 {
+		c.list.SetSelectedInstance(0)
+	}
+
 	return nil
 }
 
@@ -347,6 +352,12 @@ func (c *Controller) instanceChanged(model *Model) tea.Cmd {
 	c.tabbedWindow.UpdateDiff(taskInstance)
 	// Update menu with current instance
 	model.menu.SetInstance(taskInstance)
+
+	// Set the tmux session size to match the preview pane dimensions
+	previewWidth, previewHeight := c.tabbedWindow.GetPreviewSize()
+	if err := c.list.SetSessionPreviewSize(previewWidth, previewHeight); err != nil {
+		log.WarningLog.Printf("Failed to set session preview size: %v", err)
+	}
 
 	// If there's no selected instance, we don't need to update the preview.
 	if err := c.tabbedWindow.UpdatePreview(taskInstance); err != nil {

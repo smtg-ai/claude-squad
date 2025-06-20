@@ -3,7 +3,9 @@ package git
 import (
 	"claude-squad/config"
 	"claude-squad/log"
+	"crypto/rand"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -68,8 +70,19 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 		return nil, "", err
 	}
 
+	// Generate a unique path with multiple components to prevent race conditions
+	timestamp := time.Now().UnixNano()
+	pid := os.Getpid()
+
+	// Add 4 random bytes for additional uniqueness
+	randomBytes := make([]byte, 4)
+	if _, err := rand.Read(randomBytes); err != nil {
+		// Fallback to timestamp-only if random fails
+		randomBytes = []byte{0, 0, 0, 0}
+	}
+
 	worktreePath := filepath.Join(worktreeDir, sanitizedName)
-	worktreePath = worktreePath + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
+	worktreePath = fmt.Sprintf("%s_%x_%d_%x", worktreePath, timestamp, pid, randomBytes)
 
 	return &GitWorktree{
 		repoPath:     repoPath,

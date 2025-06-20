@@ -275,6 +275,9 @@ func (t *Task) Preview() (string, error) {
 	if !t.started || t.Status == Paused {
 		return "", nil
 	}
+	if t.tmuxSession == nil {
+		return "", fmt.Errorf("tmux session is nil")
+	}
 	return t.tmuxSession.CapturePaneContent(false)
 }
 
@@ -466,6 +469,12 @@ func (t *Task) UpdateDiffStats() error {
 
 	if t.Status == Paused {
 		// Keep the previous diff stats if the instance is paused
+		return nil
+	}
+
+	if t.gitWorktree == nil {
+		// GitWorktree not initialized yet, nothing to diff
+		t.DiffStats = nil
 		return nil
 	}
 
