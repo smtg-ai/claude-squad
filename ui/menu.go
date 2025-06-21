@@ -40,6 +40,8 @@ const (
 	StateEmpty
 	StateNewInstance
 	StatePrompt
+	StateSelectAssistant
+	StateSelectProfile
 )
 
 type Menu struct {
@@ -53,9 +55,11 @@ type Menu struct {
 	keyDown keys.KeyName
 }
 
-var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyPrompt, keys.KeyHelp, keys.KeyQuit}
+var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyPrompt, keys.KeyNewWithProfile, keys.KeyHelp, keys.KeyQuit}
 var newInstanceMenuOptions = []keys.KeyName{keys.KeySubmitName}
 var promptMenuOptions = []keys.KeyName{keys.KeySubmitName}
+var selectAssistantMenuOptions = []keys.KeyName{keys.KeySubmitName}
+var selectProfileMenuOptions = []keys.KeyName{keys.KeySubmitName}
 
 func NewMenu() *Menu {
 	return &Menu{
@@ -117,6 +121,10 @@ func (m *Menu) updateOptions() {
 		m.options = newInstanceMenuOptions
 	case StatePrompt:
 		m.options = promptMenuOptions
+	case StateSelectAssistant:
+		m.options = selectAssistantMenuOptions
+	case StateSelectProfile:
+		m.options = selectProfileMenuOptions
 	}
 }
 
