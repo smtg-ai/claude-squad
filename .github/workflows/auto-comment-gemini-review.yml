@@ -1,0 +1,51 @@
+# Place this file in: .github/workflows/auto-comment-gemini-review.yml
+
+name: Auto Comment Gemini Review
+
+on:
+  push:
+    branches:
+      - '**'  # Trigger on push to any branch
+
+jobs:
+  comment-gemini-review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write  # Required to comment on pull requests
+      contents: read       # Required to access repository contents
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get branch name
+        id: branch
+        run: echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
+
+      - name: Check for open pull requests
+        id: check-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GEMINI_REVIEW_TOKEN }}  # Use organization secret
+        run: |
+          PR_JSON=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/pulls?head=${{ github.repository_owner }}:${{ steps.branch.outputs.branch }}&state=open")
+          PR_COUNT=$(echo "$PR_JSON" | jq length)
+          if [ "$PR_COUNT" -gt 0 ]; then
+            PR_NUMBER=$(echo "$PR_JSON" | jq -r '.[0].number')
+            echo "Found open PR #$PR_NUMBER"
+            echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          else
+            echo "No open PR found for branch ${{ steps.branch.outputs.branch }}"
+            echo "pr_number=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on pull request
+        if: steps.check-pr.outputs.pr_number != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GEMINI_REVIEW_TOKEN }}  # Use organization secret
+        run: |
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${{ github.repository }}/issues/${{ steps.check-pr.outputs.pr_number }}/comments" \
+            -f body='/gemini review'
