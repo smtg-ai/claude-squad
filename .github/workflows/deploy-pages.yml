@@ -39,7 +39,7 @@ jobs:
       - name: Update Next.js config for static export
         run: |
           cd web
-          # Add output: 'export' to next.config.ts
+          sed -i "s/const nextConfig = {/const nextConfig = {\n  output: 'export',/" next.config.ts
 
       - name: Build website
         run: cd web && npm run build
