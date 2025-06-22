@@ -61,9 +61,14 @@ const TmuxPrefix = "agentfarmer_"
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)
 
 func toClaudeSquadTmuxName(str string) string {
+	original := str
 	str = whiteSpaceRegex.ReplaceAllString(str, "")
 	str = strings.ReplaceAll(str, ".", "_") // tmux replaces all . with _
-	return fmt.Sprintf("%s%s", TmuxPrefix, str)
+	sanitized := fmt.Sprintf("%s%s", TmuxPrefix, str)
+	if log.InfoLog != nil {
+		log.InfoLog.Printf("Session name: '%s' -> '%s'", original, sanitized)
+	}
+	return sanitized
 }
 
 // NewTmuxSession creates a new TmuxSession with the given name and program.
@@ -396,11 +401,16 @@ func (t *TmuxSession) DoesSessionExist() bool {
 
 // CapturePaneContent captures the content of the tmux pane
 func (t *TmuxSession) CapturePaneContent() (string, error) {
+	// Check if session exists first
+	if !t.DoesSessionExist() {
+		return "", fmt.Errorf("tmux session '%s' does not exist", t.sanitizedName)
+	}
+	
 	// Add -e flag to preserve escape sequences (ANSI color codes)
 	cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-t", t.sanitizedName)
 	output, err := t.cmdExec.Output(cmd)
 	if err != nil {
-		return "", fmt.Errorf("error capturing pane content: %v", err)
+		return "", fmt.Errorf("error capturing pane content for session '%s': %v", t.sanitizedName, err)
 	}
 	return string(output), nil
 }
