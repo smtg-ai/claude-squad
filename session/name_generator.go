@@ -54,9 +54,9 @@ type Content struct {
 
 // OpenAIRequest represents the request structure for OpenAI API
 type OpenAIRequest struct {
-	Model    string      `json:"model"`
-	Messages []OAIMessage `json:"messages"`
-	MaxTokens int        `json:"max_tokens"`
+	Model     string       `json:"model"`
+	Messages  []OAIMessage `json:"messages"`
+	MaxTokens int          `json:"max_tokens"`
 }
 
 type OAIMessage struct {
@@ -79,6 +79,12 @@ func GenerateSessionName(prompt string, config *NameGeneratorConfig) (string, er
 		config = NewNameGeneratorConfig()
 	}
 
+	// Check if we have any API keys available
+	if config.AnthropicAPIKey == "" && config.OpenAIAPIKey == "" {
+		// Fallback to simple rule-based name generation
+		return generateFallbackName(prompt, config), nil
+	}
+
 	// Try generating name with retries for length constraint
 	for attempt := 0; attempt < config.MaxRetries; attempt++ {
 		var name string
@@ -89,12 +95,11 @@ func GenerateSessionName(prompt string, config *NameGeneratorConfig) (string, er
 			name, err = generateWithAnthropic(prompt, config)
 		} else if config.OpenAIAPIKey != "" {
 			name, err = generateWithOpenAI(prompt, config)
-		} else {
-			return "", fmt.Errorf("no API keys available for name generation")
 		}
 
 		if err != nil {
-			return "", fmt.Errorf("failed to generate name: %w", err)
+			// If API fails, fall back to rule-based generation
+			return generateFallbackName(prompt, config), nil
 		}
 
 		// Clean and validate the name
@@ -106,13 +111,14 @@ func GenerateSessionName(prompt string, config *NameGeneratorConfig) (string, er
 		// If name is too long, we'll retry with more specific instructions
 	}
 
-	return "", fmt.Errorf("failed to generate a valid name within %d attempts", config.MaxRetries)
+	// If all API attempts fail, use fallback
+	return generateFallbackName(prompt, config), nil
 }
 
 // generateWithAnthropic calls the Anthropic API to generate a name
 func generateWithAnthropic(prompt string, config *NameGeneratorConfig) (string, error) {
 	systemPrompt := buildSystemPrompt(prompt)
-	
+
 	reqBody := AnthropicRequest{
 		Model:     "claude-3-haiku-20240307",
 		MaxTokens: 50,
@@ -165,7 +171,7 @@ func generateWithAnthropic(prompt string, config *NameGeneratorConfig) (string, 
 // generateWithOpenAI calls the OpenAI API to generate a name
 func generateWithOpenAI(prompt string, config *NameGeneratorConfig) (string, error) {
 	systemPrompt := buildSystemPrompt(prompt)
-	
+
 	reqBody := OpenAIRequest{
 		Model: "gpt-3.5-turbo",
 		Messages: []OAIMessage{
@@ -219,9 +225,9 @@ func buildSystemPrompt(userPrompt string) string {
 	// Check if prompt contains ticket numbers
 	ticketRegex := regexp.MustCompile(`(?i)(?:ticket|issue|bug|task|story)[\s#-]*(\w+[-\w]*\d+|\d+[-\w]*\w*|\d+)`)
 	ticketMatches := ticketRegex.FindStringSubmatch(userPrompt)
-	
+
 	basePrompt := `Generate a concise session name for this coding task. The name must be under 32 characters and use hyphens between words (no spaces). Make it descriptive but brief.`
-	
+
 	if len(ticketMatches) > 1 {
 		// Extract ticket number
 		ticketNum := ticketMatches[1]
@@ -229,13 +235,13 @@ func buildSystemPrompt(userPrompt string) string {
 	} else {
 		basePrompt += ` Use format: keyword (e.g., auth-fix, add-validation, refactor-api).`
 	}
-	
+
 	basePrompt += `
 
 Task: ` + userPrompt + `
 
 Return only the session name, nothing else.`
-	
+
 	return basePrompt
 }
 
@@ -243,20 +249,78 @@ Return only the session name, nothing else.`
 func cleanSessionName(name string) string {
 	// Remove quotes and extra whitespace
 	name = strings.Trim(name, `"' `)
-	
+
 	// Replace spaces with hyphens
 	name = strings.ReplaceAll(name, " ", "-")
-	
+
 	// Remove any characters that aren't alphanumeric, hyphens, or underscores
 	reg := regexp.MustCompile(`[^a-zA-Z0-9\-_]`)
 	name = reg.ReplaceAllString(name, "")
-	
+
 	// Remove multiple consecutive hyphens
 	hyphenReg := regexp.MustCompile(`-+`)
 	name = hyphenReg.ReplaceAllString(name, "-")
-	
+
 	// Trim hyphens from start and end
 	name = strings.Trim(name, "-_")
-	
+
 	return name
+}
+
+// generateFallbackName creates a name using simple rule-based logic when API is unavailable
+func generateFallbackName(prompt string, config *NameGeneratorConfig) string {
+	// Check if prompt contains ticket numbers
+	ticketRegex := regexp.MustCompile(`(?i)(?:ticket|issue|bug|task|story)[\s#-]*(\w+[-\w]*\d+|\d+[-\w]*\w*|\d+)`)
+	ticketMatches := ticketRegex.FindStringSubmatch(prompt)
+
+	// Extract keywords from the prompt
+	words := strings.Fields(strings.ToLower(prompt))
+	var keywords []string
+
+	// Common coding action words
+	actionWords := map[string]bool{
+		"fix": true, "add": true, "update": true, "remove": true, "delete": true,
+		"create": true, "implement": true, "refactor": true, "optimize": true,
+		"debug": true, "test": true, "validate": true, "auth": true, "login": true,
+		"api": true, "bug": true, "feature": true, "enhance": true, "improve": true,
+	}
+
+	// Extract meaningful keywords
+	for _, word := range words {
+		cleanWord := regexp.MustCompile(`[^a-zA-Z0-9]`).ReplaceAllString(word, "")
+		if len(cleanWord) > 2 && (actionWords[cleanWord] || len(cleanWord) > 4) {
+			keywords = append(keywords, cleanWord)
+			if len(keywords) >= 3 { // Limit to 3 keywords to keep name short
+				break
+			}
+		}
+	}
+
+	var name string
+	if len(ticketMatches) > 1 {
+		// If there's a ticket number, use it as prefix
+		ticketNum := ticketMatches[1]
+		if len(keywords) > 0 {
+			name = fmt.Sprintf("%s-%s", ticketNum, strings.Join(keywords, "-"))
+		} else {
+			name = fmt.Sprintf("%s-task", ticketNum)
+		}
+	} else if len(keywords) > 0 {
+		// Use keywords
+		name = strings.Join(keywords, "-")
+	} else {
+		// Last resort: use timestamp-based name
+		name = fmt.Sprintf("session-%d", time.Now().Unix()%10000)
+	}
+
+	// Clean and ensure it fits within length constraints
+	cleanName := cleanSessionName(name)
+	if len(cleanName) > config.MaxLength {
+		// Truncate to fit
+		cleanName = cleanName[:config.MaxLength]
+		// Remove trailing hyphens after truncation
+		cleanName = strings.TrimRight(cleanName, "-")
+	}
+
+	return cleanName
 }

@@ -565,7 +565,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
-		
+
 		// Go to prompt collection state for name generation
 		m.state = statePromptForName
 		m.menu.SetState(ui.StatePrompt)

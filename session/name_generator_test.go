@@ -73,12 +73,99 @@ func stringContains(s, substr string) bool {
 
 func TestNewNameGeneratorConfig(t *testing.T) {
 	config := NewNameGeneratorConfig()
-	
+
 	if config.MaxRetries != 3 {
 		t.Errorf("Expected MaxRetries to be 3, got %d", config.MaxRetries)
 	}
-	
+
 	if config.MaxLength != 32 {
 		t.Errorf("Expected MaxLength to be 32, got %d", config.MaxLength)
 	}
+}
+
+func TestGenerateFallbackName(t *testing.T) {
+	config := &NameGeneratorConfig{MaxLength: 32}
+
+	tests := []struct {
+		prompt   string
+		expected string
+	}{
+		{
+			"Fix authentication bug in login API",
+			"fix-authentication-bug",
+		},
+		{
+			"Implement ticket ABC-123 user validation",
+			"ABC-123-implement-user",
+		},
+		{
+			"Add new feature for dashboard",
+			"add-feature-dashboard",
+		},
+		{
+			"Very short prompt",
+			"very-short-prompt",
+		},
+		{
+			"Random text with no meaningful keywords here",
+			"random-text-meaningful",
+		},
+	}
+
+	for _, test := range tests {
+		result := generateFallbackName(test.prompt, config)
+		if len(result) > config.MaxLength {
+			t.Errorf("generateFallbackName(%q) returned name too long: %q (length %d > %d)",
+				test.prompt, result, len(result), config.MaxLength)
+		}
+		if len(result) == 0 {
+			t.Errorf("generateFallbackName(%q) returned empty name", test.prompt)
+		}
+		// Check that it contains only valid characters
+		if !isValidSessionName(result) {
+			t.Errorf("generateFallbackName(%q) returned invalid name: %q", test.prompt, result)
+		}
+	}
+}
+
+func TestGenerateSessionNameFallback(t *testing.T) {
+	// Test with empty API keys to trigger fallback
+	config := &NameGeneratorConfig{
+		AnthropicAPIKey: "",
+		OpenAIAPIKey:    "",
+		MaxRetries:      3,
+		MaxLength:       32,
+	}
+
+	name, err := GenerateSessionName("Fix user authentication bug", config)
+	if err != nil {
+		t.Errorf("GenerateSessionName should not return error with fallback: %v", err)
+	}
+
+	if len(name) == 0 {
+		t.Error("GenerateSessionName should return non-empty name with fallback")
+	}
+
+	if len(name) > config.MaxLength {
+		t.Errorf("Generated name too long: %q (length %d > %d)", name, len(name), config.MaxLength)
+	}
+}
+
+// Helper function to validate session name format
+func isValidSessionName(name string) bool {
+	// Should only contain alphanumeric characters, hyphens, and underscores
+	// Should not start or end with hyphens
+	if len(name) == 0 {
+		return false
+	}
+	if name[0] == '-' || name[len(name)-1] == '-' {
+		return false
+	}
+	for _, char := range name {
+		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '-' || char == '_') {
+			return false
+		}
+	}
+	return true
 }
