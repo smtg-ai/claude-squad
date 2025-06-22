@@ -2,8 +2,8 @@ package tmux
 
 import (
 	"bytes"
-	"claude-squad/cmd"
-	"claude-squad/log"
+	"agent-farmer/cmd"
+	"agent-farmer/log"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -56,7 +56,7 @@ type TmuxSession struct {
 	wg     *sync.WaitGroup
 }
 
-const TmuxPrefix = "claudesquad_"
+const TmuxPrefix = "agentfarmer_"
 
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)
 
