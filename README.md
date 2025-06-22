@@ -1,6 +1,6 @@
-# Agent Farmer [![CI](https://github.com/smtg-ai/agent-farmer/actions/workflows/build.yml/badge.svg)](https://github.com/smtg-ai/agent-farmer/actions/workflows/build.yml) [![GitHub Release](https://img.shields.io/github/v/release/smtg-ai/agent-farmer)](https://github.com/smtg-ai/agent-farmer/releases/latest)
+# Agent Farmer [![CI](https://github.com/howinator/agent-farmer/actions/workflows/build.yml/badge.svg)](https://github.com/howinator/agent-farmer/actions/workflows/build.yml) [![GitHub Release](https://img.shields.io/github/v/release/howinator/agent-farmer)](https://github.com/howinator/agent-farmer/releases/latest)
 
-[Agent Farmer](https://smtg-ai.github.io/agent-farmer/) is a terminal app that manages multiple [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex) (and other local agents including [Aider](https://github.com/Aider-AI/aider)) in separate workspaces, allowing you to work on multiple tasks simultaneously.
+[Agent Farmer](https://smtg-ai.github.io/agent-farmer/) is a terminal app that manages multiple [Claude Code](https://github.com/anthropiaf/claude-code), [Codex](https://github.com/openai/codex) (and other local agents including [Aider](https://github.com/Aider-AI/aider)) in separate workspaces, allowing you to work on multiple tasks simultaneously.
 
 
 ![Agent Farmer Screenshot](assets/screenshot.png)
@@ -19,13 +19,13 @@ https://github.com/user-attachments/assets/aef18253-e58f-4525-9032-f5a3d66c975a
 
 ### Installation
 
-Both Homebrew and manual installation will install Agent Farmer as `cs` on your system.
+Both Homebrew and manual installation will install Agent Farmer as `af` on your system.
 
 #### Homebrew
 
 ```bash
 brew install agent-farmer
-ln -s "$(brew --prefix)/bin/agent-farmer" "$(brew --prefix)/bin/cs"
+ln -s "$(brew --prefix)/bin/agent-farmer" "$(brew --prefix)/bin/af"
 ```
 
 #### Manual
@@ -33,15 +33,15 @@ ln -s "$(brew --prefix)/bin/agent-farmer" "$(brew --prefix)/bin/cs"
 Agent Farmer can also be installed by running the following command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/smtg-ai/agent-farmer/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/howinator/agent-farmer/main/install.sh | bash
 ```
 
-This puts the `cs` binary in `~/.local/bin`.
+This puts the `af` binary in `~/.local/bin`.
 
 To use a custom name for the binary:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/smtg-ai/agent-farmer/main/install.sh | bash -s -- --name <your-binary-name>
+curl -fsSL https://raw.githubusercontent.com/howinator/agent-farmer/main/install.sh | bash -s -- --name <your-binary-name>
 ```
 
 ### Prerequisites
@@ -53,8 +53,8 @@ curl -fsSL https://raw.githubusercontent.com/smtg-ai/agent-farmer/main/install.s
 
 ```
 Usage:
-  cs [flags]
-  cs [command]
+  af [flags]
+  af [command]
 
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
@@ -72,7 +72,7 @@ Flags:
 Run the application with:
 
 ```bash
-cs
+af
 ```
 
 <br />
@@ -80,9 +80,9 @@ cs
 <b>Using Agent Farmer with other AI assistants:</b>
 - For [Codex](https://github.com/openai/codex): Set your API key with `export OPENAI_API_KEY=<your_key>`
 - Launch with specific assistants:
-   - Codex: `cs -p "codex"`
-   - Aider: `cs -p "aider ..."`
-- Make this the default, by modifying the config file (locate with `cs debug`)
+   - Codex: `af -p "codex"`
+   - Aider: `af -p "aider ..."`
+- Make this the default, by modifying the config file (locate with `af debug`)
 
 <br />
 
@@ -120,4 +120,4 @@ The menu at the bottom of the screen shows available commands:
 
 ### Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=smtg-ai/agent-farmer&type=Date)](https://www.star-history.com/#smtg-ai/agent-farmer&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=howinator/agent-farmer&type=Date)](https://www.star-history.com/#howinator/agent-farmer&Date)

@@ -135,7 +135,7 @@ var (
 		Short: "Print the version number of agent-farmer",
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Printf("agent-farmer version %s\n", version)
-			fmt.Printf("https://github.com/smtg-ai/agent-farmer/releases/tag/v%s\n", version)
+			fmt.Printf("https://github.com/howinator/agent-farmer/releases/tag/v%s\n", version)
 		},
 	}
 )

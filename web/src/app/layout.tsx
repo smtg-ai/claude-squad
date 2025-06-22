@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Agent Farmer",
     description: "A terminal app that manages multiple AI code assistants in separate workspaces",
-    url: "https://github.com/smtg-ai/agent-farmer",
+    url: "https://github.com/howinator/agent-farmer",
     type: "website",
   },
   twitter: {

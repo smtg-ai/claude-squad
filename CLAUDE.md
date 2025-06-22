@@ -35,7 +35,7 @@ Claude Squad is a terminal-based session manager for AI coding assistants. It us
 
 2. **Git Worktree Integration** (`session/git/`)
    - `GitWorktree` manages isolated git branches per session
-   - Creates branches with configurable prefixes (default: claude-squad-)
+   - Creates branches with configurable prefixes (default: agent-farmer-)
    - Supports pausing/resuming by removing/restoring worktrees
 
 3. **Tmux Integration** (`session/tmux/`)
@@ -62,7 +62,7 @@ Claude Squad is a terminal-based session manager for AI coding assistants. It us
 
 ### Configuration
 
-- Config stored in `~/.claude-squad/` directory
+- Config stored in `~/.agent-farmer/` directory
 - State persisted in JSON format
 - Branch naming configurable via `BranchPrefix` setting
 - Default program and auto-yes mode configurable
