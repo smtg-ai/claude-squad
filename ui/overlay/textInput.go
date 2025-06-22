@@ -59,6 +59,16 @@ func (t *TextInputOverlay) View() string {
 // HandleKeyPress processes a key press and updates the state accordingly.
 // Returns true if the overlay should be closed.
 func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
+	// Check for Ctrl+Enter first using string representation
+	if msg.String() == "ctrl+enter" {
+		// Ctrl+Enter submits the form regardless of focus
+		t.Submitted = true
+		if t.OnSubmit != nil {
+			t.OnSubmit()
+		}
+		return true
+	}
+
 	switch msg.Type {
 	case tea.KeyTab:
 		// Toggle focus between input and enter button.

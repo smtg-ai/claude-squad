@@ -60,12 +60,46 @@ Claude Squad is a terminal-based session manager for AI coding assistants. It us
 - **Session Persistence**: Sessions can be paused (preserving branch) and resumed later
 - **Multi-Assistant Support**: Works with Claude Code, Aider, Codex and other local agents
 
+### Keyboard Shortcuts
+
+#### Session Management
+- `n` - Create new session with AI-generated name (prompts for task description)
+- `N` - Create new session with prompt (same as `n` - will be unified)
+- `enter` / `o` - Open/enter selected session
+- `D` - Delete selected session (with confirmation)
+- `q` - Quit application
+
+#### Prompt Input
+When entering prompts for name generation or sending to AI assistants:
+- `Ctrl+Enter` - Submit the prompt (recommended)
+- `Tab` - Switch focus to "Enter" button, then `Enter` to submit
+- `Esc` - Cancel and close the prompt dialog
+
+#### Navigation
+- `↑` / `k` - Navigate up in session list
+- `↓` / `j` - Navigate down in session list
+- `tab` - Switch between tabs (list view, preview, diffs)
+- `?` - Show help screen
+
 ### Configuration
 
 - Config stored in `~/.agent-farmer/` directory
 - State persisted in JSON format
 - Branch naming configurable via `BranchPrefix` setting
 - Default program and auto-yes mode configurable
+
+### AI Name Generation
+
+The application can automatically generate meaningful session names based on your task description:
+
+- **API Support**: Works with Anthropic (Claude) and OpenAI APIs via environment variables:
+  - `ANTHROPIC_API_KEY` - For Claude models
+  - `OPENAI_API_KEY` - For GPT models
+- **Fallback Mode**: Works without API keys using rule-based name generation
+- **Smart Features**: 
+  - Detects ticket numbers (ABC-123, PROJ-456) and incorporates them
+  - Identifies coding keywords and actions
+  - Ensures names are under 32 characters and git-branch friendly
 
 ### Prerequisites
 
