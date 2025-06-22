@@ -1,7 +1,7 @@
 package config
 
 import (
-	"claude-squad/log"
+	"agent-farmer/log"
 	"encoding/json"
 	"fmt"
 	"os"

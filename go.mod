@@ -1,4 +1,4 @@
-module claude-squad
+module agent-farmer
 
 go 1.23.0
 

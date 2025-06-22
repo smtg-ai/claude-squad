@@ -1,6 +1,6 @@
 # Contributor License Agreement
 
-Thank you for your interest in contributing to [Claude Squad](https://github.com/smtg-ai/claude-squad) ("the Project"). This Contributor License Agreement ("CLA") ensures that your Contributions can be used in the Project while allowing you to retain ownership of your work.
+Thank you for your interest in contributing to [Agent Farmer](https://github.com/smtg-ai/agent-farmer) ("the Project"). This Contributor License Agreement ("CLA") ensures that your Contributions can be used in the Project while allowing you to retain ownership of your work.
 
 By signing this CLA, you accept and agree to the following terms for your present and future Contributions to the Project.
 
@@ -10,7 +10,7 @@ By signing this CLA, you accept and agree to the following terms for your presen
 
 **"Contribution"**: Any original work of authorship, including source code, documentation, configuration files, or other materials, that you intentionally submit to the Project.
 
-**"Project"**: [Claude Squad](https://github.com/smtg-ai/claude-squad).
+**"Project"**: [Agent Farmer](https://github.com/smtg-ai/agent-farmer).
 
 ## 1. Grant of Rights
 

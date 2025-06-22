@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"claude-squad/log"
-	"claude-squad/session"
+	"agent-farmer/log"
+	"agent-farmer/session"
 	"errors"
 	"fmt"
 	"strings"

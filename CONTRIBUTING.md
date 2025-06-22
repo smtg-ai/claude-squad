@@ -5,8 +5,8 @@ Thank you for considering contributing to our project! This document outlines th
 ## Development Setup
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR-USERNAME/claude-squad.git`
-3. Add the upstream repository: `git remote add upstream https://github.com/smtg-ai/claude-squad.git`
+2. Clone your fork: `git clone https://github.com/YOUR-USERNAME/agent-farmer.git`
+3. Add the upstream repository: `git remote add upstream https://github.com/smtg-ai/agent-farmer.git`
 4. Install dependencies: `go mod download`
 
 ## Code Standards

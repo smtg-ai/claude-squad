@@ -1,11 +1,11 @@
 package app
 
 import (
-	"claude-squad/config"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/ui"
-	"claude-squad/ui/overlay"
+	"agent-farmer/config"
+	"agent-farmer/log"
+	"agent-farmer/session"
+	"agent-farmer/ui"
+	"agent-farmer/ui/overlay"
 	"context"
 	"fmt"
 	"os"
