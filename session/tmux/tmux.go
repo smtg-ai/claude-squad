@@ -405,7 +405,7 @@ func (t *TmuxSession) CapturePaneContent() (string, error) {
 	if !t.DoesSessionExist() {
 		return "", fmt.Errorf("tmux session '%s' does not exist", t.sanitizedName)
 	}
-	
+
 	// Add -e flag to preserve escape sequences (ANSI color codes)
 	cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-t", t.sanitizedName)
 	output, err := t.cmdExec.Output(cmd)

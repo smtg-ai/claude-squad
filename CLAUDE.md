@@ -72,7 +72,8 @@ Claude Squad is a terminal-based session manager for AI coding assistants. It us
 #### Prompt Input
 When entering prompts for name generation or sending to AI assistants:
 - `Ctrl+Enter` - Submit the prompt (recommended)
-- `Tab` - Switch focus to "Enter" button, then `Enter` to submit
+- `Tab` - Switch focus to "Submit" button, then `Enter` to submit
+- `Enter` - Add new line (carriage return) in the text area
 - `Esc` - Cancel and close the prompt dialog
 
 #### Navigation

@@ -59,9 +59,14 @@ func (t *TextInputOverlay) View() string {
 // HandleKeyPress processes a key press and updates the state accordingly.
 // Returns true if the overlay should be closed.
 func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
-	// Check for Ctrl+Enter first using string representation
-	if msg.String() == "ctrl+enter" {
-		// Ctrl+Enter submits the form regardless of focus
+	// Check for Ctrl+Enter submission (various representations)
+	keyStr := msg.String()
+	if msg.Type == tea.KeyCtrlJ ||     // Most common Ctrl+Enter on macOS/Linux terminals
+	   msg.Type == tea.KeyCtrlM ||     // Alternative Ctrl+Enter representation
+	   keyStr == "ctrl+enter" ||       // String representation
+	   keyStr == "ctrl+j" ||           // Alternative string representation
+	   keyStr == "ctrl+m" {            // Alternative string representation
+		// Submit the form regardless of focus
 		t.Submitted = true
 		if t.OnSubmit != nil {
 			t.OnSubmit()
@@ -157,14 +162,14 @@ func (t *TextInputOverlay) Render() string {
 	content := titleStyle.Render(t.Title) + "\n"
 	content += t.textarea.View() + "\n\n"
 
-	// Render enter button with appropriate style
-	enterButton := " Enter "
+	// Render submit button with appropriate style
+	submitButton := " Submit (Ctrl+Enter) "
 	if t.FocusIndex == 1 {
-		enterButton = focusedButtonStyle.Render(enterButton)
+		submitButton = focusedButtonStyle.Render(submitButton)
 	} else {
-		enterButton = buttonStyle.Render(enterButton)
+		submitButton = buttonStyle.Render(submitButton)
 	}
-	content += enterButton
+	content += submitButton
 
 	return style.Render(content)
 }

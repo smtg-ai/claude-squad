@@ -493,10 +493,23 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					instance.AutoYes = true
 				}
 
-				// Send the prompt to the instance
-				if err := instance.SendPrompt(prompt); err != nil {
-					return m, m.handleError(err)
-				}
+				// Close the overlay and reset state first
+				m.textInputOverlay = nil
+				m.state = stateDefault
+				m.menu.SetState(ui.StateDefault)
+
+				// Send the prompt after a brief delay to allow Claude to initialize
+				return m, tea.Sequence(
+					tea.WindowSize(),
+					m.instanceChanged(),
+					func() tea.Msg {
+						time.Sleep(1000 * time.Millisecond) // Give Claude time to start
+						if err := instance.SendPrompt(prompt); err != nil {
+							log.ErrorLog.Printf("Failed to send prompt: %v", err)
+						}
+						return nil
+					},
+				)
 			}
 
 			// Close the overlay and reset state
@@ -572,7 +585,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Initialize the text input overlay for prompt collection
 		m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt for new session", "")
 
-		return m, nil
+		return m, tea.WindowSize()
 	case keys.KeyUp:
 		m.list.Up()
 		return m, m.instanceChanged()
