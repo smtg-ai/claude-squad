@@ -38,6 +38,8 @@ const (
 	stateNew
 	// statePrompt is the state when the user is entering a prompt.
 	statePrompt
+	// statePromptForName is the state when collecting a prompt to generate a name.
+	statePromptForName
 	// stateHelp is the state when a help screen is displayed.
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
@@ -291,7 +293,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm {
+	if m.state == statePrompt || m.state == statePromptForName || m.state == stateHelp || m.state == stateConfirm {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -444,6 +446,73 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		return m, nil
+	} else if m.state == statePromptForName {
+		// Handle prompt collection for name generation
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+
+		// Check if the form was submitted or canceled
+		if shouldClose {
+			if m.textInputOverlay.IsSubmitted() {
+				// Form was submitted, generate name and create instance
+				prompt := m.textInputOverlay.GetValue()
+				if prompt == "" {
+					return m, m.handleError(fmt.Errorf("prompt cannot be empty"))
+				}
+
+				// Generate name using the prompt
+				generatedName, err := session.GenerateSessionName(prompt, nil)
+				if err != nil {
+					return m, m.handleError(fmt.Errorf("failed to generate session name: %w", err))
+				}
+
+				// Create the instance with the generated name
+				instance, err := session.NewInstance(session.InstanceOptions{
+					Title:   generatedName,
+					Path:    ".",
+					Program: m.program,
+				})
+				if err != nil {
+					return m, m.handleError(err)
+				}
+
+				// Start the instance
+				if err := instance.Start(true); err != nil {
+					return m, m.handleError(err)
+				}
+
+				// Add to list and save
+				m.newInstanceFinalizer = m.list.AddInstance(instance)
+				m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+				if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+					return m, m.handleError(err)
+				}
+
+				// Call the finalizer and set autoyes if needed
+				m.newInstanceFinalizer()
+				if m.autoYes {
+					instance.AutoYes = true
+				}
+
+				// Send the prompt to the instance
+				if err := instance.SendPrompt(prompt); err != nil {
+					return m, m.handleError(err)
+				}
+			}
+
+			// Close the overlay and reset state
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			return m, tea.Sequence(
+				tea.WindowSize(),
+				func() tea.Msg {
+					m.menu.SetState(ui.StateDefault)
+					return nil
+				},
+				m.instanceChanged(),
+			)
+		}
+
+		return m, nil
 	}
 
 	// Handle confirmation state
@@ -496,19 +565,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
-		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
-		})
-		if err != nil {
-			return m, m.handleError(err)
-		}
-
-		m.newInstanceFinalizer = m.list.AddInstance(instance)
-		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
-		m.state = stateNew
-		m.menu.SetState(ui.StateNewInstance)
+		
+		// Go to prompt collection state for name generation
+		m.state = statePromptForName
+		m.menu.SetState(ui.StatePrompt)
+		// Initialize the text input overlay for prompt collection
+		m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt for new session", "")
 
 		return m, nil
 	case keys.KeyUp:
@@ -738,7 +800,7 @@ func (m *home) View() string {
 		m.errBox.String(),
 	)
 
-	if m.state == statePrompt {
+	if m.state == statePrompt || m.state == statePromptForName {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
