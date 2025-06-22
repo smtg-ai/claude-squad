@@ -9,7 +9,6 @@ on:
       - 'go.sum'
       - '.github/workflows/lint.yml'
   pull_request:
-    branches: [ main ]
     paths:
       - '**.go'
       - 'go.mod'
