@@ -95,13 +95,6 @@ func DefaultConfig() *Config {
 		program = defaultProgram
 	}
 
-	gemini, err := GetGeminiCommand()
-	if err != nil {
-		log.ErrorLog.Printf("failed to get gemini command: %v", err)
-	} else {
-		program = gemini
-	}
-
 	return &Config{
 		DefaultProgram:     program,
 		AutoYes:            false,
