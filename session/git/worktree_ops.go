@@ -38,6 +38,12 @@ func (g *GitWorktree) SetupFromExistingBranch() error {
 		return fmt.Errorf("failed to create worktrees directory: %w", err)
 	}
 
+	// Ensure the parent directory of the worktree path exists
+	worktreeParent := filepath.Dir(g.worktreePath)
+	if err := os.MkdirAll(worktreeParent, 0755); err != nil {
+		return fmt.Errorf("failed to create worktree parent directory: %w", err)
+	}
+
 	// Clean up any existing worktree first
 	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath) // Ignore error if worktree doesn't exist
 
@@ -55,6 +61,12 @@ func (g *GitWorktree) SetupNewWorktree() error {
 	worktreesDir := filepath.Join(g.repoPath, "worktrees")
 	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
 		return fmt.Errorf("failed to create worktrees directory: %w", err)
+	}
+
+	// Ensure the parent directory of the worktree path exists
+	worktreeParent := filepath.Dir(g.worktreePath)
+	if err := os.MkdirAll(worktreeParent, 0755); err != nil {
+		return fmt.Errorf("failed to create worktree parent directory: %w", err)
 	}
 
 	// Clean up any existing worktree first
