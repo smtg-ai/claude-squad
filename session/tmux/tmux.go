@@ -222,7 +222,7 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 	} else if strings.HasPrefix(t.program, ProgramAider) {
 		hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
 	} else if strings.HasPrefix(t.program, ProgramGemini) {
-		hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
+		hasPrompt = strings.Contains(content, "Yes, allow once")
 	}
 
 	if !bytes.Equal(t.monitor.hash(content), t.monitor.prevOutputHash) {
