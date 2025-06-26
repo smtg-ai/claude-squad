@@ -23,6 +23,14 @@ gofmt -w .
 
 Please include tests for new features or bug fixes.
 
+### Adding a new AI assistant
+
+To add a new AI assistant, you'll need to:
+
+1.  Update `config/config.go` to detect the new assistant's command-line tool.
+2.  Update `session/tmux/tmux.go` to handle the new assistant's prompts.
+3.  Update `README.md` to include instructions for using the new assistant.
+
 ## Questions?
 
 Feel free to open an issue for any questions about contributing.
