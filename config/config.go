@@ -17,54 +17,6 @@ const (
 	defaultProgram = "claude"
 )
 
-// GetGeminiCommand attempts to find the "gemini" command in the user's shell
-// It checks in the following order:
-// 1. Shell alias resolution: using "which" command
-// 2. PATH lookup
-//
-// If both fail, it returns an error.
-func GetGeminiCommand() (string, error) {
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/bash" // Default to bash if SHELL is not set
-	}
-
-	// Force the shell to load the user's profile and then run the command
-	// For zsh, source .zshrc; for bash, source .bashrc
-	var shellCmd string
-	if strings.Contains(shell, "zsh") {
-		shellCmd = "source ~/.zshrc 2>/dev/null || true; which gemini"
-	} else if strings.Contains(shell, "bash") {
-		shellCmd = "source ~/.bashrc 2>/dev/null || true; which gemini"
-	} else {
-		shellCmd = "which gemini"
-	}
-
-	cmd := exec.Command(shell, "-c", shellCmd)
-	output, err := cmd.Output()
-	if err == nil && len(output) > 0 {
-		path := strings.TrimSpace(string(output))
-		if path != "" {
-			// Check if the output is an alias definition and extract the actual path
-			// Handle formats like "gemini: aliased to /path/to/gemini" or other shell-specific formats
-			aliasRegex := regexp.MustCompile(`(?:aliased to|->|=)\\s*([^\\s]+)`)
-			matches := aliasRegex.FindStringSubmatch(path)
-			if len(matches) > 1 {
-				path = matches[1]
-			}
-			return path, nil
-		}
-	}
-
-	// Otherwise, try to find in PATH directly
-	geminiPath, err := exec.LookPath("gemini")
-	if err == nil {
-		return geminiPath, nil
-	}
-
-	return "", fmt.Errorf("gemini command not found in aliases or PATH")
-}
-
 // GetConfigDir returns the path to the application's configuration directory
 func GetConfigDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
