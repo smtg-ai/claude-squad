@@ -22,6 +22,7 @@ import (
 const ProgramClaude = "claude"
 
 const ProgramAider = "aider"
+const ProgramGemini = "gemini"
 
 // TmuxSession represents a managed tmux session
 type TmuxSession struct {
@@ -128,7 +129,7 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("error restoring tmux session: %w", err)
 	}
 
-	if t.program == ProgramClaude || strings.HasPrefix(t.program, ProgramAider) {
+	if t.program == ProgramClaude || strings.HasPrefix(t.program, ProgramAider) || strings.HasPrefix(t.program, ProgramGemini) {
 		searchString := "Do you trust the files in this folder?"
 		tapFunc := t.TapEnter
 		iterations := 5
@@ -219,6 +220,8 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 	if t.program == ProgramClaude {
 		hasPrompt = strings.Contains(content, "No, and tell Claude what to do differently")
 	} else if strings.HasPrefix(t.program, ProgramAider) {
+		hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
+	} else if strings.HasPrefix(t.program, ProgramGemini) {
 		hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
 	}
 
