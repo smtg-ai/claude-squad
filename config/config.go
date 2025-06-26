@@ -65,7 +65,6 @@ func GetGeminiCommand() (string, error) {
 	return "", fmt.Errorf("gemini command not found in aliases or PATH")
 }
 
-
 // GetConfigDir returns the path to the application's configuration directory
 func GetConfigDir() (string, error) {
 	homeDir, err := os.UserHomeDir()
@@ -109,7 +108,6 @@ func DefaultConfig() *Config {
 		}(),
 	}
 }
-
 
 // GetClaudeCommand attempts to find the "claude" command in the user's shell
 // It checks in the following order:
