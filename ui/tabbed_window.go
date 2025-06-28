@@ -45,9 +45,10 @@ type Tab struct {
 type TabbedWindow struct {
 	tabs []string
 
-	activeTab int
-	height    int
-	width     int
+	activeTab      int
+	height         int
+	width          int
+	verticalLayout bool
 
 	preview *PreviewPane
 	diff    *DiffPane
@@ -59,8 +60,9 @@ func NewTabbedWindow(preview *PreviewPane, diff *DiffPane) *TabbedWindow {
 			"Preview",
 			"Diff",
 		},
-		preview: preview,
-		diff:    diff,
+		preview:        preview,
+		diff:           diff,
+		verticalLayout: false,
 	}
 }
 
@@ -70,7 +72,12 @@ func AdjustPreviewWidth(width int) int {
 }
 
 func (w *TabbedWindow) SetSize(width, height int) {
-	w.width = AdjustPreviewWidth(width)
+	// In vertical layout mode, use full width to match the list above
+	if w.verticalLayout {
+		w.width = width
+	} else {
+		w.width = AdjustPreviewWidth(width)
+	}
 	w.height = height
 
 	// Calculate the content height by subtracting:
@@ -87,6 +94,16 @@ func (w *TabbedWindow) SetSize(width, height int) {
 
 func (w *TabbedWindow) GetPreviewSize() (width, height int) {
 	return w.preview.width, w.preview.height
+}
+
+// SetVerticalLayout enables or disables vertical layout mode
+func (w *TabbedWindow) SetVerticalLayout(vertical bool) {
+	w.verticalLayout = vertical
+}
+
+// GetPreviewPane returns the preview pane
+func (w *TabbedWindow) GetPreviewPane() *PreviewPane {
+	return w.preview
 }
 
 func (w *TabbedWindow) Toggle() {
@@ -131,6 +148,55 @@ func (w *TabbedWindow) String() string {
 		return ""
 	}
 
+	// In vertical layout mode, show simplified tab indicator
+	if w.verticalLayout {
+		var content string
+		if w.activeTab == 0 {
+			content = w.preview.String()
+		} else {
+			content = w.diff.String()
+		}
+
+		// Create a simple tab indicator for mobile mode
+		tabIndicator := ""
+		for i, tabName := range w.tabs {
+			if i == w.activeTab {
+				// Active tab with highlight
+				tabIndicator += lipgloss.NewStyle().
+					Foreground(highlightColor).
+					Bold(true).
+					Render("● " + tabName)
+			} else {
+				// Inactive tab
+				tabIndicator += lipgloss.NewStyle().
+					Foreground(lipgloss.AdaptiveColor{Light: "#666666", Dark: "#888888"}).
+					Render("○ " + tabName)
+			}
+			if i < len(w.tabs)-1 {
+				tabIndicator += "  "
+			}
+		}
+
+		// Add tab switching hint
+		tabIndicator += lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#999999", Dark: "#666666"}).
+			Render(" (Tab to switch)")
+
+		// Simple border with tab indicator at top
+		simpleWindowStyle := lipgloss.NewStyle().
+			BorderForeground(highlightColor).
+			Border(lipgloss.NormalBorder(), true, true, true, true).
+			Width(w.width - 2).
+			Height(w.height - 3) // Leave space for tab indicator
+
+		// Combine tab indicator and content
+		return lipgloss.JoinVertical(lipgloss.Left,
+			lipgloss.NewStyle().Padding(0, 1).Render(tabIndicator),
+			simpleWindowStyle.Render(content),
+		)
+	}
+
+	// Original horizontal layout with tabs
 	var renderedTabs []string
 
 	tabWidth := w.width / len(w.tabs)

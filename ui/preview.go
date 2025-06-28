@@ -12,8 +12,9 @@ var previewPaneStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#dddddd"})
 
 type PreviewPane struct {
-	width  int
-	height int
+	width    int
+	height   int
+	hideLogo bool
 
 	previewState previewState
 }
@@ -36,10 +37,23 @@ func (p *PreviewPane) SetSize(width, maxHeight int) {
 
 // setFallbackState sets the preview state with fallback text and a message
 func (p *PreviewPane) setFallbackState(message string) {
-	p.previewState = previewState{
-		fallback: true,
-		text:     lipgloss.JoinVertical(lipgloss.Center, FallBackText, "", message),
+	if p.hideLogo {
+		// In mobile mode, just show the message without the logo
+		p.previewState = previewState{
+			fallback: true,
+			text:     message,
+		}
+	} else {
+		p.previewState = previewState{
+			fallback: true,
+			text:     lipgloss.JoinVertical(lipgloss.Center, FallBackText, "", message),
+		}
 	}
+}
+
+// SetHideLogo enables or disables the ASCII logo
+func (p *PreviewPane) SetHideLogo(hide bool) {
+	p.hideLogo = hide
 }
 
 // Updates the preview pane content with the tmux pane content

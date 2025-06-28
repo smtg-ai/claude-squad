@@ -48,6 +48,8 @@ type Menu struct {
 	state         MenuState
 	instance      *session.Instance
 	isInDiffTab   bool
+	compactMode   bool
+	verticalMode  bool // Track if we're in vertical/mobile layout
 
 	// keyDown is the key which is pressed. The default is -1.
 	keyDown keys.KeyName
@@ -62,6 +64,7 @@ func NewMenu() *Menu {
 		options:     defaultMenuOptions,
 		state:       StateEmpty,
 		isInDiffTab: false,
+		compactMode: false,
 		keyDown:     -1,
 	}
 }
@@ -98,6 +101,16 @@ func (m *Menu) SetInstance(instance *session.Instance) {
 func (m *Menu) SetInDiffTab(inDiffTab bool) {
 	m.isInDiffTab = inDiffTab
 	m.updateOptions()
+}
+
+// SetCompactMode enables or disables compact menu mode
+func (m *Menu) SetCompactMode(compact bool) {
+	m.compactMode = compact
+}
+
+// SetVerticalMode enables or disables vertical/mobile layout mode
+func (m *Menu) SetVerticalMode(vertical bool) {
+	m.verticalMode = vertical
 }
 
 // updateOptions updates the menu options based on current state and instance
@@ -190,32 +203,54 @@ func (m *Menu) String() string {
 			inActionGroup = i >= groups[1].start && i < groups[1].end
 		}
 
-		if inActionGroup {
-			s.WriteString(localActionStyle.Render(binding.Help().Key))
-			s.WriteString(" ")
-			s.WriteString(localActionStyle.Render(binding.Help().Desc))
+		// In compact mode, only show the key, not the description
+		if m.compactMode {
+			if inActionGroup {
+				s.WriteString(localActionStyle.Render(binding.Help().Key))
+			} else {
+				s.WriteString(localKeyStyle.Render(binding.Help().Key))
+			}
 		} else {
-			s.WriteString(localKeyStyle.Render(binding.Help().Key))
-			s.WriteString(" ")
-			s.WriteString(localDescStyle.Render(binding.Help().Desc))
+			// Normal mode: show key and description
+			if inActionGroup {
+				s.WriteString(localActionStyle.Render(binding.Help().Key))
+				s.WriteString(" ")
+				s.WriteString(localActionStyle.Render(binding.Help().Desc))
+			} else {
+				s.WriteString(localKeyStyle.Render(binding.Help().Key))
+				s.WriteString(" ")
+				s.WriteString(localDescStyle.Render(binding.Help().Desc))
+			}
 		}
 
 		// Add appropriate separator
 		if i != len(m.options)-1 {
-			isGroupEnd := false
-			for _, group := range groups {
-				if i == group.end-1 {
-					s.WriteString(sepStyle.Render(verticalSeparator))
-					isGroupEnd = true
-					break
+			if m.compactMode {
+				// In compact mode, use simple space separator
+				s.WriteString(" ")
+			} else {
+				isGroupEnd := false
+				for _, group := range groups {
+					if i == group.end-1 {
+						s.WriteString(sepStyle.Render(verticalSeparator))
+						isGroupEnd = true
+						break
+					}
 				}
-			}
-			if !isGroupEnd {
-				s.WriteString(sepStyle.Render(separator))
+				if !isGroupEnd {
+					s.WriteString(sepStyle.Render(separator))
+				}
 			}
 		}
 	}
 
 	centeredMenuText := menuStyle.Render(s.String())
+
+	// In vertical mode, use a more compact placement
+	if m.verticalMode {
+		// Use minimal height and top alignment for vertical mode
+		return lipgloss.Place(m.width, 1, lipgloss.Center, lipgloss.Top, centeredMenuText)
+	}
+
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, centeredMenuText)
 }
