@@ -77,9 +77,9 @@ func GetClaudeCommand() (string, error) {
 	// For zsh, source .zshrc; for bash, source .bashrc
 	var shellCmd string
 	if strings.Contains(shell, "zsh") {
-		shellCmd = "source ~/.zshrc 2>/dev/null || true; which claude"
+		shellCmd = "source ~/.zshrc &>/dev/null || true; which claude"
 	} else if strings.Contains(shell, "bash") {
-		shellCmd = "source ~/.bashrc 2>/dev/null || true; which claude"
+		shellCmd = "source ~/.bashrc &>/dev/null || true; which claude"
 	} else {
 		shellCmd = "which claude"
 	}
