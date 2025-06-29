@@ -7,8 +7,8 @@ import (
 	"claude-squad/daemon"
 	"claude-squad/log"
 	"claude-squad/session"
-	"claude-squad/session/git"
 	"claude-squad/session/tmux"
+	"claude-squad/session/vcs"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -43,7 +43,7 @@ var (
 				return fmt.Errorf("failed to get current directory: %w", err)
 			}
 
-			if !git.IsGitRepo(currentDir) {
+			if !vcs.IsGitRepo(currentDir) {
 				return fmt.Errorf("error: claude-squad must be run from within a git repository")
 			}
 
@@ -71,7 +71,7 @@ var (
 				log.ErrorLog.Printf("failed to stop daemon: %v", err)
 			}
 
-			return app.Run(ctx, program, autoYes)
+			return app.Run(ctx, program, autoYes, cfg.VCSType)
 		},
 	}
 
@@ -97,7 +97,7 @@ var (
 			}
 			fmt.Println("Tmux sessions have been cleaned up")
 
-			if err := git.CleanupWorktrees(); err != nil {
+			if err := vcs.GitCleanupWorktrees(); err != nil {
 				return fmt.Errorf("failed to cleanup worktrees: %w", err)
 			}
 			fmt.Println("Worktrees have been cleaned up")
@@ -135,7 +135,7 @@ var (
 		Short: "Print the version number of claude-squad",
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Printf("claude-squad version %s\n", version)
-			fmt.Printf("https://github.com/smtg-ai/claude-squad/releases/tag/v%s\n", version)
+			fmt.Printf("https://github.com/smtg-ai/claude_squad/releases/tag/v%s\n", version)
 		},
 	}
 )
