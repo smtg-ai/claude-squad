@@ -2,8 +2,8 @@ package session
 
 import (
 	"claude-squad/log"
-	"claude-squad/session/git"
 	"claude-squad/session/tmux"
+	"claude-squad/session/vcs"
 	"path/filepath"
 
 	"fmt"
@@ -28,6 +28,38 @@ const (
 )
 
 // Instance is a running instance of claude code.
+type GitWorktreeData struct {
+	RepoPath      string
+	WorktreePath  string
+	SessionName   string
+	BranchName    string
+	BaseCommitSHA string
+}
+
+type DiffStatsData struct {
+	FilesChanged int
+	Insertions   int
+	Deletions    int
+	Output       string
+}
+
+// InstanceData is the serializable form of an Instance
+type InstanceData struct {
+	Title     string
+	Path      string
+	Branch    string
+	Status    Status
+	Height    int
+	Width     int
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	Program   string
+	AutoYes   bool
+
+	Worktree  GitWorktreeData
+	DiffStats DiffStatsData
+}
+
 type Instance struct {
 	// Title is the title of the instance.
 	Title string
@@ -53,15 +85,15 @@ type Instance struct {
 	Prompt string
 
 	// DiffStats stores the current git diff statistics
-	diffStats *git.DiffStats
+	diffStats *vcs.DiffStats
 
 	// The below fields are initialized upon calling Start().
 
 	started bool
 	// tmuxSession is the tmux session for the instance.
 	tmuxSession *tmux.TmuxSession
-	// gitWorktree is the git worktree for the instance.
-	gitWorktree *git.GitWorktree
+	// vcs is the version control system for the instance.
+	vcs vcs.VCS
 }
 
 // ToInstanceData converts an Instance to its serializable form
@@ -80,22 +112,23 @@ func (i *Instance) ToInstanceData() InstanceData {
 	}
 
 	// Only include worktree data if gitWorktree is initialized
-	if i.gitWorktree != nil {
+	if i.vcs != nil {
 		data.Worktree = GitWorktreeData{
-			RepoPath:      i.gitWorktree.GetRepoPath(),
-			WorktreePath:  i.gitWorktree.GetWorktreePath(),
+			RepoPath:      i.vcs.GetRepoPath(),
+			WorktreePath:  i.vcs.GetWorktreePath(),
 			SessionName:   i.Title,
-			BranchName:    i.gitWorktree.GetBranchName(),
-			BaseCommitSHA: i.gitWorktree.GetBaseCommitSHA(),
+			BranchName:    i.vcs.GetBranchName(),
+			BaseCommitSHA: i.vcs.GetBaseCommitSHA(),
 		}
 	}
 
 	// Only include diff stats if they exist
 	if i.diffStats != nil {
 		data.DiffStats = DiffStatsData{
-			Added:   i.diffStats.Added,
-			Removed: i.diffStats.Removed,
-			Content: i.diffStats.Content,
+			FilesChanged: i.diffStats.FilesChanged,
+			Insertions:   i.diffStats.Insertions,
+			Deletions:    i.diffStats.Deletions,
+			Output:       i.diffStats.Output,
 		}
 	}
 
@@ -114,17 +147,18 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		CreatedAt: data.CreatedAt,
 		UpdatedAt: data.UpdatedAt,
 		Program:   data.Program,
-		gitWorktree: git.NewGitWorktreeFromStorage(
+		vcs: vcs.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,
 			data.Worktree.SessionName,
 			data.Worktree.BranchName,
 			data.Worktree.BaseCommitSHA,
 		),
-		diffStats: &git.DiffStats{
-			Added:   data.DiffStats.Added,
-			Removed: data.DiffStats.Removed,
-			Content: data.DiffStats.Content,
+		diffStats: &vcs.DiffStats{
+			FilesChanged: data.DiffStats.FilesChanged,
+			Insertions:   data.DiffStats.Insertions,
+			Deletions:    data.DiffStats.Deletions,
+			Output:       data.DiffStats.Output,
 		},
 	}
 
@@ -150,6 +184,8 @@ type InstanceOptions struct {
 	Program string
 	// If AutoYes is true, then
 	AutoYes bool
+	// VCSType is the type of VCS to use (e.g., "git", "jujutsu").
+	VCSType string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -159,6 +195,22 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 	absPath, err := filepath.Abs(opts.Path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	var vcsInstance vcs.VCS
+	switch opts.VCSType {
+	case "git":
+		vcsInstance, _, err = vcs.NewGitWorktree(absPath, opts.Title)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create git VCS instance: %w", err)
+		}
+	case "jujutsu":
+		vcsInstance, _, err = vcs.NewJujutsuVCS(absPath, opts.Title)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create jujutsu VCS instance: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported VCS type: %s", opts.VCSType)
 	}
 
 	return &Instance{
@@ -171,6 +223,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		CreatedAt: t,
 		UpdatedAt: t,
 		AutoYes:   false,
+		vcs:       vcsInstance,
 	}, nil
 }
 
@@ -178,7 +231,7 @@ func (i *Instance) RepoName() (string, error) {
 	if !i.started {
 		return "", fmt.Errorf("cannot get repo name for instance that has not been started")
 	}
-	return i.gitWorktree.GetRepoName(), nil
+	return i.vcs.GetRepoName(), nil
 }
 
 func (i *Instance) SetStatus(status Status) {
@@ -195,11 +248,11 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	i.tmuxSession = tmuxSession
 
 	if firstTimeSetup {
-		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
+		vcsInstance, branchName, err := vcs.NewGitWorktree(i.Path, i.Title)
 		if err != nil {
-			return fmt.Errorf("failed to create git worktree: %w", err)
+			return fmt.Errorf("failed to create VCS worktree: %w", err)
 		}
-		i.gitWorktree = gitWorktree
+		i.vcs = vcsInstance
 		i.Branch = branchName
 	}
 
@@ -223,15 +276,15 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 	} else {
 		// Setup git worktree first
-		if err := i.gitWorktree.Setup(); err != nil {
-			setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
+		if err := i.vcs.Setup(); err != nil {
+			setupErr = fmt.Errorf("failed to setup VCS worktree: %w", err)
 			return setupErr
 		}
 
 		// Create new session
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
-			// Cleanup git worktree if tmux session creation fails
-			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
+		if err := i.tmuxSession.Start(i.vcs.GetWorktreePath()); err != nil {
+			// Cleanup VCS worktree if tmux session creation fails
+			if cleanupErr := i.vcs.Cleanup(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
 			}
 			setupErr = fmt.Errorf("failed to start new session: %w", err)
@@ -262,9 +315,9 @@ func (i *Instance) Kill() error {
 	}
 
 	// Then clean up git worktree
-	if i.gitWorktree != nil {
-		if err := i.gitWorktree.Cleanup(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to cleanup git worktree: %w", err))
+	if i.vcs != nil {
+		if err := i.vcs.Cleanup(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to cleanup VCS worktree: %w", err))
 		}
 	}
 
@@ -334,12 +387,9 @@ func (i *Instance) SetPreviewSize(width, height int) error {
 	return i.tmuxSession.SetDetachedSize(width, height)
 }
 
-// GetGitWorktree returns the git worktree for the instance
-func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {
-	if !i.started {
-		return nil, fmt.Errorf("cannot get git worktree for instance that has not been started")
-	}
-	return i.gitWorktree, nil
+// GetVCS returns the VCS for the instance
+func (i *Instance) GetVCS() vcs.VCS {
+	return i.vcs
 }
 
 func (i *Instance) Started() bool {
@@ -377,13 +427,13 @@ func (i *Instance) Pause() error {
 	var errs []error
 
 	// Check if there are any changes to commit
-	if dirty, err := i.gitWorktree.IsDirty(); err != nil {
+	if dirty, err := i.vcs.IsDirty(); err != nil {
 		errs = append(errs, fmt.Errorf("failed to check if worktree is dirty: %w", err))
 		log.ErrorLog.Print(err)
 	} else if dirty {
 		// Commit changes locally (without pushing to GitHub)
 		commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s (paused)", i.Title, time.Now().Format(time.RFC822))
-		if err := i.gitWorktree.CommitChanges(commitMsg); err != nil {
+		if err := i.vcs.CommitChanges(commitMsg); err != nil {
 			errs = append(errs, fmt.Errorf("failed to commit changes: %w", err))
 			log.ErrorLog.Print(err)
 			// Return early if we can't commit changes to avoid corrupted state
@@ -400,17 +450,17 @@ func (i *Instance) Pause() error {
 	}
 
 	// Check if worktree exists before trying to remove it
-	if _, err := os.Stat(i.gitWorktree.GetWorktreePath()); err == nil {
+	if _, err := os.Stat(i.vcs.GetWorktreePath()); err == nil {
 		// Remove worktree but keep branch
-		if err := i.gitWorktree.Remove(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to remove git worktree: %w", err))
+		if err := i.vcs.Remove(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to remove VCS worktree: %w", err))
 			log.ErrorLog.Print(err)
 			return i.combineErrors(errs)
 		}
 
 		// Only prune if remove was successful
-		if err := i.gitWorktree.Prune(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to prune git worktrees: %w", err))
+		if err := i.vcs.Prune(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to prune VCS worktrees: %w", err))
 			log.ErrorLog.Print(err)
 			return i.combineErrors(errs)
 		}
@@ -422,7 +472,7 @@ func (i *Instance) Pause() error {
 	}
 
 	i.SetStatus(Paused)
-	_ = clipboard.WriteAll(i.gitWorktree.GetBranchName())
+	_ = clipboard.WriteAll(i.vcs.GetBranchName())
 	return nil
 }
 
@@ -436,24 +486,24 @@ func (i *Instance) Resume() error {
 	}
 
 	// Check if branch is checked out
-	if checked, err := i.gitWorktree.IsBranchCheckedOut(); err != nil {
+	if checked, err := i.vcs.IsBranchCheckedOut(); err != nil {
 		log.ErrorLog.Print(err)
 		return fmt.Errorf("failed to check if branch is checked out: %w", err)
 	} else if checked {
 		return fmt.Errorf("cannot resume: branch is checked out, please switch to a different branch")
 	}
 
-	// Setup git worktree
-	if err := i.gitWorktree.Setup(); err != nil {
+	// Setup VCS worktree
+	if err := i.vcs.Setup(); err != nil {
 		log.ErrorLog.Print(err)
-		return fmt.Errorf("failed to setup git worktree: %w", err)
+		return fmt.Errorf("failed to setup VCS worktree: %w", err)
 	}
 
 	// Create new tmux session
-	if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+	if err := i.tmuxSession.Start(i.vcs.GetWorktreePath()); err != nil {
 		log.ErrorLog.Print(err)
-		// Cleanup git worktree if tmux session creation fails
-		if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
+		// Cleanup VCS worktree if tmux session creation fails
+		if cleanupErr := i.vcs.Cleanup(); cleanupErr != nil {
 			err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
 			log.ErrorLog.Print(err)
 		}
@@ -476,14 +526,11 @@ func (i *Instance) UpdateDiffStats() error {
 		return nil
 	}
 
-	stats := i.gitWorktree.Diff()
-	if stats.Error != nil {
-		if strings.Contains(stats.Error.Error(), "base commit SHA not set") {
-			// Worktree is not fully set up yet, not an error
-			i.diffStats = nil
-			return nil
-		}
-		return fmt.Errorf("failed to get diff stats: %w", stats.Error)
+	stats := i.vcs.Diff()
+	if stats.Output != "Jujutsu VCS is not yet implemented" && strings.Contains(stats.Output, "base commit SHA not set") {
+		// Worktree is not fully set up yet, not an error
+		i.diffStats = nil
+		return nil
 	}
 
 	i.diffStats = stats
@@ -491,7 +538,7 @@ func (i *Instance) UpdateDiffStats() error {
 }
 
 // GetDiffStats returns the current git diff statistics
-func (i *Instance) GetDiffStats() *git.DiffStats {
+func (i *Instance) GetDiffStats() *vcs.DiffStats {
 	return i.diffStats
 }
 

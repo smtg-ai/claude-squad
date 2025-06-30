@@ -86,10 +86,10 @@ func (d *DiffPane) SetDiff(instance *session.Instance) {
 		d.diff = ""
 		d.viewport.SetContent(centeredFallbackMessage)
 	} else {
-		additions := AdditionStyle.Render(fmt.Sprintf("%d additions(+)", stats.Added))
-		deletions := DeletionStyle.Render(fmt.Sprintf("%d deletions(-)", stats.Removed))
+		additions := AdditionStyle.Render(fmt.Sprintf("%d additions(+)", stats.Insertions))
+		deletions := DeletionStyle.Render(fmt.Sprintf("%d deletions(-)", stats.Deletions))
 		d.stats = lipgloss.JoinHorizontal(lipgloss.Center, additions, " ", deletions)
-		d.diff = colorizeDiff(stats.Content)
+		d.diff = colorizeDiff(stats.Output)
 		d.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, d.stats, d.diff))
 	}
 }

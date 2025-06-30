@@ -1,15 +1,17 @@
 package app
 
 import (
-	"claude-squad/config"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/ui"
-	"claude-squad/ui/overlay"
 	"context"
+	"claude-squad/config"
 	"fmt"
 	"os"
+	"os/exec"
 	"testing"
+
+	"claude-squad/ui"
+	"claude-squad/ui/overlay"
+	"claude-squad/log"
+	"claude-squad/session"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -233,11 +235,16 @@ func TestConfirmationFlowSimulation(t *testing.T) {
 	list := ui.NewList(&spinner, false)
 
 	// Add test instance
+	tempDir := t.TempDir()
+	_, err := exec.Command("git", "init", tempDir).CombinedOutput()
+		require.NoError(t, err)
+
 	instance, err := session.NewInstance(session.InstanceOptions{
 		Title:   "test-session",
-		Path:    t.TempDir(),
+		Path:    tempDir,
 		Program: "claude",
 		AutoYes: false,
+		VCSType: "git",
 	})
 	require.NoError(t, err)
 	_ = list.AddInstance(instance)

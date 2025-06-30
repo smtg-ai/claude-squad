@@ -4,41 +4,7 @@ import (
 	"claude-squad/config"
 	"encoding/json"
 	"fmt"
-	"time"
 )
-
-// InstanceData represents the serializable data of an Instance
-type InstanceData struct {
-	Title     string    `json:"title"`
-	Path      string    `json:"path"`
-	Branch    string    `json:"branch"`
-	Status    Status    `json:"status"`
-	Height    int       `json:"height"`
-	Width     int       `json:"width"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	AutoYes   bool      `json:"auto_yes"`
-
-	Program   string          `json:"program"`
-	Worktree  GitWorktreeData `json:"worktree"`
-	DiffStats DiffStatsData   `json:"diff_stats"`
-}
-
-// GitWorktreeData represents the serializable data of a GitWorktree
-type GitWorktreeData struct {
-	RepoPath      string `json:"repo_path"`
-	WorktreePath  string `json:"worktree_path"`
-	SessionName   string `json:"session_name"`
-	BranchName    string `json:"branch_name"`
-	BaseCommitSHA string `json:"base_commit_sha"`
-}
-
-// DiffStatsData represents the serializable data of a DiffStats
-type DiffStatsData struct {
-	Added   int    `json:"added"`
-	Removed int    `json:"removed"`
-	Content string `json:"content"`
-}
 
 // Storage handles saving and loading instances using the state interface
 type Storage struct {
@@ -56,9 +22,9 @@ func NewStorage(state config.InstanceStorage) (*Storage, error) {
 func (s *Storage) SaveInstances(instances []*Instance) error {
 	// Convert instances to InstanceData
 	data := make([]InstanceData, 0)
-	for _, instance := range instances {
-		if instance.Started() {
-			data = append(data, instance.ToInstanceData())
+	for _, inst := range instances {
+		if inst.Started() {
+			data = append(data, inst.ToInstanceData())
 		}
 	}
 
@@ -82,11 +48,11 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 
 	instances := make([]*Instance, len(instancesData))
 	for i, data := range instancesData {
-		instance, err := FromInstanceData(data)
+		inst, err := FromInstanceData(data)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create instance %s: %w", data.Title, err)
 		}
-		instances[i] = instance
+		instances[i] = inst
 	}
 
 	return instances, nil
@@ -101,10 +67,10 @@ func (s *Storage) DeleteInstance(title string) error {
 
 	found := false
 	newInstances := make([]*Instance, 0)
-	for _, instance := range instances {
-		data := instance.ToInstanceData()
+	for _, inst := range instances {
+		data := inst.ToInstanceData()
 		if data.Title != title {
-			newInstances = append(newInstances, instance)
+			newInstances = append(newInstances, inst)
 		} else {
 			found = true
 		}

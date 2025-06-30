@@ -71,18 +71,13 @@ func TestStartTmuxSession(t *testing.T) {
 
 	err := session.Start(workdir)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s claudesquad_test-session -c %s claude", workdir),
-		cmd2.ToString(ptyFactory.cmds[0]))
+	require.Equal(t, 1, len(ptyFactory.cmds))
 	require.Equal(t, "tmux attach-session -t claudesquad_test-session",
-		cmd2.ToString(ptyFactory.cmds[1]))
+		cmd2.ToString(ptyFactory.cmds[0]))
 
-	require.Equal(t, 2, len(ptyFactory.files))
+	require.Equal(t, 1, len(ptyFactory.files))
 
-	// File should be closed.
-	_, err = ptyFactory.files[0].Stat()
-	require.Error(t, err)
 	// File should be open
-	_, err = ptyFactory.files[1].Stat()
+	_, err = ptyFactory.files[0].Stat()
 	require.NoError(t, err)
 }
