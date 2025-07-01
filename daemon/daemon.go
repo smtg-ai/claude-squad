@@ -1,9 +1,6 @@
 package daemon
 
 import (
-	"claude-squad/config"
-	"claude-squad/log"
-	"claude-squad/session"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +9,10 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/smtg-ai/claude-squad/config"
+	"github.com/smtg-ai/claude-squad/log"
+	"github.com/smtg-ai/claude-squad/session"
 )
 
 // RunDaemon runs the daemon process which iterates over all sessions and runs AutoYes mode on them.

@@ -1,16 +1,17 @@
 package app
 
 import (
-	"claude-squad/config"
-	"claude-squad/keys"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/ui"
-	"claude-squad/ui/overlay"
 	"context"
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/smtg-ai/claude-squad/config"
+	"github.com/smtg-ai/claude-squad/keys"
+	"github.com/smtg-ai/claude-squad/log"
+	"github.com/smtg-ai/claude-squad/session"
+	"github.com/smtg-ai/claude-squad/ui"
+	"github.com/smtg-ai/claude-squad/ui/overlay"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"

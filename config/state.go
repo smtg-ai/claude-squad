@@ -1,11 +1,12 @@
 package config
 
 import (
-	"claude-squad/log"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/smtg-ai/claude-squad/log"
 )
 
 const (

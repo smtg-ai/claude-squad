@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"claude-squad/session"
+	"github.com/smtg-ai/claude-squad/session"
 
 	"github.com/charmbracelet/lipgloss"
 )
