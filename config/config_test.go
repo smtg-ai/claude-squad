@@ -1,12 +1,13 @@
 package config
 
 import (
-	"claude-squad/log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/smtg-ai/claude-squad/log"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

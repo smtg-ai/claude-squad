@@ -1,11 +1,12 @@
 package app
 
 import (
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/ui"
-	"claude-squad/ui/overlay"
 	"fmt"
+
+	"github.com/smtg-ai/claude-squad/log"
+	"github.com/smtg-ai/claude-squad/session"
+	"github.com/smtg-ai/claude-squad/ui"
+	"github.com/smtg-ai/claude-squad/ui/overlay"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"

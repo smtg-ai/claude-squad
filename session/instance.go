@@ -1,10 +1,11 @@
 package session
 
 import (
-	"claude-squad/log"
-	"claude-squad/session/git"
-	"claude-squad/session/tmux"
 	"path/filepath"
+
+	"github.com/smtg-ai/claude-squad/log"
+	"github.com/smtg-ai/claude-squad/session/git"
+	"github.com/smtg-ai/claude-squad/session/tmux"
 
 	"fmt"
 	"os"

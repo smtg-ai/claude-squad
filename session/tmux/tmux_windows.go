@@ -3,9 +3,10 @@
 package tmux
 
 import (
-	"claude-squad/log"
 	"os"
 	"time"
+
+	"github.com/smtg-ai/claude-squad/log"
 
 	"golang.org/x/term"
 )

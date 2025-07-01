@@ -1,10 +1,11 @@
 package session
 
 import (
-	"claude-squad/config"
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/smtg-ai/claude-squad/config"
 )
 
 // InstanceData represents the serializable data of an Instance

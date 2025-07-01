@@ -1,7 +1,6 @@
 package tmux
 
 import (
-	cmd2 "claude-squad/cmd"
 	"fmt"
 	"math/rand"
 	"os"
@@ -10,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"claude-squad/cmd/cmd_test"
+	cmd2 "github.com/smtg-ai/claude-squad/cmd"
+
+	"github.com/smtg-ai/claude-squad/cmd/cmd_test"
 
 	"github.com/stretchr/testify/require"
 )

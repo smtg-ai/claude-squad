@@ -1,18 +1,19 @@
 package main
 
 import (
-	"claude-squad/app"
-	cmd2 "claude-squad/cmd"
-	"claude-squad/config"
-	"claude-squad/daemon"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/session/git"
-	"claude-squad/session/tmux"
 	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+
+	"github.com/smtg-ai/claude-squad/app"
+	cmd2 "github.com/smtg-ai/claude-squad/cmd"
+	"github.com/smtg-ai/claude-squad/config"
+	"github.com/smtg-ai/claude-squad/daemon"
+	"github.com/smtg-ai/claude-squad/log"
+	"github.com/smtg-ai/claude-squad/session"
+	"github.com/smtg-ai/claude-squad/session/git"
+	"github.com/smtg-ai/claude-squad/session/tmux"
 
 	"github.com/spf13/cobra"
 )

@@ -2,8 +2,6 @@ package tmux
 
 import (
 	"bytes"
-	"claude-squad/cmd"
-	"claude-squad/log"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -15,6 +13,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/smtg-ai/claude-squad/cmd"
+	"github.com/smtg-ai/claude-squad/log"
 
 	"github.com/creack/pty"
 )

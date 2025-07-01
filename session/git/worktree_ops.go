@@ -1,12 +1,13 @@
 package git
 
 import (
-	"claude-squad/log"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/smtg-ai/claude-squad/log"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"

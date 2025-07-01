@@ -1,9 +1,10 @@
 package ui
 
 import (
-	"claude-squad/session"
 	"fmt"
 	"strings"
+
+	"github.com/smtg-ai/claude-squad/session"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"

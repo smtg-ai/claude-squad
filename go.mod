@@ -1,8 +1,6 @@
-module claude-squad
+module github.com/smtg-ai/claude-squad
 
-go 1.23.0
-
-toolchain go1.24.1
+go 1.24.1
 
 require (
 	github.com/atotto/clipboard v0.1.4
@@ -15,11 +13,14 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 	github.com/muesli/reflow v0.3.0
 	github.com/muesli/termenv v0.15.2
+	github.com/smtg-ai/claude-squad/log v0.0.0 // dummy version which gets replaced below
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/sys v0.31.0
 	golang.org/x/term v0.30.0
 )
+
+replace github.com/smtg-ai/claude-squad/log => ./log
 
 require (
 	dario.cat/mergo v1.0.0 // indirect

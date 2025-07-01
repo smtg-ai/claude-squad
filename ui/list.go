@@ -1,11 +1,12 @@
 package ui
 
 import (
-	"claude-squad/log"
-	"claude-squad/session"
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/smtg-ai/claude-squad/log"
+	"github.com/smtg-ai/claude-squad/session"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
