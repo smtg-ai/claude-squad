@@ -618,8 +618,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 func (m *home) instanceChanged() tea.Cmd {
 	// selected may be nil
 	selected := m.list.GetSelectedInstance()
+	if selected != nil && selected.Started() {
+		stats := selected.GetDiffStats()
+		m.tabbedWindow.UpdateDiff(false, stats != nil, stats)
+	} else {
+		m.tabbedWindow.UpdateDiff(false, false, nil)
+	}
 
-	m.tabbedWindow.UpdateDiff(selected)
 	// Update menu with current instance
 	m.menu.SetInstance(selected)
 

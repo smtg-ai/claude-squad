@@ -93,9 +93,9 @@ func (i *Instance) ToInstanceData() InstanceData {
 	// Only include diff stats if they exist
 	if i.diffStats != nil {
 		data.DiffStats = DiffStatsData{
-			Added:   i.diffStats.Added,
-			Removed: i.diffStats.Removed,
-			Content: i.diffStats.Content,
+			Added:   i.diffStats.Added(),
+			Removed: i.diffStats.Removed(),
+			Content: i.diffStats.Content(),
 		}
 	}
 
@@ -121,11 +121,12 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 			data.Worktree.BranchName,
 			data.Worktree.BaseCommitSHA,
 		),
-		diffStats: &git.DiffStats{
-			Added:   data.DiffStats.Added,
-			Removed: data.DiffStats.Removed,
-			Content: data.DiffStats.Content,
-		},
+		diffStats: git.NewDiffStats(
+			data.DiffStats.Content,
+			data.DiffStats.Added,
+			data.DiffStats.Removed,
+			nil,
+		),
 	}
 
 	if instance.Paused() {
@@ -477,8 +478,8 @@ func (i *Instance) UpdateDiffStats() error {
 	}
 
 	stats := i.gitWorktree.Diff()
-	if stats.Error != nil {
-		if strings.Contains(stats.Error.Error(), "base commit SHA not set") {
+	if stats.Error() != nil {
+		if strings.Contains(stats.Error().Error(), "base commit SHA not set") {
 			// Worktree is not fully set up yet, not an error
 			i.diffStats = nil
 			return nil

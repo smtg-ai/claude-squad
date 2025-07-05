@@ -1,13 +1,25 @@
 package ui
 
 import (
-	"claude-squad/session"
 	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 )
+
+type DiffStats interface {
+	// Error returns an error if the diff could not be read.
+	Error() error
+	// IsEmpty returns true if the below fields are empty.
+	IsEmpty() bool
+	// Content stores the diff content.
+	Content() string
+	// Added is the nubmer of lines added.
+	Added() int
+	// Removed is the nubmer of lines removed.
+	Removed() int
+}
 
 var (
 	AdditionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#22c55e"))
@@ -40,7 +52,7 @@ func (d *DiffPane) SetSize(width, height int) {
 	}
 }
 
-func (d *DiffPane) SetDiff(instance *session.Instance) {
+func (d *DiffPane) SetDiff(hasInstances bool, diffIsValid bool, stats DiffStats) {
 	centeredFallbackMessage := lipgloss.Place(
 		d.width,
 		d.height,
@@ -48,15 +60,17 @@ func (d *DiffPane) SetDiff(instance *session.Instance) {
 		lipgloss.Center,
 		"No changes",
 	)
-
-	if instance == nil || !instance.Started() {
-		d.viewport.SetContent(centeredFallbackMessage)
+	if !hasInstances {
+		d.viewport.SetContent(lipgloss.Place(
+			d.width,
+			d.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			"No changes",
+		))
 		return
 	}
-
-	stats := instance.GetDiffStats()
-	if stats == nil {
-		// Show loading message if worktree is not ready
+	if !diffIsValid {
 		centeredMessage := lipgloss.Place(
 			d.width,
 			d.height,
@@ -68,7 +82,7 @@ func (d *DiffPane) SetDiff(instance *session.Instance) {
 		return
 	}
 
-	if stats.Error != nil {
+	if stats.Error() != nil {
 		// Show error message
 		centeredMessage := lipgloss.Place(
 			d.width,
@@ -85,13 +99,14 @@ func (d *DiffPane) SetDiff(instance *session.Instance) {
 		d.stats = ""
 		d.diff = ""
 		d.viewport.SetContent(centeredFallbackMessage)
-	} else {
-		additions := AdditionStyle.Render(fmt.Sprintf("%d additions(+)", stats.Added))
-		deletions := DeletionStyle.Render(fmt.Sprintf("%d deletions(-)", stats.Removed))
-		d.stats = lipgloss.JoinHorizontal(lipgloss.Center, additions, " ", deletions)
-		d.diff = colorizeDiff(stats.Content)
-		d.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, d.stats, d.diff))
+		return
 	}
+
+	additions := AdditionStyle.Render(fmt.Sprintf("%d additions(+)", stats.Added()))
+	deletions := DeletionStyle.Render(fmt.Sprintf("%d deletions(-)", stats.Removed()))
+	d.stats = lipgloss.JoinHorizontal(lipgloss.Center, additions, " ", deletions)
+	d.diff = colorizeDiff(stats.Content())
+	d.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, d.stats, d.diff))
 }
 
 func (d *DiffPane) String() string {

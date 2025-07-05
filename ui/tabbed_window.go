@@ -101,11 +101,15 @@ func (w *TabbedWindow) UpdatePreview(instance *session.Instance) error {
 	return w.preview.UpdateContent(instance)
 }
 
-func (w *TabbedWindow) UpdateDiff(instance *session.Instance) {
+// UpdateDiff updates the content of the diff pane.
+// hasInstances is true if there are any instances running in the app.
+// diffIsvalid is true if the diff stats are valid. An instance may exist but the diff stats may be nil.
+// If hasInstances and diffIsvalid, only then is it safe to use the diff.
+func (w *TabbedWindow) UpdateDiff(hasInstances bool, diffIsvalid bool, diff DiffStats) {
 	if w.activeTab != DiffTab {
 		return
 	}
-	w.diff.SetDiff(instance)
+	w.diff.SetDiff(hasInstances, diffIsvalid, diff)
 }
 
 // Add these new methods for handling scroll events
