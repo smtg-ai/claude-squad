@@ -117,7 +117,7 @@ The menu at the bottom of the screen shows available commands:
 
 ### License
 
-[AGPL-3.0](LICENSE.md)
+[Commons Clause + Apache 2.0](LICENSE.md)
 
 ### Star History
 
