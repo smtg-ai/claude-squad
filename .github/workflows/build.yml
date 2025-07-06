@@ -28,24 +28,24 @@ jobs:
           - goos: windows
             goarch: arm64
 
+    # submodules: https://github.com/actions/checkout/issues/287#issuecomment-707304140
     steps:
     - name: clone claude-squad
       uses: actions/checkout@v4
       with:
          submodules: false
 
-    # https://github.com/actions/checkout/issues/287#issuecomment-3018957939
-    - name: Setup SSH for submodules
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.CLAUDE_SQUAD_PRO_READONLY_DEPLOY_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan github.com >> ~/.ssh/known_hosts
+    - name: clone claude-squad-pro
+      uses: actions/checkout@v2
+      with:
+        repository: smtg-ai/claude-squad-pro
+        path: pro
+        ssh-key: ${{ secrets.CLAUDE_SQUAD_PRO_READONLY_DEPLOY_KEY }}
+        persist-credentials: true
 
-    - name: Init and update submodules
+    - name: checkout right version of claude-squad-pro
       run: |
-       git submodule sync
-       git submodule update --init --recursive
+        git submodule update --init --recursive
 
     - name: Set up Go
       uses: actions/setup-go@v4
