@@ -40,6 +40,7 @@ jobs:
       with:
         repository: smtg-ai/claude-squad-pro
         path: pro
+        ref: main
         ssh-key: ${{ secrets.CLAUDE_SQUAD_PRO_READONLY_DEPLOY_KEY }}
         persist-credentials: true
 
