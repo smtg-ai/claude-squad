@@ -28,25 +28,14 @@ jobs:
           - goos: windows
             goarch: arm64
 
-    # submodules: https://github.com/actions/checkout/issues/287#issuecomment-707304140
+    # Not using a PAT does not work. I tried deploy keys and no dice. https://github.com/actions/checkout/issues/287
+    # I went with this solution: https://dbushell.com/2024/07/19/github-private-submodules/
     steps:
-    - name: clone claude-squad
+    - name: checkout claude-squad with pro submodule
       uses: actions/checkout@v4
       with:
-         submodules: false
-
-    - name: clone claude-squad-pro
-      uses: actions/checkout@v2
-      with:
-        repository: smtg-ai/claude-squad-pro
-        path: pro
-        ref: main
-        ssh-key: ${{ secrets.CLAUDE_SQUAD_PRO_READONLY_DEPLOY_KEY }}
-        persist-credentials: true
-
-    - name: checkout right version of claude-squad-pro
-      run: |
-        git submodule update --init --recursive
+         submodules: recursive
+         token: ${{ secrets.CLAUDE_SQUAD_PRO_PAT }}
 
     - name: Set up Go
       uses: actions/setup-go@v4
