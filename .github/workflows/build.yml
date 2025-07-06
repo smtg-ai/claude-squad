@@ -30,13 +30,13 @@ jobs:
 
     # submodules: https://github.com/actions/checkout/issues/287#issuecomment-707304140
     steps:
-    - name: clone claude-squad
+    - name: checkout claude-squad
       uses: actions/checkout@v4
       with:
          submodules: false
 
-    - name: clone claude-squad-pro
-      uses: actions/checkout@v2
+    - name: checkout claude-squad-pro
+      uses: actions/checkout@v4
       with:
         repository: smtg-ai/claude-squad-pro
         path: pro
@@ -71,7 +71,7 @@ jobs:
     - name: Run tests (Pro)
       run: |
         ./inline_pro_files.sh
-        go test -v ./...
+        go test -v -tags=pro ./...
 
     - name: Build (Pro)
       env:
@@ -83,7 +83,7 @@ jobs:
           BINARY_NAME=$BINARY_NAME.exe
         fi
         ./inline_pro_files.sh
-        go build -v -flags=pro -o build/${{ matrix.goos }}_${{ matrix.goarch }}/$BINARY_NAME
+        go build -v -tags=pro -o build/${{ matrix.goos }}_${{ matrix.goarch }}/$BINARY_NAME
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
