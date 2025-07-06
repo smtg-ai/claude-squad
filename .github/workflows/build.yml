@@ -29,7 +29,18 @@ jobs:
             goarch: arm64
 
     steps:
-    - uses: actions/checkout@v4
+    - name: clone claude-squad
+      uses: actions/checkout@v4
+
+    - name: clone claude-squad-pro
+      uses: actions/checkout@v4
+      with:
+        repository: smtg-ai/claude-squad-pro
+        path: pro
+        ssh-key: ${{ secrets.CLAUDE_SQUAD_PRO_READONLY_DEPLOY_KEY }}
+        ssh-known-hosts: github.com
+        ref: main
+        persist-credentials: false
 
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -50,6 +61,23 @@ jobs:
           BINARY_NAME=$BINARY_NAME.exe
         fi
         go build -v -o build/${{ matrix.goos }}_${{ matrix.goarch }}/$BINARY_NAME
+
+    - name: Run tests (Pro)
+      run: |
+        ./inline_pro_files.sh
+        go test -v ./...
+
+    - name: Build (Pro)
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        BINARY_NAME=claude-squad-pro
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          BINARY_NAME=$BINARY_NAME.exe
+        fi
+        ./inline_pro_files.sh
+        go build -v -flags=pro -o build/${{ matrix.goos }}_${{ matrix.goarch }}/$BINARY_NAME
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
