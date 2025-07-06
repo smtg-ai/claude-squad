@@ -31,23 +31,21 @@ jobs:
     steps:
     - name: clone claude-squad
       uses: actions/checkout@v4
-
-    # hack to clone the submodule without getting auth errors https://github.com/actions/checkout/issues/287
-    - name: clone claude-squad-pro
-      uses: actions/checkout@v4
       with:
-        repository: smtg-ai/claude-squad-pro
-        path: pro
-        ssh-key: ${{ secrets.CLAUDE_SQUAD_PRO_READONLY_DEPLOY_KEY }}
-        ref: main
-        persist-credentials: true
+         submodules: false
 
-    # check out the version of of the submodule used by claude-squad
-    # https://github.com/actions/checkout/issues/287#issuecomment-707304140
-    - name: checkout submodule
+    # https://github.com/actions/checkout/issues/287#issuecomment-3018957939
+    - name: Setup SSH for submodules
       run: |
-        git submodule init
-        git submodule update
+        mkdir -p ~/.ssh
+        echo "${{ secrets.CLAUDE_SQUAD_PRO_READONLY_DEPLOY_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+    - name: Init and update submodules
+      run: |
+       git submodule sync
+       git submodule update --init --recursive
 
     - name: Set up Go
       uses: actions/setup-go@v4
