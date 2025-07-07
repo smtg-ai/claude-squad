@@ -1,8 +1,10 @@
 package git
 
 import (
+	"claude-squad/config"
 	"claude-squad/log"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -44,6 +46,12 @@ func (g *GitWorktree) SetupFromExistingBranch() error {
 	// Create a new worktree from the existing branch
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", g.worktreePath, g.branchName); err != nil {
 		return fmt.Errorf("failed to create worktree from branch %s: %w", g.branchName, err)
+	}
+
+	// Run worktree setup if configured
+	if err := g.runWorktreeSetup(); err != nil {
+		log.WarningLog.Printf("failed to run worktree setup: %v", err)
+		// Don't fail the worktree setup if setup fails
 	}
 
 	return nil
@@ -89,6 +97,154 @@ func (g *GitWorktree) SetupNewWorktree() error {
 	// TODO: we might want to give an option to use main/master instead of the current branch.
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, headCommit); err != nil {
 		return fmt.Errorf("failed to create worktree from commit %s: %w", headCommit, err)
+	}
+
+	// Run worktree setup if configured
+	if err := g.runWorktreeSetup(); err != nil {
+		log.WarningLog.Printf("failed to run worktree setup: %v", err)
+		// Don't fail the worktree setup if setup fails
+	}
+
+	return nil
+}
+
+// runWorktreeSetup runs the configured setup steps for new worktrees
+func (g *GitWorktree) runWorktreeSetup() error {
+	cfg := config.LoadConfig()
+	if cfg.WorktreeSetup == nil {
+		return nil // No setup configured
+	}
+
+	// Copy gitignored files first
+	if err := g.copyGitIgnoredFiles(cfg.WorktreeSetup); err != nil {
+		return fmt.Errorf("failed to copy gitignored files: %w", err)
+	}
+
+	// Run setup commands
+	if err := g.runSetupCommands(cfg.WorktreeSetup); err != nil {
+		return fmt.Errorf("failed to run setup commands: %w", err)
+	}
+
+	return nil
+}
+
+// copyGitIgnoredFiles copies gitignored files matching the configured patterns into the worktree
+func (g *GitWorktree) copyGitIgnoredFiles(setup *config.WorktreeSetup) error {
+	if len(setup.CopyIgnored) == 0 {
+		return nil // Nothing to copy
+	}
+
+	for _, pattern := range setup.CopyIgnored {
+		// Validate that the pattern doesn't start with /
+		if strings.HasPrefix(pattern, "/") {
+			log.WarningLog.Printf("skipping absolute path pattern: %s", pattern)
+			continue
+		}
+
+		// Find matching files in the repository
+		matches, err := filepath.Glob(filepath.Join(g.repoPath, pattern))
+		if err != nil {
+			log.WarningLog.Printf("invalid glob pattern %s: %v", pattern, err)
+			continue
+		}
+
+		for _, srcPath := range matches {
+			// Get relative path from repo root
+			relPath, err := filepath.Rel(g.repoPath, srcPath)
+			if err != nil {
+				log.WarningLog.Printf("failed to get relative path for %s: %v", srcPath, err)
+				continue
+			}
+
+			// Skip if the file is not gitignored
+			if !g.isGitIgnored(relPath) {
+				continue
+			}
+
+			// Determine destination path
+			dstPath := filepath.Join(g.worktreePath, relPath)
+
+			// Create destination directory if needed
+			dstDir := filepath.Dir(dstPath)
+			if err := os.MkdirAll(dstDir, 0755); err != nil {
+				log.WarningLog.Printf("failed to create directory %s: %v", dstDir, err)
+				continue
+			}
+
+			// Copy the file
+			if err := g.copyFile(srcPath, dstPath); err != nil {
+				log.WarningLog.Printf("failed to copy %s to %s: %v", srcPath, dstPath, err)
+				continue
+			}
+
+			log.InfoLog.Printf("copied gitignored file: %s", relPath)
+		}
+	}
+
+	return nil
+}
+
+// isGitIgnored checks if a file is ignored by git
+func (g *GitWorktree) isGitIgnored(relPath string) bool {
+	// Use git check-ignore to determine if file is ignored
+	cmd := exec.Command("git", "-C", g.repoPath, "check-ignore", relPath)
+	err := cmd.Run()
+	// If the command exits with status 0, the file is ignored
+	return err == nil
+}
+
+// copyFile copies a file from src to dst
+func (g *GitWorktree) copyFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	// Skip directories
+	if srcInfo.IsDir() {
+		return nil
+	}
+
+	dstFile, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, srcInfo.Mode())
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	return err
+}
+
+// runSetupCommands runs the configured commands in the worktree
+func (g *GitWorktree) runSetupCommands(setup *config.WorktreeSetup) error {
+	if len(setup.Run) == 0 {
+		return nil // No commands to run
+	}
+
+	for _, command := range setup.Run {
+		log.InfoLog.Printf("running setup command: %s", command)
+		
+		// Run command in the worktree directory
+		cmd := exec.Command("sh", "-c", command)
+		cmd.Dir = g.worktreePath
+		
+		// Capture output instead of sending to console
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.ErrorLog.Printf("command failed: %s\nOutput: %s", command, string(output))
+			return fmt.Errorf("failed to run command %q: %w", command, err)
+		}
+		
+		// Log output for debugging if needed
+		if len(output) > 0 {
+			log.InfoLog.Printf("command output: %s", string(output))
+		}
 	}
 
 	return nil
