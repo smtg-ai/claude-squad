@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-DEST_DIR="pro"
+DEST_DIR="_pro"
 
 echo "Copying *_pro.go files into '$DEST_DIR/'..."
 
