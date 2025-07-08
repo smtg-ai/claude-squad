@@ -160,8 +160,8 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		removedDiff = ""
 		diff = ""
 	} else {
-		addedDiff = fmt.Sprintf("+%d", stat.Added)
-		removedDiff = fmt.Sprintf("-%d ", stat.Removed)
+		addedDiff = fmt.Sprintf("+%d", stat.Insertions)
+		removedDiff = fmt.Sprintf("-%d ", stat.Deletions)
 		diff = lipgloss.JoinHorizontal(
 			lipgloss.Center,
 			addedLinesStyle.Background(descS.GetBackground()).Render(addedDiff),

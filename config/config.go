@@ -36,6 +36,8 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// VCSType is the type of Version Control System to use (e.g., "git", "jujutsu").
+	VCSType string `json:"vcs_type"`
 }
 
 // DefaultConfig returns the default configuration
@@ -58,6 +60,7 @@ func DefaultConfig() *Config {
 			}
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
+		VCSType: "git",
 	}
 }
 

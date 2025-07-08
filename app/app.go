@@ -20,9 +20,9 @@ import (
 const GlobalInstanceLimit = 10
 
 // Run is the main entrypoint into the application.
-func Run(ctx context.Context, program string, autoYes bool) error {
+func Run(ctx context.Context, program string, autoYes bool, vcsType string) error {
 	p := tea.NewProgram(
-		newHome(ctx, program, autoYes),
+		newHome(ctx, program, autoYes, vcsType),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(), // Mouse scroll
 	)
@@ -93,7 +93,7 @@ type home struct {
 	confirmationOverlay *overlay.ConfirmationOverlay
 }
 
-func newHome(ctx context.Context, program string, autoYes bool) *home {
+func newHome(ctx context.Context, program string, autoYes bool, vcsType string) *home {
 	// Load application config
 	appConfig := config.LoadConfig()
 
@@ -456,6 +456,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			Title:   "",
 			Path:    ".",
 			Program: m.program,
+			VCSType: m.appConfig.VCSType,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -477,6 +478,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			Title:   "",
 			Path:    ".",
 			Program: m.program,
+			VCSType: m.appConfig.VCSType,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -517,11 +519,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Create the kill action as a tea.Cmd
 		killAction := func() tea.Msg {
 			// Get worktree and check if branch is checked out
-			worktree, err := selected.GetGitWorktree()
-			if err != nil {
-				return err
-			}
-
+			worktree := selected.GetVCS()
 			checkedOut, err := worktree.IsBranchCheckedOut()
 			if err != nil {
 				return err
@@ -553,12 +551,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Create the push action as a tea.Cmd
 		pushAction := func() tea.Msg {
 			// Default commit message with timestamp
-			commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
-			worktree, err := selected.GetGitWorktree()
-			if err != nil {
-				return err
-			}
-			if err = worktree.PushChanges(commitMsg, true); err != nil {
+			commitMsg := fmt.Sprintf("[claude_squad] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
+			worktree := selected.GetVCS()
+			if err := worktree.PushChanges(commitMsg, true); err != nil {
 				return err
 			}
 			return nil

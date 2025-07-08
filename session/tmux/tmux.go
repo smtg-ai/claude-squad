@@ -91,22 +91,14 @@ func (t *TmuxSession) Start(workDir string) error {
 
 	// Create a new detached tmux session and start claude in it
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
-
-	ptmx, err := t.ptyFactory.Start(cmd)
-	if err != nil {
-		// Cleanup any partially created session if any exists.
-		if t.DoesSessionExist() {
-			cleanupCmd := exec.Command("tmux", "kill-session", "-t", t.sanitizedName)
-			if cleanupErr := t.cmdExec.Run(cleanupCmd); cleanupErr != nil {
-				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
-			}
-		}
+	if err := t.cmdExec.Run(cmd); err != nil {
 		return fmt.Errorf("error starting tmux session: %w", err)
 	}
 
 	// We need to close the ptmx, but we shouldn't close it before the command above finishes.
 	// So, we poll for completion before closing.
 	timeout := time.After(2 * time.Second)
+	var err error
 	for !t.DoesSessionExist() {
 		select {
 		case <-timeout:
@@ -119,7 +111,6 @@ func (t *TmuxSession) Start(workDir string) error {
 			time.Sleep(time.Millisecond * 10)
 		}
 	}
-	ptmx.Close()
 
 	err = t.Restore()
 	if err != nil {
