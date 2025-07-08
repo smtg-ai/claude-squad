@@ -7,8 +7,8 @@ import (
 type KeyName int
 
 const (
-	KeyUp KeyName = iota
-	KeyDown
+	KeyPrev KeyName = iota
+	KeyNext
 	KeyEnter
 	KeyNew
 	KeyKill
@@ -32,10 +32,6 @@ const (
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
 var GlobalKeyStringsMap = map[string]KeyName{
-	"up":         KeyUp,
-	"k":          KeyUp,
-	"down":       KeyDown,
-	"j":          KeyDown,
 	"shift+up":   KeyShiftUp,
 	"shift+down": KeyShiftDown,
 	"N":          KeyPrompt,
@@ -53,14 +49,6 @@ var GlobalKeyStringsMap = map[string]KeyName{
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
 var GlobalkeyBindings = map[KeyName]key.Binding{
-	KeyUp: key.NewBinding(
-		key.WithKeys("up", "k"),
-		key.WithHelp("↑/k", "up"),
-	),
-	KeyDown: key.NewBinding(
-		key.WithKeys("down", "j"),
-		key.WithHelp("↓/j", "down"),
-	),
 	KeyShiftUp: key.NewBinding(
 		key.WithKeys("shift+up"),
 		key.WithHelp("shift+↑", "scroll"),
