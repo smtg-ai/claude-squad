@@ -1,3 +1,3 @@
 [submodule "pro"]
-	path = pro
+	path = _pro
 	url = git@github.com:smtg-ai/claude-squad-pro.git

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Root of the pro version files
-PRO_DIR="pro"
+PRO_DIR="_pro"
 
 echo "copying *_pro.go files from '$PRO_DIR'..."
 
