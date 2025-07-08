@@ -74,6 +74,7 @@ Run the application with:
 ```bash
 cs
 ```
+NOTE: The default program is `claude` and we recommend using the latest version.
 
 <br />
 
@@ -108,6 +109,13 @@ The menu at the bottom of the screen shows available commands:
 - `tab` - Switch between preview tab and diff tab
 - `q` - Quit the application
 - `shift-↓/↑` - scroll in diff view
+
+### FAQs
+
+#### Failed to start new session
+
+If you get an error like `failed to start new session: timed out waiting for tmux session`, update the
+underlying program (ex. `claude`) to the latest version.
 
 ### How It Works
 
