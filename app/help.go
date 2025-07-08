@@ -11,9 +11,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-type helpType interface {
-	// toContent returns the help UI content
+type helpText interface {
+	// toContent returns the help UI content.
 	toContent() string
+	// mask returns the bit mask for this help text. These are used to track which help screens
+	// have been seen in the config and app state.
+	mask() uint32
 }
 
 type helpTypeGeneral struct{}
@@ -22,13 +25,13 @@ type helpTypeInstanceStart struct {
 	instance *session.Instance
 }
 
-func helpStart(instance *session.Instance) helpType {
-	return helpTypeInstanceStart{instance: instance}
-}
-
 type helpTypeInstanceAttach struct{}
 
 type helpTypeInstanceCheckout struct{}
+
+func helpStart(instance *session.Instance) helpText {
+	return helpTypeInstanceStart{instance: instance}
+}
 
 func (h helpTypeGeneral) toContent() string {
 	content := lipgloss.JoinVertical(lipgloss.Left,
@@ -102,14 +105,19 @@ func (h helpTypeInstanceCheckout) toContent() string {
 	)
 	return content
 }
+func (h helpTypeGeneral) mask() uint32 {
+	return 1
+}
 
-// Help screen bit flags for tracking in config
-const (
-	HelpFlagGeneral          uint32 = 1
-	HelpFlagInstanceStart    uint32 = 1 << 1
-	HelpFlagInstanceAttach   uint32 = 1 << 2
-	HelpFlagInstanceCheckout uint32 = 1 << 3
-)
+func (h helpTypeInstanceStart) mask() uint32 {
+	return 1 << 1
+}
+func (h helpTypeInstanceAttach) mask() uint32 {
+	return 1 << 2
+}
+func (h helpTypeInstanceCheckout) mask() uint32 {
+	return 1 << 3
+}
 
 var (
 	titleStyle  = lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.Color("#7D56F4"))
@@ -119,28 +127,22 @@ var (
 )
 
 // showHelpScreen displays the help screen overlay if it hasn't been shown before
-func (m *home) showHelpScreen(helpType helpType, onDismiss func()) (tea.Model, tea.Cmd) {
+func (m *home) showHelpScreen(helpType helpText, onDismiss func()) (tea.Model, tea.Cmd) {
 	// Get the flag for this help type
 	var alwaysShow bool
-	var helpFlag uint32
 	switch helpType.(type) {
 	case helpTypeGeneral:
-		helpFlag = HelpFlagGeneral
 		alwaysShow = true
-	case helpTypeInstanceStart:
-		helpFlag = HelpFlagInstanceStart
-	case helpTypeInstanceAttach:
-		helpFlag = HelpFlagInstanceAttach
-	case helpTypeInstanceCheckout:
-		helpFlag = HelpFlagInstanceCheckout
 	}
+
+	flag := helpType.mask()
 
 	// Check if this help screen has been seen before
 	// Only show if we're showing the general help screen or the corresponding flag is not set
 	// in the seen bitmask.
-	if alwaysShow || (m.appState.GetHelpScreensSeen()&helpFlag) == 0 {
+	if alwaysShow || (m.appState.GetHelpScreensSeen()&flag) == 0 {
 		// Mark this help screen as seen and save state
-		if err := m.appState.SetHelpScreensSeen(m.appState.GetHelpScreensSeen() | helpFlag); err != nil {
+		if err := m.appState.SetHelpScreensSeen(m.appState.GetHelpScreensSeen() | flag); err != nil {
 			log.WarningLog.Printf("Failed to save help screen state: %v", err)
 		}
 
