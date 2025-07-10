@@ -84,21 +84,30 @@ func (d *DiffPane) refreshDiff() {
 		stats = d.instance.GetCommitDiffAtOffset(d.commitOffset)
 		if d.commitOffset == -1 && stats != nil && stats.IsUncommitted {
 			modeLabel = "[Uncommitted Changes] "
-		} else if hash, msg, err := d.instance.GetCommitInfo(d.commitOffset); err == nil {
-			// Truncate message if too long
-			if len(msg) > 40 {
-				msg = msg[:37] + "..."
-			}
-			if d.commitOffset == 0 || (d.commitOffset == -1 && stats != nil && !stats.IsUncommitted) {
-				modeLabel = fmt.Sprintf("[HEAD: %s] ", msg)
-			} else {
-				modeLabel = fmt.Sprintf("[%s: %s] ", hash, msg)
-			}
 		} else {
-			if d.commitOffset == 0 || (d.commitOffset == -1 && stats != nil && !stats.IsUncommitted) {
-				modeLabel = "[Last Commit] "
+			// Determine the actual offset for commit info
+			// When commitOffset is -1 but we're showing HEAD (no uncommitted changes), use offset 0
+			actualOffset := d.commitOffset
+			if d.commitOffset == -1 && stats != nil && !stats.IsUncommitted {
+				actualOffset = 0
+			}
+			
+			if hash, msg, err := d.instance.GetCommitInfo(actualOffset); err == nil {
+				// Truncate message if too long
+				if len(msg) > 40 {
+					msg = msg[:37] + "..."
+				}
+				if actualOffset == 0 {
+					modeLabel = fmt.Sprintf("[HEAD: %s] ", msg)
+				} else {
+					modeLabel = fmt.Sprintf("[%s: %s] ", hash, msg)
+				}
 			} else {
-				modeLabel = fmt.Sprintf("[HEAD~%d] ", d.commitOffset)
+				if actualOffset == 0 {
+					modeLabel = "[Last Commit] "
+				} else {
+					modeLabel = fmt.Sprintf("[HEAD~%d] ", actualOffset)
+				}
 			}
 		}
 	}

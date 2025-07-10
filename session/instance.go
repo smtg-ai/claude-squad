@@ -520,8 +520,15 @@ func (i *Instance) GetCommitDiffAtOffset(offset int) *git.DiffStats {
 		uncommittedStats := i.gitWorktree.DiffUncommitted()
 		// If there are no uncommitted changes, show the last commit instead
 		if uncommittedStats.IsEmpty() && uncommittedStats.Error == nil {
-			return i.gitWorktree.DiffCommitAtOffset(0)
+			// Return the HEAD commit stats, but preserve that we tried to get uncommitted changes
+			headStats := i.gitWorktree.DiffCommitAtOffset(0)
+			if headStats != nil {
+				// Mark that this is showing HEAD because there were no uncommitted changes
+				headStats.IsUncommitted = false
+			}
+			return headStats
 		}
+		uncommittedStats.IsUncommitted = true
 		return uncommittedStats
 	}
 
