@@ -238,6 +238,7 @@ func TestConfirmationFlowSimulation(t *testing.T) {
 		Path:    t.TempDir(),
 		Program: "claude",
 		AutoYes: false,
+		Danger:  false,
 	})
 	require.NoError(t, err)
 	_ = list.AddInstance(instance)
