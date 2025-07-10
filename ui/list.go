@@ -303,6 +303,12 @@ func (l *List) Attach() (chan struct{}, error) {
 	return targetInstance.Attach()
 }
 
+// AttachToPane attaches to the selected instance focusing on the specified pane
+func (l *List) AttachToPane(paneIndex int) (chan struct{}, error) {
+	targetInstance := l.items[l.selectedIdx]
+	return targetInstance.AttachToPane(paneIndex)
+}
+
 // Up selects the prev item in the list.
 func (l *List) Up() {
 	if len(l.items) == 0 {

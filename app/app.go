@@ -63,6 +63,8 @@ type home struct {
 
 	// state is the current discrete state of the application
 	state state
+	// scrollLocked indicates if up/down keys should scroll in diff view without shift
+	scrollLocked bool
 	// newInstanceFinalizer is called when the state is stateNew and then you press enter.
 	// It registers the new instance in the list after the instance has been started.
 	newInstanceFinalizer func()
@@ -79,7 +81,7 @@ type home struct {
 	list *ui.List
 	// menu displays the bottom menu
 	menu *ui.Menu
-	// tabbedWindow displays the tabbed window with preview and diff panes
+	// tabbedWindow displays the tabbed window with AI, diff, and terminal panes
 	tabbedWindow *ui.TabbedWindow
 	// errBox displays error messages
 	errBox *ui.ErrBox
@@ -111,7 +113,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		ctx:          ctx,
 		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewTerminalPane()),
 		errBox:       ui.NewErrBox(),
 		storage:      storage,
 		appConfig:    appConfig,
@@ -489,10 +491,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		return m, nil
 	case keys.KeyUp:
-		m.list.Up()
+		if m.scrollLocked && m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.ScrollUp()
+		} else {
+			m.list.Up()
+		}
 		return m, m.instanceChanged()
 	case keys.KeyDown:
-		m.list.Down()
+		if m.scrollLocked && m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.ScrollDown()
+		} else {
+			m.list.Down()
+		}
 		return m, m.instanceChanged()
 	case keys.KeyShiftUp:
 		if m.tabbedWindow.IsInDiffTab() {
@@ -504,10 +514,66 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.tabbedWindow.ScrollDown()
 		}
 		return m, m.instanceChanged()
+	case keys.KeyHome:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.ScrollToTop()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyEnd:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.ScrollToBottom()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyPageUp:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.PageUp()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyPageDown:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.PageDown()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyAltUp:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.JumpToPrevFile()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyAltDown:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.JumpToNextFile()
+		}
+		return m, m.instanceChanged()
 	case keys.KeyTab:
 		m.tabbedWindow.Toggle()
 		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
 		return m, m.instanceChanged()
+	case keys.KeyDiffAll:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.SetDiffModeAll()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyDiffLastCommit:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.SetDiffModeLastCommit()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyLeft:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.NavigateToPrevCommit()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyRight:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.NavigateToNextCommit()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyScrollLock:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.scrollLocked = !m.scrollLocked
+			m.menu.SetScrollLocked(m.scrollLocked)
+		}
+		return m, nil
 	case keys.KeyKill:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
@@ -600,7 +666,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		// Show help screen before attaching
 		m.showHelpScreen(helpTypeInstanceAttach{}, func() {
-			ch, err := m.list.Attach()
+			var ch chan struct{}
+			var err error
+			
+			// Determine which pane to attach to based on active tab
+			if m.tabbedWindow.IsInTerminalTab() {
+				// If terminal tab is active, attach to terminal pane (pane 0)
+				ch, err = m.list.AttachToPane(0)
+			} else {
+				// Otherwise, attach to AI pane (pane 1)
+				ch, err = m.list.AttachToPane(1)
+			}
+			
 			if err != nil {
 				m.handleError(err)
 				return
@@ -614,13 +691,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 }
 
-// instanceChanged updates the preview pane, menu, and diff pane based on the selected instance. It returns an error
+// instanceChanged updates the AI pane, menu, diff pane, and terminal pane based on the selected instance. It returns an error
 // Cmd if there was any error.
 func (m *home) instanceChanged() tea.Cmd {
 	// selected may be nil
 	selected := m.list.GetSelectedInstance()
 
 	m.tabbedWindow.UpdateDiff(selected)
+	m.tabbedWindow.UpdateTerminal(selected)
 	// Update menu with current instance
 	m.menu.SetInstance(selected)
 
