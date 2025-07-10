@@ -22,6 +22,7 @@ var (
 	programFlag string
 	autoYesFlag bool
 	daemonFlag  bool
+	dangerFlag  bool
 	rootCmd     = &cobra.Command{
 		Use:   "claude-squad",
 		Short: "Claude Squad - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.",
@@ -59,6 +60,11 @@ var (
 			if autoYesFlag {
 				autoYes = true
 			}
+			// Danger flag overrides config
+			danger := cfg.Danger
+			if dangerFlag {
+				danger = true
+			}
 			if autoYes {
 				defer func() {
 					if err := daemon.LaunchDaemon(); err != nil {
@@ -71,7 +77,7 @@ var (
 				log.ErrorLog.Printf("failed to stop daemon: %v", err)
 			}
 
-			return app.Run(ctx, program, autoYes)
+			return app.Run(ctx, program, autoYes, danger)
 		},
 	}
 
@@ -150,6 +156,8 @@ func init() {
 		"[experimental] If enabled, all instances will automatically accept prompts")
 	rootCmd.Flags().BoolVar(&daemonFlag, "daemon", false, "Run a program that loads all sessions"+
 		" and runs autoyes mode on them.")
+	rootCmd.Flags().BoolVar(&dangerFlag, "danger", false,
+		"Run claude with --dangerously-skip-permissions flag")
 
 	// Hide the daemonFlag as it's only for internal use
 	err := rootCmd.Flags().MarkHidden("daemon")
