@@ -495,6 +495,43 @@ func (i *Instance) GetDiffStats() *git.DiffStats {
 	return i.diffStats
 }
 
+// GetLastCommitDiffStats returns the diff statistics for uncommitted changes if they exist, otherwise the last commit
+func (i *Instance) GetLastCommitDiffStats() *git.DiffStats {
+	if !i.started {
+		return nil
+	}
+
+	if i.Status == Paused {
+		// For paused instances, we can still get the diff
+		return i.gitWorktree.DiffUncommittedOrLastCommit()
+	}
+
+	return i.gitWorktree.DiffUncommittedOrLastCommit()
+}
+
+// GetCommitDiffAtOffset returns the diff statistics for a commit at the specified offset
+// offset -1 = uncommitted changes, offset 0 = HEAD, offset 1 = HEAD~1, etc.
+func (i *Instance) GetCommitDiffAtOffset(offset int) *git.DiffStats {
+	if !i.started {
+		return nil
+	}
+
+	if offset == -1 {
+		return i.gitWorktree.DiffUncommitted()
+	}
+
+	return i.gitWorktree.DiffCommitAtOffset(offset)
+}
+
+// GetCommitInfo returns the commit hash and message at the specified offset
+func (i *Instance) GetCommitInfo(offset int) (hash string, message string, err error) {
+	if !i.started {
+		return "", "", fmt.Errorf("instance not started")
+	}
+
+	return i.gitWorktree.GetCommitInfo(offset)
+}
+
 // SendPrompt sends a prompt to the tmux session
 func (i *Instance) SendPrompt(prompt string) error {
 	if !i.started {

@@ -162,6 +162,30 @@ func (w *TabbedWindow) IsInDiffTab() bool {
 	return w.activeTab == 1
 }
 
+// SetDiffModeAll sets the diff view to show all changes
+func (w *TabbedWindow) SetDiffModeAll() {
+	w.diff.SetDiffMode(DiffModeAll)
+}
+
+// SetDiffModeLastCommit sets the diff view to show only the last commit
+func (w *TabbedWindow) SetDiffModeLastCommit() {
+	w.diff.SetDiffMode(DiffModeLastCommit)
+}
+
+// NavigateToPrevCommit moves to the previous (older) commit in diff view
+func (w *TabbedWindow) NavigateToPrevCommit() {
+	if w.activeTab == 1 { // Diff tab
+		w.diff.NavigateToPrevCommit()
+	}
+}
+
+// NavigateToNextCommit moves to the next (newer) commit in diff view
+func (w *TabbedWindow) NavigateToNextCommit() {
+	if w.activeTab == 1 { // Diff tab
+		w.diff.NavigateToNextCommit()
+	}
+}
+
 func (w *TabbedWindow) String() string {
 	if w.width == 0 || w.height == 0 {
 		return ""

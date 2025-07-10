@@ -2,6 +2,7 @@ package ui
 
 import (
 	"claude-squad/session"
+	"claude-squad/session/git"
 	"fmt"
 	"strings"
 
@@ -15,6 +16,13 @@ var (
 	HunkStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#0ea5e9"))
 )
 
+type DiffMode int
+
+const (
+	DiffModeAll DiffMode = iota
+	DiffModeLastCommit
+)
+
 type DiffPane struct {
 	viewport      viewport.Model
 	diff          string
@@ -22,11 +30,15 @@ type DiffPane struct {
 	width         int
 	height        int
 	filePositions []int // Line numbers where each file starts
+	mode          DiffMode
+	instance      *session.Instance
+	commitOffset  int // Offset from HEAD when viewing commits (0 = HEAD, 1 = HEAD~1, etc.)
 }
 
 func NewDiffPane() *DiffPane {
 	return &DiffPane{
 		viewport: viewport.New(0, 0),
+		mode:     DiffModeAll,
 	}
 }
 
@@ -42,6 +54,11 @@ func (d *DiffPane) SetSize(width, height int) {
 }
 
 func (d *DiffPane) SetDiff(instance *session.Instance) {
+	d.instance = instance
+	d.refreshDiff()
+}
+
+func (d *DiffPane) refreshDiff() {
 	centeredFallbackMessage := lipgloss.Place(
 		d.width,
 		d.height,
@@ -50,12 +67,41 @@ func (d *DiffPane) SetDiff(instance *session.Instance) {
 		"No changes",
 	)
 
-	if instance == nil || !instance.Started() {
+	if d.instance == nil || !d.instance.Started() {
 		d.viewport.SetContent(centeredFallbackMessage)
 		return
 	}
 
-	stats := instance.GetDiffStats()
+	var stats *git.DiffStats
+	var modeLabel string
+	
+	switch d.mode {
+	case DiffModeAll:
+		stats = d.instance.GetDiffStats()
+		modeLabel = "[All Changes] "
+	case DiffModeLastCommit:
+		// Show commit diff based on offset
+		stats = d.instance.GetCommitDiffAtOffset(d.commitOffset)
+		if d.commitOffset == -1 {
+			modeLabel = "[Uncommitted Changes] "
+		} else if hash, msg, err := d.instance.GetCommitInfo(d.commitOffset); err == nil {
+			// Truncate message if too long
+			if len(msg) > 40 {
+				msg = msg[:37] + "..."
+			}
+			if d.commitOffset == 0 {
+				modeLabel = fmt.Sprintf("[HEAD: %s] ", msg)
+			} else {
+				modeLabel = fmt.Sprintf("[%s: %s] ", hash, msg)
+			}
+		} else {
+			if d.commitOffset == 0 {
+				modeLabel = "[Last Commit] "
+			} else {
+				modeLabel = fmt.Sprintf("[HEAD~%d] ", d.commitOffset)
+			}
+		}
+	}
 	if stats == nil {
 		// Show loading message if worktree is not ready
 		centeredMessage := lipgloss.Place(
@@ -89,7 +135,7 @@ func (d *DiffPane) SetDiff(instance *session.Instance) {
 	} else {
 		additions := AdditionStyle.Render(fmt.Sprintf("%d additions(+)", stats.Added))
 		deletions := DeletionStyle.Render(fmt.Sprintf("%d deletions(-)", stats.Removed))
-		d.stats = lipgloss.JoinHorizontal(lipgloss.Center, additions, " ", deletions)
+		d.stats = lipgloss.JoinHorizontal(lipgloss.Center, modeLabel, additions, " ", deletions)
 		d.diff = colorizeDiff(stats.Content)
 		content := lipgloss.JoinVertical(lipgloss.Left, d.stats, d.diff)
 		d.viewport.SetContent(content)
@@ -184,6 +230,40 @@ func (d *DiffPane) JumpToPrevFile() {
 	// If no previous file, jump to the first file
 	if currentOffset > d.filePositions[0] {
 		d.viewport.SetYOffset(d.filePositions[0])
+	}
+}
+
+// SetDiffMode changes the diff display mode
+func (d *DiffPane) SetDiffMode(mode DiffMode) {
+	if d.mode != mode {
+		d.mode = mode
+		if mode == DiffModeLastCommit {
+			d.commitOffset = -1 // Start with uncommitted changes
+		} else {
+			d.commitOffset = 0
+		}
+		d.refreshDiff()
+	}
+}
+
+// GetDiffMode returns the current diff mode
+func (d *DiffPane) GetDiffMode() DiffMode {
+	return d.mode
+}
+
+// NavigateToPrevCommit moves to the previous (older) commit
+func (d *DiffPane) NavigateToPrevCommit() {
+	if d.mode == DiffModeLastCommit {
+		d.commitOffset++
+		d.refreshDiff()
+	}
+}
+
+// NavigateToNextCommit moves to the next (newer) commit
+func (d *DiffPane) NavigateToNextCommit() {
+	if d.mode == DiffModeLastCommit && d.commitOffset > -1 {
+		d.commitOffset--
+		d.refreshDiff()
 	}
 }
 

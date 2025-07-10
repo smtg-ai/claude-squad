@@ -63,6 +63,8 @@ type home struct {
 
 	// state is the current discrete state of the application
 	state state
+	// scrollLocked indicates if up/down keys should scroll in diff view without shift
+	scrollLocked bool
 	// newInstanceFinalizer is called when the state is stateNew and then you press enter.
 	// It registers the new instance in the list after the instance has been started.
 	newInstanceFinalizer func()
@@ -489,10 +491,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		return m, nil
 	case keys.KeyUp:
-		m.list.Up()
+		if m.scrollLocked && m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.ScrollUp()
+		} else {
+			m.list.Up()
+		}
 		return m, m.instanceChanged()
 	case keys.KeyDown:
-		m.list.Down()
+		if m.scrollLocked && m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.ScrollDown()
+		} else {
+			m.list.Down()
+		}
 		return m, m.instanceChanged()
 	case keys.KeyShiftUp:
 		if m.tabbedWindow.IsInDiffTab() {
@@ -538,6 +548,32 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.tabbedWindow.Toggle()
 		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
 		return m, m.instanceChanged()
+	case keys.KeyDiffAll:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.SetDiffModeAll()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyDiffLastCommit:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.SetDiffModeLastCommit()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyLeft:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.NavigateToPrevCommit()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyRight:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.NavigateToNextCommit()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyScrollLock:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.scrollLocked = !m.scrollLocked
+			m.menu.SetScrollLocked(m.scrollLocked)
+		}
+		return m, nil
 	case keys.KeyKill:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
