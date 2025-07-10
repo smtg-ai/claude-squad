@@ -28,6 +28,17 @@ const (
 	// Diff keybindings
 	KeyShiftUp
 	KeyShiftDown
+	KeyHome
+	KeyEnd
+	KeyPageUp
+	KeyPageDown
+	KeyAltUp
+	KeyAltDown
+	KeyDiffAll
+	KeyDiffLastCommit
+	KeyLeft
+	KeyRight
+	KeyScrollLock
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
@@ -38,6 +49,17 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"j":          KeyDown,
 	"shift+up":   KeyShiftUp,
 	"shift+down": KeyShiftDown,
+	"home":       KeyHome,
+	"end":        KeyEnd,
+	"pgup":       KeyPageUp,
+	"pgdown":     KeyPageDown,
+	"alt+up":     KeyAltUp,
+	"alt+down":   KeyAltDown,
+	"a":          KeyDiffAll,
+	"d":          KeyDiffLastCommit,
+	"left":       KeyLeft,
+	"right":      KeyRight,
+	"s":          KeyScrollLock,
 	"N":          KeyPrompt,
 	"enter":      KeyEnter,
 	"o":          KeyEnter,
@@ -68,6 +90,50 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyShiftDown: key.NewBinding(
 		key.WithKeys("shift+down"),
 		key.WithHelp("shift+↓", "scroll"),
+	),
+	KeyHome: key.NewBinding(
+		key.WithKeys("home"),
+		key.WithHelp("home", "scroll to top"),
+	),
+	KeyEnd: key.NewBinding(
+		key.WithKeys("end"),
+		key.WithHelp("end", "scroll to bottom"),
+	),
+	KeyPageUp: key.NewBinding(
+		key.WithKeys("pgup"),
+		key.WithHelp("pgup", "page up"),
+	),
+	KeyPageDown: key.NewBinding(
+		key.WithKeys("pgdown"),
+		key.WithHelp("pgdn", "page down"),
+	),
+	KeyAltUp: key.NewBinding(
+		key.WithKeys("alt+up"),
+		key.WithHelp("alt+↑", "prev file"),
+	),
+	KeyAltDown: key.NewBinding(
+		key.WithKeys("alt+down"),
+		key.WithHelp("alt+↓", "next file"),
+	),
+	KeyDiffAll: key.NewBinding(
+		key.WithKeys("a"),
+		key.WithHelp("a", "all changes"),
+	),
+	KeyDiffLastCommit: key.NewBinding(
+		key.WithKeys("d"),
+		key.WithHelp("d", "last commit diff"),
+	),
+	KeyLeft: key.NewBinding(
+		key.WithKeys("left"),
+		key.WithHelp("←", "prev commit"),
+	),
+	KeyRight: key.NewBinding(
+		key.WithKeys("right"),
+		key.WithHelp("→", "next commit"),
+	),
+	KeyScrollLock: key.NewBinding(
+		key.WithKeys("s"),
+		key.WithHelp("s", "toggle scroll lock"),
 	),
 	KeyEnter: key.NewBinding(
 		key.WithKeys("enter", "o"),

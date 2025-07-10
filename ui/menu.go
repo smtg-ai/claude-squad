@@ -48,6 +48,7 @@ type Menu struct {
 	state         MenuState
 	instance      *session.Instance
 	isInDiffTab   bool
+	scrollLocked  bool
 
 	// keyDown is the key which is pressed. The default is -1.
 	keyDown keys.KeyName
@@ -100,6 +101,10 @@ func (m *Menu) SetInDiffTab(inDiffTab bool) {
 	m.updateOptions()
 }
 
+func (m *Menu) SetScrollLocked(locked bool) {
+	m.scrollLocked = locked
+}
+
 // updateOptions updates the menu options based on current state and instance
 func (m *Menu) updateOptions() {
 	switch m.state {
@@ -134,7 +139,7 @@ func (m *Menu) addInstanceOptions() {
 
 	// Navigation group (when in diff tab)
 	if m.isInDiffTab {
-		actionGroup = append(actionGroup, keys.KeyShiftUp)
+		actionGroup = append(actionGroup, keys.KeyShiftUp, keys.KeyScrollLock)
 	}
 
 	// System group
@@ -214,6 +219,15 @@ func (m *Menu) String() string {
 				s.WriteString(sepStyle.Render(separator))
 			}
 		}
+	}
+
+	// Add scroll lock indicator at the end if in diff tab
+	if m.isInDiffTab && m.scrollLocked {
+		s.WriteString(sepStyle.Render(verticalSeparator))
+		scrollLockStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("220")).
+			Bold(true)
+		s.WriteString(scrollLockStyle.Render("[SCROLL LOCK]"))
 	}
 
 	centeredMenuText := menuStyle.Render(s.String())
