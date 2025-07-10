@@ -299,7 +299,10 @@ func (i *Instance) Preview() (string, error) {
 	if !i.started || i.Status == Paused {
 		return "", nil
 	}
-	return i.tmuxSession.CapturePaneContent()
+	// Ensure terminal pane exists first
+	i.tmuxSession.CreateTerminalPane(i.gitWorktree.GetWorktreePath())
+	// AI content is in pane 1 after terminal split
+	return i.tmuxSession.CaptureTerminalContent()
 }
 
 func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
@@ -324,6 +327,38 @@ func (i *Instance) Attach() (chan struct{}, error) {
 		return nil, fmt.Errorf("cannot attach instance that has not been started")
 	}
 	return i.tmuxSession.Attach()
+}
+
+// AttachToPane attaches to the instance and focuses on the specified pane
+func (i *Instance) AttachToPane(paneIndex int) (chan struct{}, error) {
+	if !i.started {
+		return nil, fmt.Errorf("cannot attach instance that has not been started")
+	}
+	
+	// If attaching to terminal pane, ensure it exists first
+	if paneIndex == 1 {
+		if err := i.tmuxSession.CreateTerminalPane(i.gitWorktree.GetWorktreePath()); err != nil {
+			// Log error but continue - attach will handle missing pane
+			log.ErrorLog.Printf("failed to create terminal pane: %v", err)
+		}
+	}
+	
+	return i.tmuxSession.AttachToPane(paneIndex)
+}
+
+// GetTerminalContent returns the content of the terminal pane
+func (i *Instance) GetTerminalContent() (string, error) {
+	if !i.started || i.Status == Paused {
+		return "", fmt.Errorf("instance not available")
+	}
+	
+	// Ensure terminal pane exists
+	if err := i.tmuxSession.CreateTerminalPane(i.gitWorktree.GetWorktreePath()); err != nil {
+		return "", fmt.Errorf("failed to create terminal pane: %v", err)
+	}
+	
+	// Terminal is in pane 0 (original pane)
+	return i.tmuxSession.CapturePaneContent()
 }
 
 func (i *Instance) SetPreviewSize(width, height int) error {

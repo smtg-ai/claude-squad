@@ -106,7 +106,7 @@ The menu at the bottom of the screen shows available commands:
 - `?` - Show help menu
 
 ##### Navigation
-- `tab` - Switch between preview tab and diff tab
+- `tab` - Switch between AI, diff, and terminal tabs
 - `q` - Quit the application
 - `shift-↓/↑` - scroll in diff view
 
