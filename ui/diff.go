@@ -270,9 +270,21 @@ func (d *DiffPane) NavigateToPrevCommit() {
 
 // NavigateToNextCommit moves to the next (newer) commit
 func (d *DiffPane) NavigateToNextCommit() {
-	if d.mode == DiffModeLastCommit && d.commitOffset > -1 {
-		d.commitOffset--
-		d.refreshDiff()
+	if d.mode == DiffModeLastCommit {
+		// Check if we're trying to go to uncommitted changes (-1)
+		if d.commitOffset == 0 {
+			// Only allow going to -1 if there are uncommitted changes
+			stats := d.instance.GetCommitDiffAtOffset(-1)
+			if stats != nil && stats.IsUncommitted && !stats.IsEmpty() {
+				d.commitOffset = -1
+				d.refreshDiff()
+			}
+			// Otherwise stay at 0 (HEAD)
+		} else if d.commitOffset > 0 {
+			// Normal navigation to newer commits
+			d.commitOffset--
+			d.refreshDiff()
+		}
 	}
 }
 
