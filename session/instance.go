@@ -51,6 +51,8 @@ type Instance struct {
 	AutoYes bool
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
+	// Danger is true if the instance should run claude with --dangerously-skip-permissions
+	Danger bool
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
@@ -77,6 +79,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 		UpdatedAt: time.Now(),
 		Program:   i.Program,
 		AutoYes:   i.AutoYes,
+		Danger:    i.Danger,
 	}
 
 	// Only include worktree data if gitWorktree is initialized
@@ -114,6 +117,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		CreatedAt: data.CreatedAt,
 		UpdatedAt: data.UpdatedAt,
 		Program:   data.Program,
+		Danger:    data.Danger,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,
@@ -150,6 +154,8 @@ type InstanceOptions struct {
 	Program string
 	// If AutoYes is true, then
 	AutoYes bool
+	// If Danger is true, claude will run with --dangerously-skip-permissions
+	Danger bool
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -171,6 +177,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		CreatedAt: t,
 		UpdatedAt: t,
 		AutoYes:   false,
+		Danger:    opts.Danger,
 	}, nil
 }
 
@@ -191,7 +198,13 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		return fmt.Errorf("instance title cannot be empty")
 	}
 
-	tmuxSession := tmux.NewTmuxSession(i.Title, i.Program)
+	// If danger mode is enabled and the program is claude, append the danger flag
+	program := i.Program
+	if i.Danger && strings.HasSuffix(program, "claude") {
+		program = program + " --dangerously-skip-permissions"
+	}
+
+	tmuxSession := tmux.NewTmuxSession(i.Title, program)
 	i.tmuxSession = tmuxSession
 
 	if firstTimeSetup {

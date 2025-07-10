@@ -36,6 +36,8 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// Danger is a flag to run claude with --dangerously-skip-permissions
+	Danger bool `json:"danger"`
 }
 
 // DefaultConfig returns the default configuration
