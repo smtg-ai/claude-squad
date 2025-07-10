@@ -28,6 +28,12 @@ const (
 	// Diff keybindings
 	KeyShiftUp
 	KeyShiftDown
+	KeyHome
+	KeyEnd
+	KeyPageUp
+	KeyPageDown
+	KeyAltUp
+	KeyAltDown
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
@@ -38,6 +44,12 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"j":          KeyDown,
 	"shift+up":   KeyShiftUp,
 	"shift+down": KeyShiftDown,
+	"home":       KeyHome,
+	"end":        KeyEnd,
+	"pgup":       KeyPageUp,
+	"pgdown":     KeyPageDown,
+	"alt+up":     KeyAltUp,
+	"alt+down":   KeyAltDown,
 	"N":          KeyPrompt,
 	"enter":      KeyEnter,
 	"o":          KeyEnter,
@@ -68,6 +80,30 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyShiftDown: key.NewBinding(
 		key.WithKeys("shift+down"),
 		key.WithHelp("shift+↓", "scroll"),
+	),
+	KeyHome: key.NewBinding(
+		key.WithKeys("home"),
+		key.WithHelp("home", "scroll to top"),
+	),
+	KeyEnd: key.NewBinding(
+		key.WithKeys("end"),
+		key.WithHelp("end", "scroll to bottom"),
+	),
+	KeyPageUp: key.NewBinding(
+		key.WithKeys("pgup"),
+		key.WithHelp("pgup", "page up"),
+	),
+	KeyPageDown: key.NewBinding(
+		key.WithKeys("pgdown"),
+		key.WithHelp("pgdn", "page down"),
+	),
+	KeyAltUp: key.NewBinding(
+		key.WithKeys("alt+up"),
+		key.WithHelp("alt+↑", "prev file"),
+	),
+	KeyAltDown: key.NewBinding(
+		key.WithKeys("alt+down"),
+		key.WithHelp("alt+↓", "next file"),
 	),
 	KeyEnter: key.NewBinding(
 		key.WithKeys("enter", "o"),

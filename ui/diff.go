@@ -16,11 +16,12 @@ var (
 )
 
 type DiffPane struct {
-	viewport viewport.Model
-	diff     string
-	stats    string
-	width    int
-	height   int
+	viewport      viewport.Model
+	diff          string
+	stats         string
+	width         int
+	height        int
+	filePositions []int // Line numbers where each file starts
 }
 
 func NewDiffPane() *DiffPane {
@@ -90,7 +91,11 @@ func (d *DiffPane) SetDiff(instance *session.Instance) {
 		deletions := DeletionStyle.Render(fmt.Sprintf("%d deletions(-)", stats.Removed))
 		d.stats = lipgloss.JoinHorizontal(lipgloss.Center, additions, " ", deletions)
 		d.diff = colorizeDiff(stats.Content)
-		d.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, d.stats, d.diff))
+		content := lipgloss.JoinVertical(lipgloss.Left, d.stats, d.diff)
+		d.viewport.SetContent(content)
+		
+		// Parse file positions after setting content
+		d.parseFilePositions(content)
 	}
 }
 
@@ -106,6 +111,80 @@ func (d *DiffPane) ScrollUp() {
 // ScrollDown scrolls the viewport down
 func (d *DiffPane) ScrollDown() {
 	d.viewport.LineDown(1)
+}
+
+// ScrollToTop scrolls the viewport to the top
+func (d *DiffPane) ScrollToTop() {
+	d.viewport.GotoTop()
+}
+
+// ScrollToBottom scrolls the viewport to the bottom
+func (d *DiffPane) ScrollToBottom() {
+	d.viewport.GotoBottom()
+}
+
+// PageUp scrolls the viewport up by one page
+func (d *DiffPane) PageUp() {
+	d.viewport.ViewUp()
+}
+
+// PageDown scrolls the viewport down by one page
+func (d *DiffPane) PageDown() {
+	d.viewport.ViewDown()
+}
+
+// parseFilePositions identifies line numbers where each file starts in the diff
+func (d *DiffPane) parseFilePositions(content string) {
+	d.filePositions = []int{}
+	lines := strings.Split(content, "\n")
+	
+	for i, line := range lines {
+		// Look for diff headers that indicate a new file
+		if strings.HasPrefix(line, "diff --git") {
+			d.filePositions = append(d.filePositions, i)
+		}
+	}
+}
+
+// JumpToNextFile jumps to the next file in the diff
+func (d *DiffPane) JumpToNextFile() {
+	if len(d.filePositions) == 0 {
+		return
+	}
+	
+	currentOffset := d.viewport.YOffset
+	
+	// Find the next file position after the current offset
+	for _, pos := range d.filePositions {
+		if pos > currentOffset {
+			d.viewport.SetYOffset(pos)
+			return
+		}
+	}
+	
+	// If no next file, stay at current position
+}
+
+// JumpToPrevFile jumps to the previous file in the diff
+func (d *DiffPane) JumpToPrevFile() {
+	if len(d.filePositions) == 0 {
+		return
+	}
+	
+	currentOffset := d.viewport.YOffset
+	
+	// Find the previous file position before the current offset
+	for i := len(d.filePositions) - 1; i >= 0; i-- {
+		if d.filePositions[i] < currentOffset {
+			d.viewport.SetYOffset(d.filePositions[i])
+			return
+		}
+	}
+	
+	// If no previous file, jump to the first file
+	if currentOffset > d.filePositions[0] {
+		d.viewport.SetYOffset(d.filePositions[0])
+	}
 }
 
 func colorizeDiff(diff string) string {

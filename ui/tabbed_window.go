@@ -121,6 +121,42 @@ func (w *TabbedWindow) ScrollDown() {
 	}
 }
 
+func (w *TabbedWindow) ScrollToTop() {
+	if w.activeTab == 1 { // Diff tab
+		w.diff.ScrollToTop()
+	}
+}
+
+func (w *TabbedWindow) ScrollToBottom() {
+	if w.activeTab == 1 { // Diff tab
+		w.diff.ScrollToBottom()
+	}
+}
+
+func (w *TabbedWindow) PageUp() {
+	if w.activeTab == 1 { // Diff tab
+		w.diff.PageUp()
+	}
+}
+
+func (w *TabbedWindow) PageDown() {
+	if w.activeTab == 1 { // Diff tab
+		w.diff.PageDown()
+	}
+}
+
+func (w *TabbedWindow) JumpToNextFile() {
+	if w.activeTab == 1 { // Diff tab
+		w.diff.JumpToNextFile()
+	}
+}
+
+func (w *TabbedWindow) JumpToPrevFile() {
+	if w.activeTab == 1 { // Diff tab
+		w.diff.JumpToPrevFile()
+	}
+}
+
 // IsInDiffTab returns true if the diff tab is currently active
 func (w *TabbedWindow) IsInDiffTab() bool {
 	return w.activeTab == 1

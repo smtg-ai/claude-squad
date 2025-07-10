@@ -504,6 +504,36 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.tabbedWindow.ScrollDown()
 		}
 		return m, m.instanceChanged()
+	case keys.KeyHome:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.ScrollToTop()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyEnd:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.ScrollToBottom()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyPageUp:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.PageUp()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyPageDown:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.PageDown()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyAltUp:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.JumpToPrevFile()
+		}
+		return m, m.instanceChanged()
+	case keys.KeyAltDown:
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.JumpToNextFile()
+		}
+		return m, m.instanceChanged()
 	case keys.KeyTab:
 		m.tabbedWindow.Toggle()
 		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
