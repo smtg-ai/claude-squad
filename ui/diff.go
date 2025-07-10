@@ -82,20 +82,20 @@ func (d *DiffPane) refreshDiff() {
 	case DiffModeLastCommit:
 		// Show commit diff based on offset
 		stats = d.instance.GetCommitDiffAtOffset(d.commitOffset)
-		if d.commitOffset == -1 {
+		if d.commitOffset == -1 && stats != nil && stats.IsUncommitted {
 			modeLabel = "[Uncommitted Changes] "
 		} else if hash, msg, err := d.instance.GetCommitInfo(d.commitOffset); err == nil {
 			// Truncate message if too long
 			if len(msg) > 40 {
 				msg = msg[:37] + "..."
 			}
-			if d.commitOffset == 0 {
+			if d.commitOffset == 0 || (d.commitOffset == -1 && stats != nil && !stats.IsUncommitted) {
 				modeLabel = fmt.Sprintf("[HEAD: %s] ", msg)
 			} else {
 				modeLabel = fmt.Sprintf("[%s: %s] ", hash, msg)
 			}
 		} else {
-			if d.commitOffset == 0 {
+			if d.commitOffset == 0 || (d.commitOffset == -1 && stats != nil && !stats.IsUncommitted) {
 				modeLabel = "[Last Commit] "
 			} else {
 				modeLabel = fmt.Sprintf("[HEAD~%d] ", d.commitOffset)

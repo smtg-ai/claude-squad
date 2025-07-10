@@ -517,7 +517,12 @@ func (i *Instance) GetCommitDiffAtOffset(offset int) *git.DiffStats {
 	}
 
 	if offset == -1 {
-		return i.gitWorktree.DiffUncommitted()
+		uncommittedStats := i.gitWorktree.DiffUncommitted()
+		// If there are no uncommitted changes, show the last commit instead
+		if uncommittedStats.IsEmpty() && uncommittedStats.Error == nil {
+			return i.gitWorktree.DiffCommitAtOffset(0)
+		}
+		return uncommittedStats
 	}
 
 	return i.gitWorktree.DiffCommitAtOffset(offset)
