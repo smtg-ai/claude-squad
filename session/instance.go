@@ -51,6 +51,8 @@ type Instance struct {
 	AutoYes bool
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
+	// usedToMakeWorktrees if needed.
+	gitWorktreeSource git.WorktreeSource
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
@@ -150,6 +152,8 @@ type InstanceOptions struct {
 	Program string
 	// If AutoYes is true, then
 	AutoYes bool
+	// Used to make git worktrees if needed.
+	WorktreeSource git.WorktreeSource
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -162,15 +166,16 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 	}
 
 	return &Instance{
-		Title:     opts.Title,
-		Status:    Ready,
-		Path:      absPath,
-		Program:   opts.Program,
-		Height:    0,
-		Width:     0,
-		CreatedAt: t,
-		UpdatedAt: t,
-		AutoYes:   false,
+		Title:             opts.Title,
+		Status:            Ready,
+		Path:              absPath,
+		Program:           opts.Program,
+		Height:            0,
+		Width:             0,
+		CreatedAt:         t,
+		UpdatedAt:         t,
+		AutoYes:           false,
+		gitWorktreeSource: opts.WorktreeSource,
 	}, nil
 }
 
@@ -195,12 +200,12 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	i.tmuxSession = tmuxSession
 
 	if firstTimeSetup {
-		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
+		gitWorktree, err := i.gitWorktreeSource.GetGitWorktree(i.Path, i.Title)
 		if err != nil {
 			return fmt.Errorf("failed to create git worktree: %w", err)
 		}
 		i.gitWorktree = gitWorktree
-		i.Branch = branchName
+		i.Branch = gitWorktree.GetBranchName()
 	}
 
 	// Setup error handler to cleanup resources on any error
@@ -222,12 +227,6 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 			return setupErr
 		}
 	} else {
-		// Setup git worktree first
-		if err := i.gitWorktree.Setup(); err != nil {
-			setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
-			return setupErr
-		}
-
 		// Create new session
 		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 			// Cleanup git worktree if tmux session creation fails
