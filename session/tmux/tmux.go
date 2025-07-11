@@ -89,24 +89,43 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
 	}
 
+	// Verify the program exists before trying to create the session
+	// Extract just the command name (first part before any arguments)
+	programParts := strings.Fields(t.program)
+	if len(programParts) == 0 {
+		return fmt.Errorf("no program specified")
+	}
+	
+	// Check if the program is available
+	if _, err := exec.LookPath(programParts[0]); err != nil {
+		return fmt.Errorf("program '%s' not found in PATH. Please ensure it is installed and available", programParts[0])
+	}
+
 	// Create a new detached tmux session and start claude in it
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
 
 	ptmx, err := t.ptyFactory.Start(cmd)
 	if err != nil {
+		// Get more detailed error information
+		var exitErr *exec.ExitError
+		errorDetails := err.Error()
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			errorDetails = fmt.Sprintf("%v (stderr: %s)", err, string(exitErr.Stderr))
+		}
+		
 		// Cleanup any partially created session if any exists.
 		if t.DoesSessionExist() {
 			cleanupCmd := exec.Command("tmux", "kill-session", "-t", t.sanitizedName)
 			if cleanupErr := t.cmdExec.Run(cleanupCmd); cleanupErr != nil {
-				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+				errorDetails = fmt.Sprintf("%v (cleanup error: %v)", errorDetails, cleanupErr)
 			}
 		}
-		return fmt.Errorf("error starting tmux session: %w", err)
+		return fmt.Errorf("error starting tmux session '%s' with program '%s' in dir '%s': %s", t.sanitizedName, t.program, workDir, errorDetails)
 	}
 
 	// We need to close the ptmx, but we shouldn't close it before the command above finishes.
 	// So, we poll for completion before closing.
-	timeout := time.After(2 * time.Second)
+	timeout := time.After(5 * time.Second) // Increased from 2s to 5s for slower systems
 	for !t.DoesSessionExist() {
 		select {
 		case <-timeout:
@@ -114,7 +133,12 @@ func (t *TmuxSession) Start(workDir string) error {
 			if cleanupErr := t.Close(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
 			}
-			return fmt.Errorf("timed out waiting for tmux session %s: %v", t.sanitizedName, err)
+			
+			// Try to get more diagnostic information
+			listCmd := exec.Command("tmux", "list-sessions")
+			listOutput, _ := listCmd.CombinedOutput()
+			
+			return fmt.Errorf("timed out waiting for tmux session '%s' after 5 seconds. Current tmux sessions: %s", t.sanitizedName, string(listOutput))
 		default:
 			time.Sleep(time.Millisecond * 10)
 		}
