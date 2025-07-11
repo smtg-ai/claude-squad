@@ -121,6 +121,13 @@ func (t *TmuxSession) Start(workDir string) error {
 	}
 	ptmx.Close()
 
+	// Set status-position to top
+	statusCmd := exec.Command("tmux", "set-option", "-t", t.sanitizedName, "status-position", "top")
+	if err := t.cmdExec.Run(statusCmd); err != nil {
+		// Non-fatal error, just log it
+		// The session will still work without this setting
+	}
+
 	err = t.Restore()
 	if err != nil {
 		if cleanupErr := t.Close(); cleanupErr != nil {
