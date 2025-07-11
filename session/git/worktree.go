@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+// sessionNameToBranchAndPath returns the git worktree name from the session name.
+func sessionNameToBranchAndPath(sessionName string) (branch string, path string) {
+	cfg := config.LoadConfig()
+	sanitizedName := sanitizeBranchName(sessionName)
+	return fmt.Sprintf("%s%s", cfg.BranchPrefix, sanitizedName), sanitizedName
+}
+
 func getWorktreeDirectory() (string, error) {
 	configDir, err := config.GetConfigDir()
 	if err != nil {
@@ -27,6 +34,9 @@ type GitWorktree struct {
 	sessionName string
 	// Branch name for the worktree
 	branchName string
+
+	// exists only after the worktree is Setup()
+
 	// Base commit hash for the worktree
 	baseCommitSHA string
 }
@@ -41,12 +51,9 @@ func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName
 	}
 }
 
-// NewGitWorktree creates a new GitWorktree instance
-func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, branchname string, err error) {
-	cfg := config.LoadConfig()
-	sanitizedName := sanitizeBranchName(sessionName)
-	branchName := fmt.Sprintf("%s%s", cfg.BranchPrefix, sanitizedName)
-
+// newGitWorktree creates a new GitWorktree instance
+func newGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, err error) {
+	branchName, path := sessionNameToBranchAndPath(sessionName)
 	// Convert repoPath to absolute path
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
@@ -57,15 +64,15 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 
 	repoPath, err = findGitRepoRoot(absPath)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	worktreeDir, err := getWorktreeDirectory()
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	worktreePath := filepath.Join(worktreeDir, sanitizedName)
+	worktreePath := filepath.Join(worktreeDir, path)
 	worktreePath = worktreePath + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
 
 	return &GitWorktree{
@@ -73,7 +80,7 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 		sessionName:  sessionName,
 		branchName:   branchName,
 		worktreePath: worktreePath,
-	}, branchName, nil
+	}, nil
 }
 
 // GetWorktreePath returns the path to the worktree

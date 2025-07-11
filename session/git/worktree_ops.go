@@ -23,15 +23,15 @@ func (g *GitWorktree) Setup() error {
 	branchRef := plumbing.NewBranchReferenceName(g.branchName)
 	if _, err := repo.Reference(branchRef, false); err == nil {
 		// Branch exists, use SetupFromExistingBranch
-		return g.SetupFromExistingBranch()
+		return g.setupFromExistingBranch()
 	}
 
 	// Branch doesn't exist, create new worktree from HEAD
-	return g.SetupNewWorktree()
+	return g.setupNewWorktree()
 }
 
 // SetupFromExistingBranch creates a worktree from an existing branch
-func (g *GitWorktree) SetupFromExistingBranch() error {
+func (g *GitWorktree) setupFromExistingBranch() error {
 	// Ensure worktrees directory exists
 	worktreesDir := filepath.Join(g.repoPath, "worktrees")
 	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
@@ -50,7 +50,7 @@ func (g *GitWorktree) SetupFromExistingBranch() error {
 }
 
 // SetupNewWorktree creates a new worktree from HEAD
-func (g *GitWorktree) SetupNewWorktree() error {
+func (g *GitWorktree) setupNewWorktree() error {
 	// Ensure worktrees directory exists
 	worktreesDir := filepath.Join(g.repoPath, "worktrees")
 	if err := os.MkdirAll(worktreesDir, 0755); err != nil {

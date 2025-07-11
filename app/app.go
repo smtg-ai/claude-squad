@@ -5,6 +5,7 @@ import (
 	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/session"
+	"claude-squad/session/git"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
 	"context"
@@ -43,6 +44,10 @@ const (
 	stateConfirm
 )
 
+// repoPath is the path to the git repo. As of writing, the app must be run from the
+// root of the repo.
+const repoPath = "."
+
 type home struct {
 	ctx context.Context
 
@@ -57,6 +62,8 @@ type home struct {
 	appConfig *config.Config
 	// appState stores persistent application state like seen help screens
 	appState config.AppState
+	// worktreeSource is used to get git worktrees.
+	worktreeSource git.WorktreeSource
 
 	// -- State --
 
@@ -107,17 +114,18 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	}
 
 	h := &home{
-		ctx:          ctx,
-		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
-		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
-		errBox:       ui.NewErrBox(),
-		storage:      storage,
-		appConfig:    appConfig,
-		program:      program,
-		autoYes:      autoYes,
-		state:        stateDefault,
-		appState:     appState,
+		ctx:            ctx,
+		spinner:        spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+		menu:           ui.NewMenu(),
+		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
+		errBox:         ui.NewErrBox(),
+		storage:        storage,
+		appConfig:      appConfig,
+		worktreeSource: git.NewTreeSource(repoPath),
+		program:        program,
+		autoYes:        autoYes,
+		state:          stateDefault,
+		appState:       appState,
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 
@@ -314,6 +322,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
 				return m, m.handleError(err)
 			}
+
+			log.InfoLog.Println("c")
 			// Instance added successfully, call the finalizer.
 			m.newInstanceFinalizer()
 			if m.autoYes {
@@ -321,6 +331,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 
 			m.newInstanceFinalizer()
+
+			log.InfoLog.Println("d")
 			m.state = stateDefault
 			if m.promptAfterName {
 				m.state = statePrompt
@@ -447,9 +459,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
+			Title:          "",
+			Path:           repoPath,
+			Program:        m.program,
+			WorktreeSource: m.worktreeSource,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -467,14 +480,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
+		log.InfoLog.Println("a")
 		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
+			Title:          "",
+			Path:           repoPath,
+			Program:        m.program,
+			WorktreeSource: m.worktreeSource,
 		})
 		if err != nil {
 			return m, m.handleError(err)
 		}
+
+		log.InfoLog.Println("b")
 
 		m.newInstanceFinalizer = m.list.AddInstance(instance)
 		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
