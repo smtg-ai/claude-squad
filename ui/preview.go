@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -16,6 +17,8 @@ type PreviewPane struct {
 	height int
 
 	previewState previewState
+	isScrolling  bool
+	viewport     viewport.Model
 }
 
 type previewState struct {
@@ -26,12 +29,16 @@ type previewState struct {
 }
 
 func NewPreviewPane() *PreviewPane {
-	return &PreviewPane{}
+	return &PreviewPane{
+		viewport: viewport.New(0, 0),
+	}
 }
 
 func (p *PreviewPane) SetSize(width, maxHeight int) {
 	p.width = width
 	p.height = maxHeight
+	p.viewport.Width = width
+	p.viewport.Height = maxHeight
 }
 
 // setFallbackState sets the preview state with fallback text and a message
@@ -65,20 +72,43 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		return nil
 	}
 
-	content, err := instance.Preview()
-	if err != nil {
-		return err
+	var content string
+	var err error
+
+	// If in scroll mode but haven't captured content yet, do it now
+	if p.isScrolling && p.viewport.Height > 0 && len(p.viewport.View()) == 0 {
+		// Capture full pane content including scrollback history using capture-pane -p -S -
+		content, err = instance.PreviewFullHistory()
+		if err != nil {
+			return err
+		}
+
+		// Set content in the viewport
+		footer := lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#808080", Dark: "#808080"}).
+			Render("ESC to exit scroll mode")
+
+		p.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, content, footer))
+	} else if !p.isScrolling {
+		// In normal mode, use the usual preview
+		content, err = instance.Preview()
+		if err != nil {
+			return err
+		}
+
+		// Always update the preview state with content, even if empty
+		// This ensures that newly created instances will display their content immediately
+		if len(content) == 0 && !instance.Started() {
+			p.setFallbackState("Please enter a name for the instance.")
+		} else {
+			// Update the preview state with the current content
+			p.previewState = previewState{
+				fallback: false,
+				text:     content,
+			}
+		}
 	}
 
-	if len(content) == 0 && !instance.Started() {
-		p.setFallbackState("Please enter a name for the instance.")
-		return nil
-	}
-
-	p.previewState = previewState{
-		fallback: false,
-		text:     content,
-	}
 	return nil
 }
 
@@ -121,6 +151,12 @@ func (p *PreviewPane) String() string {
 			Render(strings.Join(lines, ""))
 	}
 
+	// If in copy mode, use the viewport to display scrollable content
+	if p.isScrolling {
+		return p.viewport.View()
+	}
+
+	// Normal mode display
 	// Calculate available height accounting for border and margin
 	availableHeight := p.height - 1 //  1 for ellipsis
 
@@ -141,4 +177,93 @@ func (p *PreviewPane) String() string {
 	content := strings.Join(lines, "\n")
 	rendered := previewPaneStyle.Width(p.width).Render(content)
 	return rendered
+}
+
+// ScrollUp scrolls up in the viewport
+func (p *PreviewPane) ScrollUp(instance *session.Instance) error {
+	if instance == nil || instance.Status == session.Paused {
+		return nil
+	}
+
+	if !p.isScrolling {
+		// Entering scroll mode - capture entire pane content including scrollback history
+		content, err := instance.PreviewFullHistory()
+		if err != nil {
+			return err
+		}
+
+		// Set content in the viewport
+		footer := lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#808080", Dark: "#808080"}).
+			Render("ESC to exit scroll mode")
+
+		contentWithFooter := lipgloss.JoinVertical(lipgloss.Left, content, footer)
+		p.viewport.SetContent(contentWithFooter)
+
+		// Position the viewport at the bottom initially
+		p.viewport.GotoBottom()
+
+		p.isScrolling = true
+		return nil
+	}
+
+	// Already in scroll mode, just scroll the viewport
+	p.viewport.LineUp(1)
+	return nil
+}
+
+// ScrollDown scrolls down in the viewport
+func (p *PreviewPane) ScrollDown(instance *session.Instance) error {
+	if instance == nil || instance.Status == session.Paused {
+		return nil
+	}
+
+	if !p.isScrolling {
+		// Entering scroll mode - capture entire pane content including scrollback history
+		content, err := instance.PreviewFullHistory()
+		if err != nil {
+			return err
+		}
+
+		// Set content in the viewport
+		footer := lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#808080", Dark: "#808080"}).
+			Render("ESC to exit scroll mode")
+
+		contentWithFooter := lipgloss.JoinVertical(lipgloss.Left, content, footer)
+		p.viewport.SetContent(contentWithFooter)
+
+		// Position the viewport at the bottom initially
+		p.viewport.GotoBottom()
+
+		p.isScrolling = true
+		return nil
+	}
+
+	// Already in copy mode, just scroll the viewport
+	p.viewport.LineDown(1)
+	return nil
+}
+
+// ResetToNormalMode exits scroll mode and returns to normal mode
+func (p *PreviewPane) ResetToNormalMode(instance *session.Instance) error {
+	if instance == nil || instance.Status == session.Paused {
+		return nil
+	}
+
+	if p.isScrolling {
+		p.isScrolling = false
+		// Reset viewport
+		p.viewport.SetContent("")
+		p.viewport.GotoTop()
+
+		// Immediately update content instead of waiting for next UpdateContent call
+		content, err := instance.Preview()
+		if err != nil {
+			return err
+		}
+		p.previewState.text = content
+	}
+
+	return nil
 }

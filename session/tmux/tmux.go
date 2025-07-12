@@ -72,6 +72,11 @@ func NewTmuxSession(name string, program string) *TmuxSession {
 	return newTmuxSession(name, program, MakePtyFactory(), cmd.MakeExecutor())
 }
 
+// NewTmuxSessionWithDeps creates a new TmuxSession with provided dependencies for testing.
+func NewTmuxSessionWithDeps(name string, program string, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
+	return newTmuxSession(name, program, ptyFactory, cmdExec)
+}
+
 func newTmuxSession(name string, program string, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
 	return &TmuxSession{
 		sanitizedName: toClaudeSquadTmuxName(name),
@@ -120,6 +125,12 @@ func (t *TmuxSession) Start(workDir string) error {
 		}
 	}
 	ptmx.Close()
+
+	// Set history limit to enable scrollback (default is 2000, we'll use 10000 for more history)
+	historyCmd := exec.Command("tmux", "set-option", "-t", t.sanitizedName, "history-limit", "10000")
+	if err := t.cmdExec.Run(historyCmd); err != nil {
+		log.InfoLog.Printf("Warning: failed to set history-limit for session %s: %v", t.sanitizedName, err)
+	}
 
 	err = t.Restore()
 	if err != nil {

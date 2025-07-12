@@ -1,8 +1,8 @@
 package ui
 
 import (
+	"claude-squad/log"
 	"claude-squad/session"
-
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -31,7 +31,7 @@ var (
 )
 
 const (
-	PreviewTab = iota
+	PreviewTab int = iota
 	DiffTab
 )
 
@@ -49,8 +49,9 @@ type TabbedWindow struct {
 	height    int
 	width     int
 
-	preview *PreviewPane
-	diff    *DiffPane
+	preview  *PreviewPane
+	diff     *DiffPane
+	instance *session.Instance
 }
 
 func NewTabbedWindow(preview *PreviewPane, diff *DiffPane) *TabbedWindow {
@@ -62,6 +63,10 @@ func NewTabbedWindow(preview *PreviewPane, diff *DiffPane) *TabbedWindow {
 		preview: preview,
 		diff:    diff,
 	}
+}
+
+func (w *TabbedWindow) SetInstance(instance *session.Instance) {
+	w.instance = instance
 }
 
 // AdjustPreviewWidth adjusts the width of the preview pane to be 90% of the provided width.
@@ -93,6 +98,16 @@ func (w *TabbedWindow) Toggle() {
 	w.activeTab = (w.activeTab + 1) % len(w.tabs)
 }
 
+// ToggleWithReset toggles the tab and resets preview pane to normal mode
+func (w *TabbedWindow) ToggleWithReset(instance *session.Instance) error {
+	// Reset preview pane to normal mode before switching
+	if err := w.preview.ResetToNormalMode(instance); err != nil {
+		return err
+	}
+	w.activeTab = (w.activeTab + 1) % len(w.tabs)
+	return nil
+}
+
 // UpdatePreview updates the content of the preview pane. instance may be nil.
 func (w *TabbedWindow) UpdatePreview(instance *session.Instance) error {
 	if w.activeTab != PreviewTab {
@@ -108,15 +123,30 @@ func (w *TabbedWindow) UpdateDiff(instance *session.Instance) {
 	w.diff.SetDiff(instance)
 }
 
+// ResetPreviewToNormalMode resets the preview pane to normal mode
+func (w *TabbedWindow) ResetPreviewToNormalMode(instance *session.Instance) error {
+	return w.preview.ResetToNormalMode(instance)
+}
+
 // Add these new methods for handling scroll events
 func (w *TabbedWindow) ScrollUp() {
-	if w.activeTab == 1 { // Diff tab
+	if w.activeTab == PreviewTab {
+		err := w.preview.ScrollUp(w.instance)
+		if err != nil {
+			log.InfoLog.Printf("tabbed window failed to scroll up: %v", err)
+		}
+	} else {
 		w.diff.ScrollUp()
 	}
 }
 
 func (w *TabbedWindow) ScrollDown() {
-	if w.activeTab == 1 { // Diff tab
+	if w.activeTab == PreviewTab {
+		err := w.preview.ScrollDown(w.instance)
+		if err != nil {
+			log.InfoLog.Printf("tabbed window failed to scroll down: %v", err)
+		}
+	} else {
 		w.diff.ScrollDown()
 	}
 }
@@ -124,6 +154,11 @@ func (w *TabbedWindow) ScrollDown() {
 // IsInDiffTab returns true if the diff tab is currently active
 func (w *TabbedWindow) IsInDiffTab() bool {
 	return w.activeTab == 1
+}
+
+// IsPreviewInScrollMode returns true if the preview pane is in scroll mode
+func (w *TabbedWindow) IsPreviewInScrollMode() bool {
+	return w.preview.isScrolling
 }
 
 func (w *TabbedWindow) String() string {
@@ -153,11 +188,11 @@ func (w *TabbedWindow) String() string {
 		border, _, _, _, _ := style.GetBorder()
 		if isFirst && isActive {
 			border.BottomLeft = "│"
-		} else if isFirst && !isActive {
+		} else if isFirst {
 			border.BottomLeft = "├"
 		} else if isLast && isActive {
 			border.BottomRight = "│"
-		} else if isLast && !isActive {
+		} else if isLast {
 			border.BottomRight = "┤"
 		}
 		style = style.Border(border)

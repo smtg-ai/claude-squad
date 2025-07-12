@@ -191,7 +191,14 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		return fmt.Errorf("instance title cannot be empty")
 	}
 
-	tmuxSession := tmux.NewTmuxSession(i.Title, i.Program)
+	var tmuxSession *tmux.TmuxSession
+	if i.tmuxSession != nil {
+		// Use existing tmux session (useful for testing)
+		tmuxSession = i.tmuxSession
+	} else {
+		// Create new tmux session
+		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program)
+	}
 	i.tmuxSession = tmuxSession
 
 	if firstTimeSetup {
@@ -285,14 +292,6 @@ func (i *Instance) combineErrors(errs []error) error {
 		errMsg += "\n  - " + err.Error()
 	}
 	return fmt.Errorf("%s", errMsg)
-}
-
-// Close is an alias for Kill to maintain backward compatibility
-func (i *Instance) Close() error {
-	if !i.started {
-		return fmt.Errorf("cannot close instance that has not been started")
-	}
-	return i.Kill()
 }
 
 func (i *Instance) Preview() (string, error) {
@@ -514,4 +513,25 @@ func (i *Instance) SendPrompt(prompt string) error {
 	}
 
 	return nil
+}
+
+// PreviewFullHistory captures the entire tmux pane output including full scrollback history
+func (i *Instance) PreviewFullHistory() (string, error) {
+	if !i.started || i.Status == Paused {
+		return "", nil
+	}
+	return i.tmuxSession.CapturePaneContentWithOptions("-", "-")
+}
+
+// SetTmuxSession sets the tmux session for testing purposes
+func (i *Instance) SetTmuxSession(session *tmux.TmuxSession) {
+	i.tmuxSession = session
+}
+
+// SendKeys sends keys to the tmux session
+func (i *Instance) SendKeys(keys string) error {
+	if !i.started || i.Status == Paused {
+		return fmt.Errorf("cannot send keys to instance that has not been started or is paused")
+	}
+	return i.tmuxSession.SendKeys(keys)
 }

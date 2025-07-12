@@ -220,16 +220,19 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tickUpdateMetadataCmd
 	case tea.MouseMsg:
-		// Handle mouse wheel scrolling in the diff view
-		if m.tabbedWindow.IsInDiffTab() {
-			if msg.Action == tea.MouseActionPress {
+		// Handle mouse wheel events for scrolling the diff/preview pane
+		if msg.Action == tea.MouseActionPress {
+			if msg.Button == tea.MouseButtonWheelDown || msg.Button == tea.MouseButtonWheelUp {
+				selected := m.list.GetSelectedInstance()
+				if selected == nil || selected.Status == session.Paused {
+					return m, nil
+				}
+
 				switch msg.Button {
 				case tea.MouseButtonWheelUp:
 					m.tabbedWindow.ScrollUp()
-					return m, m.instanceChanged()
 				case tea.MouseButtonWheelDown:
 					m.tabbedWindow.ScrollDown()
-					return m, m.instanceChanged()
 				}
 			}
 		}
@@ -434,6 +437,22 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	// Exit scrolling mode when ESC is pressed and preview pane is in scrolling mode
+	// Check if Escape key was pressed and we're not in the diff tab (meaning we're in preview tab)
+	// Always check for escape key first to ensure it doesn't get intercepted elsewhere
+	if msg.Type == tea.KeyEsc {
+		// If in preview tab and in scroll mode, exit scroll mode
+		if !m.tabbedWindow.IsInDiffTab() && m.tabbedWindow.IsPreviewInScrollMode() {
+			// Use the selected instance from the list
+			selected := m.list.GetSelectedInstance()
+			err := m.tabbedWindow.ResetPreviewToNormalMode(selected)
+			if err != nil {
+				return m, m.handleError(err)
+			}
+			return m, m.instanceChanged()
+		}
+	}
+
 	// Handle quit commands first
 	if msg.String() == "ctrl+c" || msg.String() == "q" {
 		return m.handleQuit()
@@ -495,14 +514,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.list.Down()
 		return m, m.instanceChanged()
 	case keys.KeyShiftUp:
-		if m.tabbedWindow.IsInDiffTab() {
-			m.tabbedWindow.ScrollUp()
-		}
+		m.tabbedWindow.ScrollUp()
 		return m, m.instanceChanged()
 	case keys.KeyShiftDown:
-		if m.tabbedWindow.IsInDiffTab() {
-			m.tabbedWindow.ScrollDown()
-		}
+		m.tabbedWindow.ScrollDown()
 		return m, m.instanceChanged()
 	case keys.KeyTab:
 		m.tabbedWindow.Toggle()
@@ -621,6 +636,7 @@ func (m *home) instanceChanged() tea.Cmd {
 	selected := m.list.GetSelectedInstance()
 
 	m.tabbedWindow.UpdateDiff(selected)
+	m.tabbedWindow.SetInstance(selected)
 	// Update menu with current instance
 	m.menu.SetInstance(selected)
 
