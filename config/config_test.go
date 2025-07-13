@@ -108,6 +108,7 @@ func TestDefaultConfig(t *testing.T) {
 		assert.Equal(t, 1000, config.DaemonPollInterval)
 		assert.NotEmpty(t, config.BranchPrefix)
 		assert.True(t, strings.HasSuffix(config.BranchPrefix, "/"))
+		assert.Nil(t, config.WorktreeSetup)
 	})
 
 }
@@ -155,7 +156,11 @@ func TestLoadConfig(t *testing.T) {
 			"default_program": "test-claude",
 			"auto_yes": true,
 			"daemon_poll_interval": 2000,
-			"branch_prefix": "test/"
+			"branch_prefix": "test/",
+			"worktree_setup": {
+				"copy_ignored": [".env.local", "config/*.secret"],
+				"run": ["npm install", "cp .env.example .env"]
+			}
 		}`
 		err = os.WriteFile(configPath, []byte(configContent), 0644)
 		require.NoError(t, err)
@@ -172,6 +177,9 @@ func TestLoadConfig(t *testing.T) {
 		assert.True(t, config.AutoYes)
 		assert.Equal(t, 2000, config.DaemonPollInterval)
 		assert.Equal(t, "test/", config.BranchPrefix)
+		assert.NotNil(t, config.WorktreeSetup)
+		assert.Equal(t, []string{".env.local", "config/*.secret"}, config.WorktreeSetup.CopyIgnored)
+		assert.Equal(t, []string{"npm install", "cp .env.example .env"}, config.WorktreeSetup.Run)
 	})
 
 	t.Run("returns default config on invalid JSON", func(t *testing.T) {
@@ -202,6 +210,69 @@ func TestLoadConfig(t *testing.T) {
 	})
 }
 
+func TestWorktreeSetupConfig(t *testing.T) {
+	t.Run("validates absolute paths in copy_ignored", func(t *testing.T) {
+		// Create a temporary config directory
+		tempHome := t.TempDir()
+		configDir := filepath.Join(tempHome, ".claude-squad")
+		err := os.MkdirAll(configDir, 0755)
+		require.NoError(t, err)
+
+		// Create a test config file with absolute paths
+		configPath := filepath.Join(configDir, ConfigFileName)
+		configContent := `{
+			"default_program": "test-claude",
+			"worktree_setup": {
+				"copy_ignored": ["/etc/passwd", ".env.local", "/root/.ssh/id_rsa"]
+			}
+		}`
+		err = os.WriteFile(configPath, []byte(configContent), 0644)
+		require.NoError(t, err)
+
+		// Override HOME environment
+		originalHome := os.Getenv("HOME")
+		os.Setenv("HOME", tempHome)
+		defer os.Setenv("HOME", originalHome)
+
+		config := LoadConfig()
+
+		// Config should load successfully
+		assert.NotNil(t, config)
+		assert.NotNil(t, config.WorktreeSetup)
+		// All patterns should be present (validation happens during copy, not during config load)
+		assert.Equal(t, []string{"/etc/passwd", ".env.local", "/root/.ssh/id_rsa"}, config.WorktreeSetup.CopyIgnored)
+	})
+
+	t.Run("handles empty worktree_setup", func(t *testing.T) {
+		// Create a temporary config directory
+		tempHome := t.TempDir()
+		configDir := filepath.Join(tempHome, ".claude-squad")
+		err := os.MkdirAll(configDir, 0755)
+		require.NoError(t, err)
+
+		// Create a test config file with empty worktree_setup
+		configPath := filepath.Join(configDir, ConfigFileName)
+		configContent := `{
+			"default_program": "test-claude",
+			"worktree_setup": {}
+		}`
+		err = os.WriteFile(configPath, []byte(configContent), 0644)
+		require.NoError(t, err)
+
+		// Override HOME environment
+		originalHome := os.Getenv("HOME")
+		os.Setenv("HOME", tempHome)
+		defer os.Setenv("HOME", originalHome)
+
+		config := LoadConfig()
+
+		assert.NotNil(t, config)
+		assert.NotNil(t, config.WorktreeSetup)
+		assert.Empty(t, config.WorktreeSetup.CopyIgnored)
+		assert.Empty(t, config.WorktreeSetup.Run)
+	})
+}
+
 func TestSaveConfig(t *testing.T) {
 	t.Run("saves config to file", func(t *testing.T) {
 		// Create a temporary config directory
@@ -218,6 +289,10 @@ func TestSaveConfig(t *testing.T) {
 			AutoYes:            true,
 			DaemonPollInterval: 3000,
 			BranchPrefix:       "test-branch/",
+			WorktreeSetup: &WorktreeSetup{
+				CopyIgnored: []string{".env.test"},
+				Run:         []string{"echo 'test'"},
+			},
 		}
 
 		err := SaveConfig(testConfig)
@@ -235,5 +310,8 @@ func TestSaveConfig(t *testing.T) {
 		assert.Equal(t, testConfig.AutoYes, loadedConfig.AutoYes)
 		assert.Equal(t, testConfig.DaemonPollInterval, loadedConfig.DaemonPollInterval)
 		assert.Equal(t, testConfig.BranchPrefix, loadedConfig.BranchPrefix)
+		assert.NotNil(t, loadedConfig.WorktreeSetup)
+		assert.Equal(t, testConfig.WorktreeSetup.CopyIgnored, loadedConfig.WorktreeSetup.CopyIgnored)
+		assert.Equal(t, testConfig.WorktreeSetup.Run, loadedConfig.WorktreeSetup.Run)
 	})
 }

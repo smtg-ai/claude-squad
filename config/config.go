@@ -26,6 +26,15 @@ func GetConfigDir() (string, error) {
 	return filepath.Join(homeDir, ".claude-squad"), nil
 }
 
+// WorktreeSetup contains configuration for initializing new worktrees
+type WorktreeSetup struct {
+	// CopyIgnored is a list of glob patterns for gitignored files to copy into worktrees.
+	// Patterns must be relative to the repository root. Absolute paths are not allowed.
+	CopyIgnored []string `json:"copy_ignored,omitempty"`
+	// Run is a list of commands to run after creating a worktree.
+	Run []string `json:"run,omitempty"`
+}
+
 // Config represents the application configuration
 type Config struct {
 	// DefaultProgram is the default program to run in new instances
@@ -36,6 +45,8 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// WorktreeSetup contains configuration for initializing new worktrees
+	WorktreeSetup *WorktreeSetup `json:"worktree_setup,omitempty"`
 }
 
 // DefaultConfig returns the default configuration
@@ -58,6 +69,7 @@ func DefaultConfig() *Config {
 			}
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
+		WorktreeSetup: nil, // No setup by default
 	}
 }
 
