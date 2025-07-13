@@ -320,6 +320,47 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 	return t.attachCh, nil
 }
 
+// DetachSafely disconnects from the current tmux session without panicking
+func (t *TmuxSession) DetachSafely() error {
+	// Only detach if we're actually attached
+	if t.attachCh == nil {
+		return nil // Already detached
+	}
+
+	var errs []error
+
+	// Close the attached pty session.
+	if t.ptmx != nil {
+		if err := t.ptmx.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("error closing attach pty session: %w", err))
+		}
+		t.ptmx = nil
+	}
+
+	// Clean up attach state
+	if t.attachCh != nil {
+		close(t.attachCh)
+		t.attachCh = nil
+	}
+
+	if t.cancel != nil {
+		t.cancel()
+		t.cancel = nil
+	}
+
+	if t.wg != nil {
+		t.wg.Wait()
+		t.wg = nil
+	}
+
+	t.ctx = nil
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors during detach: %v", errs)
+	}
+	return nil
+}
+
 // Detach disconnects from the current tmux session. It panics if detaching fails. At the moment, there's no
 // way to recover from a failed detach.
 func (t *TmuxSession) Detach() {

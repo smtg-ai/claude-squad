@@ -390,12 +390,11 @@ func (i *Instance) Pause() error {
 		}
 	}
 
-	// Close tmux session first since it's using the git worktree
-	if err := i.tmuxSession.Close(); err != nil {
-		errs = append(errs, fmt.Errorf("failed to close tmux session: %w", err))
+	// Detach from tmux session instead of closing to preserve session output
+	if err := i.tmuxSession.DetachSafely(); err != nil {
+		errs = append(errs, fmt.Errorf("failed to detach tmux session: %w", err))
 		log.ErrorLog.Print(err)
-		// Return early if we can't close tmux to avoid corrupted state
-		return i.combineErrors(errs)
+		// Continue with pause process even if detach fails
 	}
 
 	// Check if worktree exists before trying to remove it
@@ -448,15 +447,33 @@ func (i *Instance) Resume() error {
 		return fmt.Errorf("failed to setup git worktree: %w", err)
 	}
 
-	// Create new tmux session
-	if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
-		log.ErrorLog.Print(err)
-		// Cleanup git worktree if tmux session creation fails
-		if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
-			err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+	// Check if tmux session still exists from pause, otherwise create new one
+	if i.tmuxSession.DoesSessionExist() {
+		// Session exists, just restore PTY connection to it
+		if err := i.tmuxSession.Restore(); err != nil {
 			log.ErrorLog.Print(err)
+			// If restore fails, fall back to creating new session
+			if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+				log.ErrorLog.Print(err)
+				// Cleanup git worktree if tmux session creation fails
+				if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
+					err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+					log.ErrorLog.Print(err)
+				}
+				return fmt.Errorf("failed to start new session: %w", err)
+			}
 		}
-		return fmt.Errorf("failed to start new session: %w", err)
+	} else {
+		// Create new tmux session
+		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+			log.ErrorLog.Print(err)
+			// Cleanup git worktree if tmux session creation fails
+			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
+				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+				log.ErrorLog.Print(err)
+			}
+			return fmt.Errorf("failed to start new session: %w", err)
+		}
 	}
 
 	i.SetStatus(Running)
