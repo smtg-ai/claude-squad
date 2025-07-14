@@ -76,6 +76,38 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 	}, branchName, nil
 }
 
+// NewGitWorktreeForBranch creates a new GitWorktree instance for an existing branch
+func NewGitWorktreeForBranch(repoPath string, sessionName string, branchName string) (tree *GitWorktree, branchname string, err error) {
+	// Convert repoPath to absolute path
+	absPath, err := filepath.Abs(repoPath)
+	if err != nil {
+		log.ErrorLog.Printf("git worktree path abs error, falling back to repoPath %s: %s", repoPath, err)
+		// If we can't get absolute path, use original path as fallback
+		absPath = repoPath
+	}
+
+	repoPath, err = findGitRepoRoot(absPath)
+	if err != nil {
+		return nil, "", err
+	}
+
+	worktreeDir, err := getWorktreeDirectory()
+	if err != nil {
+		return nil, "", err
+	}
+
+	sanitizedName := sanitizeBranchName(sessionName)
+	worktreePath := filepath.Join(worktreeDir, sanitizedName)
+	worktreePath = worktreePath + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
+
+	return &GitWorktree{
+		repoPath:     repoPath,
+		sessionName:  sessionName,
+		branchName:   branchName,
+		worktreePath: worktreePath,
+	}, branchName, nil
+}
+
 // GetWorktreePath returns the path to the worktree
 func (g *GitWorktree) GetWorktreePath() string {
 	return g.worktreePath

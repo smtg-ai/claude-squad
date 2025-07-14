@@ -5,6 +5,7 @@ import (
 	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/session"
+	"claude-squad/session/git"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
 	"context"
@@ -42,6 +43,8 @@ const (
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
+	// stateBranchSelect is the state when the user is selecting a branch.
+	stateBranchSelect
 )
 
 type home struct {
@@ -93,6 +96,8 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// branchSelectorOverlay displays branch selection interface
+	branchSelectorOverlay *overlay.BranchSelectorOverlay
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -186,6 +191,31 @@ func (m *home) Init() tea.Cmd {
 }
 
 func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle branch selector updates when in that state
+	if m.state == stateBranchSelect && m.branchSelectorOverlay != nil {
+		if _, ok := msg.(tea.KeyMsg); ok {
+			// Update the branch selector
+			_, cmd := m.branchSelectorOverlay.Update(msg)
+			
+			// Check if selection is complete
+			if m.branchSelectorOverlay.IsSelected() {
+				selectedBranch := m.branchSelectorOverlay.SelectedBranch()
+				if selectedBranch == "" {
+					// User cancelled
+					m.state = stateDefault
+					m.menu.SetState(ui.StateDefault)
+					m.branchSelectorOverlay = nil
+					return m, nil
+				}
+				
+				// Create instance with selected branch
+				return m.createInstanceWithBranch(selectedBranch)
+			}
+			
+			return m, cmd
+		}
+	}
+
 	switch msg := msg.(type) {
 	case hideErrMsg:
 		m.errBox.Clear()
@@ -488,6 +518,26 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
 		m.state = stateNew
 		m.menu.SetState(ui.StateNewInstance)
+
+		return m, nil
+	case keys.KeyExistingBranch:
+		if m.list.NumInstances() >= GlobalInstanceLimit {
+			return m, m.handleError(
+				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
+		}
+		
+		// Show branch selector
+		m.state = stateBranchSelect
+		m.menu.SetState(ui.StateNewInstance)
+		
+		// Get list of remote branches
+		branches, err := git.ListRemoteBranchesFromRepo(".")
+		if err != nil {
+			return m, m.handleError(fmt.Errorf("failed to list remote branches: %w", err))
+		}
+		
+		// Create branch selector overlay
+		m.branchSelectorOverlay = overlay.NewBranchSelectorOverlay(branches)
 
 		return m, nil
 	case keys.KeyUp:
@@ -808,7 +858,37 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("confirmation overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
+	} else if m.state == stateBranchSelect {
+		if m.branchSelectorOverlay == nil {
+			log.ErrorLog.Printf("branch selector overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.branchSelectorOverlay.View(), mainView, true, true)
 	}
 
 	return mainView
+}
+
+func (m *home) createInstanceWithBranch(branchName string) (tea.Model, tea.Cmd) {
+	// Create a new instance with the selected branch
+	instance, err := session.NewInstanceWithBranch(session.InstanceOptions{
+		Title:      branchName, // Use branch name as title
+		Path:       ".",
+		Program:    m.program,
+		BranchName: branchName,
+	})
+	if err != nil {
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		m.branchSelectorOverlay = nil
+		return m, m.handleError(err)
+	}
+
+	m.newInstanceFinalizer = m.list.AddInstance(instance)
+	m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+	m.state = stateNew
+	m.menu.SetState(ui.StateNewInstance)
+	m.branchSelectorOverlay = nil
+	m.promptAfterName = true
+
+	return m, nil
 }

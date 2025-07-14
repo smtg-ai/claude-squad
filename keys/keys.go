@@ -24,6 +24,7 @@ const (
 	KeyResume
 	KeyPrompt // New key for entering a prompt
 	KeyHelp   // Key for showing help screen
+	KeyExistingBranch // Key for creating instance from existing branch
 
 	// Diff keybindings
 	KeyShiftUp
@@ -64,6 +65,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"enter":      KeyEnter,
 	"o":          KeyEnter,
 	"n":          KeyNew,
+	"e":          KeyExistingBranch,
 	"D":          KeyKill,
 	"q":          KeyQuit,
 	"tab":        KeyTab,
@@ -142,6 +144,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyNew: key.NewBinding(
 		key.WithKeys("n"),
 		key.WithHelp("n", "new"),
+	),
+	KeyExistingBranch: key.NewBinding(
+		key.WithKeys("e"),
+		key.WithHelp("e", "existing branch"),
 	),
 	KeyKill: key.NewBinding(
 		key.WithKeys("D"),

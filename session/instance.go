@@ -62,6 +62,8 @@ type Instance struct {
 	tmuxSession *tmux.TmuxSession
 	// gitWorktree is the git worktree for the instance.
 	gitWorktree *git.GitWorktree
+	// existingBranch indicates if this instance is using an existing branch
+	existingBranch bool
 }
 
 // ToInstanceData converts an Instance to its serializable form
@@ -150,6 +152,8 @@ type InstanceOptions struct {
 	Program string
 	// If AutoYes is true, then
 	AutoYes bool
+	// BranchName is the name of an existing branch to checkout (optional)
+	BranchName string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -174,6 +178,39 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 	}, nil
 }
 
+// NewInstanceWithBranch creates a new instance that will use an existing branch
+func NewInstanceWithBranch(opts InstanceOptions) (*Instance, error) {
+	t := time.Now()
+
+	// Convert path to absolute
+	absPath, err := filepath.Abs(opts.Path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	// If title is empty, use branch name
+	title := opts.Title
+	if title == "" {
+		title = opts.BranchName
+	}
+
+	instance := &Instance{
+		Title:     title,
+		Status:    Ready,
+		Path:      absPath,
+		Program:   opts.Program,
+		Branch:    opts.BranchName, // Set the branch name
+		Height:    0,
+		Width:     0,
+		CreatedAt: t,
+		UpdatedAt: t,
+		AutoYes:   opts.AutoYes,
+		existingBranch: true, // Mark this as using an existing branch
+	}
+
+	return instance, nil
+}
+
 func (i *Instance) RepoName() (string, error) {
 	if !i.started {
 		return "", fmt.Errorf("cannot get repo name for instance that has not been started")
@@ -195,12 +232,22 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	i.tmuxSession = tmuxSession
 
 	if firstTimeSetup {
-		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
-		if err != nil {
-			return fmt.Errorf("failed to create git worktree: %w", err)
+		if i.existingBranch && i.Branch != "" {
+			// Create worktree for existing branch
+			gitWorktree, _, err := git.NewGitWorktreeForBranch(i.Path, i.Title, i.Branch)
+			if err != nil {
+				return fmt.Errorf("failed to create git worktree for branch %s: %w", i.Branch, err)
+			}
+			i.gitWorktree = gitWorktree
+		} else {
+			// Create new worktree with auto-generated branch
+			gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
+			if err != nil {
+				return fmt.Errorf("failed to create git worktree: %w", err)
+			}
+			i.gitWorktree = gitWorktree
+			i.Branch = branchName
 		}
-		i.gitWorktree = gitWorktree
-		i.Branch = branchName
 	}
 
 	// Setup error handler to cleanup resources on any error
