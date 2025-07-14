@@ -62,12 +62,12 @@ func DefaultConfig() *Config {
 }
 
 // GetClaudeCommand attempts to find the "claude" command in the user's shell
-// It checks in the following order:
-// 1. Shell alias resolution: using "which" command
-// 2. PATH lookup
-//
-// If both fail, it returns an error.
 func GetClaudeCommand() (string, error) {
+	return findCommand("claude")
+}
+
+// findCommand attempts to find a specific command in the user's shell
+func findCommand(cmdName string) (string, error) {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/bash" // Default to bash if SHELL is not set
@@ -77,11 +77,11 @@ func GetClaudeCommand() (string, error) {
 	// For zsh, source .zshrc; for bash, source .bashrc
 	var shellCmd string
 	if strings.Contains(shell, "zsh") {
-		shellCmd = "source ~/.zshrc &>/dev/null || true; which claude"
+		shellCmd = fmt.Sprintf("source ~/.zshrc &>/dev/null || true; which %s", cmdName)
 	} else if strings.Contains(shell, "bash") {
-		shellCmd = "source ~/.bashrc &>/dev/null || true; which claude"
+		shellCmd = fmt.Sprintf("source ~/.bashrc &>/dev/null || true; which %s", cmdName)
 	} else {
-		shellCmd = "which claude"
+		shellCmd = fmt.Sprintf("which %s", cmdName)
 	}
 
 	cmd := exec.Command(shell, "-c", shellCmd)
@@ -101,12 +101,12 @@ func GetClaudeCommand() (string, error) {
 	}
 
 	// Otherwise, try to find in PATH directly
-	claudePath, err := exec.LookPath("claude")
+	cmdPath, err := exec.LookPath(cmdName)
 	if err == nil {
-		return claudePath, nil
+		return cmdPath, nil
 	}
 
-	return "", fmt.Errorf("claude command not found in aliases or PATH")
+	return "", fmt.Errorf("%s command not found in aliases or PATH", cmdName)
 }
 
 func LoadConfig() *Config {
