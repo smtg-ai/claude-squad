@@ -2,6 +2,7 @@ package overlay
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -30,12 +31,59 @@ type BranchSelectionOverlay struct {
 	width, height int
 	fixedWidth    int // Calculated fixed width based on content
 	filterText    string // Current filter text
+	currentBranch string // Currently checked-out branch
+}
+
+// getCurrentBranch gets the currently checked-out branch
+func getCurrentBranch() string {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
+}
+
+// sortBranchesWithCurrentFirst sorts branches to put current branch first (if no default branch)
+func sortBranchesWithCurrentFirst(branches []string, defaultBranch string) []string {
+	// If there's a default branch set, don't reorder
+	if defaultBranch != "" && defaultBranch != "HEAD" {
+		return branches
+	}
+	
+	currentBranch := getCurrentBranch()
+	if currentBranch == "" {
+		return branches
+	}
+	
+	// Create new slice with current branch first
+	sorted := make([]string, 0, len(branches))
+	
+	// Add current branch first if it exists in the list
+	for _, branch := range branches {
+		if branch == currentBranch {
+			sorted = append(sorted, branch)
+			break
+		}
+	}
+	
+	// Add all other branches
+	for _, branch := range branches {
+		if branch != currentBranch {
+			sorted = append(sorted, branch)
+		}
+	}
+	
+	return sorted
 }
 
 // NewBranchSelectionOverlay creates a new branch selection overlay.
 func NewBranchSelectionOverlay(title string, branches []string, defaultBranch string) *BranchSelectionOverlay {
-	items := make([]list.Item, len(branches))
-	for i, branch := range branches {
+	// Sort branches to put current branch first (if no default branch)
+	sortedBranches := sortBranchesWithCurrentFirst(branches, defaultBranch)
+	
+	items := make([]list.Item, len(sortedBranches))
+	for i, branch := range sortedBranches {
 		items[i] = branchItem{name: branch}
 	}
 
@@ -46,9 +94,17 @@ func NewBranchSelectionOverlay(title string, branches []string, defaultBranch st
 	l.SetFilteringEnabled(true)
 	l.SetShowHelp(false)
 
-	// Find and select default branch
-	for i, branch := range branches {
-		if branch == defaultBranch {
+	// Find and select default branch, or use first branch (current branch if no default)
+	selectedBranch := defaultBranch
+	if selectedBranch == "" || selectedBranch == "HEAD" {
+		if len(sortedBranches) > 0 {
+			selectedBranch = sortedBranches[0] // This will be current branch if it exists
+		}
+	}
+	
+	// Set list selection
+	for i, branch := range sortedBranches {
+		if branch == selectedBranch {
 			l.Select(i)
 			break
 		}
@@ -56,17 +112,18 @@ func NewBranchSelectionOverlay(title string, branches []string, defaultBranch st
 
 	overlay := &BranchSelectionOverlay{
 		list:          l,
-		branches:      branches,
-		allBranches:   make([]string, len(branches)), // Store original list
+		branches:      sortedBranches,
+		allBranches:   make([]string, len(sortedBranches)), // Store sorted list
 		Title:         title,
 		Submitted:     false,
 		Canceled:      false,
-		selectedBranch: defaultBranch,
+		selectedBranch: selectedBranch,
 		filterText:    "",
+		currentBranch: getCurrentBranch(),
 	}
 	
-	// Copy branches to allBranches
-	copy(overlay.allBranches, branches)
+	// Copy sorted branches to allBranches
+	copy(overlay.allBranches, sortedBranches)
 	
 	// Calculate fixed width based on content
 	overlay.fixedWidth = overlay.calculateFixedWidth()
@@ -123,11 +180,12 @@ func (b *BranchSelectionOverlay) calculateFixedWidth() int {
 // filterBranches filters the branch list based on the current filter text
 func (b *BranchSelectionOverlay) filterBranches() {
 	if b.filterText == "" {
-		// No filter, show all branches
+		// No filter, show all branches (already sorted with current branch first if no default)
 		b.branches = make([]string, len(b.allBranches))
 		copy(b.branches, b.allBranches)
 	} else {
 		// Filter branches that start with the filter text
+		// The current branch can be filtered out like any other branch
 		var filtered []string
 		for _, branch := range b.allBranches {
 			if strings.HasPrefix(strings.ToLower(branch), strings.ToLower(b.filterText)) {
