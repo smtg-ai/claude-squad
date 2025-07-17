@@ -454,7 +454,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.branchSelectionOverlay = nil
 
 			if wasCanceled {
-				// If canceled, go back to default state
+				// If canceled, remove the instance that was created and go back to default state
+				m.list.Kill()
 				m.state = stateDefault
 			}
 			// If branch was selected, the callback already set state to stateNew
@@ -539,25 +540,28 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
+		// Create instance immediately to show in UI
+		instance, err := session.NewInstance(session.InstanceOptions{
+			Title:   "",
+			Path:    ".",
+			Program: m.program,
+		})
+		if err != nil {
+			return m, m.handleError(err)
+		}
+		
+		// Add instance to list and set state to stateNew immediately
+		m.newInstanceFinalizer = m.list.AddInstance(instance)
+		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+		
+		// Show branch selection overlay over the new instance
 		return m.showBranchSelectionOverlay(".", func(parentBranch string) {
-			// Store selected parent branch for use during instance creation
-			m.pendingParentBranch = parentBranch
-
-			instance, err := session.NewInstance(session.InstanceOptions{
-				Title:   "",
-				Path:    ".",
-				Program: m.program,
-			})
-			if err != nil {
-				// TODO: handle error properly
-				return
-			}
+			// Update the existing instance's parent branch
 			if err := instance.SetParentBranch(parentBranch); err != nil {
 				// TODO: handle error properly
 				return
 			}
-			m.newInstanceFinalizer = m.list.AddInstance(instance)
-			m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+			// Set state to stateNew so user can name the instance
 			m.state = stateNew
 			m.menu.SetState(ui.StateNewInstance)
 		})
