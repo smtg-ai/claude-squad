@@ -212,12 +212,20 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 
 	branchLine := fmt.Sprintf("%s %s-%s%s%s", strings.Repeat(" ", len(prefix)), branchIcon, branch, spaces, diff)
 
-	// join title and subtitle
-	text := lipgloss.JoinVertical(
-		lipgloss.Left,
-		title,
-		descS.Render(branchLine),
-	)
+	// Create parent branch line
+	parentBranch := i.GetParentBranch()
+	var parentBranchLine string
+	if parentBranch != "" && parentBranch != "HEAD" {
+		parentBranchLine = fmt.Sprintf("%s   └─ parent: %s", strings.Repeat(" ", len(prefix)), parentBranch)
+	}
+
+	// join title, branch line, and parent branch line
+	lines := []string{title, descS.Render(branchLine)}
+	if parentBranchLine != "" {
+		lines = append(lines, descS.Render(parentBranchLine))
+	}
+
+	text := lipgloss.JoinVertical(lipgloss.Left, lines...)
 
 	return text
 }

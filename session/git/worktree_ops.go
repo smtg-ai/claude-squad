@@ -71,24 +71,28 @@ func (g *GitWorktree) SetupNewWorktree() error {
 		return fmt.Errorf("failed to cleanup existing branch: %w", err)
 	}
 
-	output, err := g.runGitCommand(g.repoPath, "rev-parse", "HEAD")
-	if err != nil {
-		if strings.Contains(err.Error(), "fatal: ambiguous argument 'HEAD'") ||
-			strings.Contains(err.Error(), "fatal: not a valid object name") ||
-			strings.Contains(err.Error(), "fatal: HEAD: not a valid object name") {
-			return fmt.Errorf("this appears to be a brand new repository: please create an initial commit before creating an instance")
-		}
-		return fmt.Errorf("failed to get HEAD commit hash: %w", err)
+	// Use parent branch if specified, otherwise use HEAD
+	parentRef := g.parentBranch
+	if parentRef == "" {
+		parentRef = "HEAD"
 	}
-	headCommit := strings.TrimSpace(string(output))
-	g.baseCommitSHA = headCommit
 
-	// Create a new worktree from the HEAD commit
+	output, err := g.runGitCommand(g.repoPath, "rev-parse", parentRef)
+	if err != nil {
+		if strings.Contains(err.Error(), "fatal: ambiguous argument") ||
+			strings.Contains(err.Error(), "fatal: not a valid object name") {
+			return fmt.Errorf("parent branch '%s' does not exist or is not a valid reference", parentRef)
+		}
+		return fmt.Errorf("failed to get %s commit hash: %w", parentRef, err)
+	}
+	parentCommit := strings.TrimSpace(string(output))
+	g.baseCommitSHA = parentCommit
+
+	// Create a new worktree from the parent branch/commit
 	// Otherwise, we'll inherit uncommitted changes from the previous worktree.
 	// This way, we can start the worktree with a clean slate.
-	// TODO: we might want to give an option to use main/master instead of the current branch.
-	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, headCommit); err != nil {
-		return fmt.Errorf("failed to create worktree from commit %s: %w", headCommit, err)
+	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, parentCommit); err != nil {
+		return fmt.Errorf("failed to create worktree from commit %s: %w", parentCommit, err)
 	}
 
 	return nil

@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"time"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 )
 
 func getWorktreeDirectory() (string, error) {
@@ -29,23 +32,34 @@ type GitWorktree struct {
 	branchName string
 	// Base commit hash for the worktree
 	baseCommitSHA string
+	// Parent branch to create the worktree from
+	parentBranch string
 }
 
-func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string) *GitWorktree {
+func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string, parentBranch string) *GitWorktree {
 	return &GitWorktree{
 		repoPath:      repoPath,
 		worktreePath:  worktreePath,
 		sessionName:   sessionName,
 		branchName:    branchName,
 		baseCommitSHA: baseCommitSHA,
+		parentBranch:  parentBranch,
 	}
 }
 
 // NewGitWorktree creates a new GitWorktree instance
-func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, branchname string, err error) {
+func NewGitWorktree(repoPath string, sessionName string, parentBranch string) (tree *GitWorktree, branchname string, err error) {
 	cfg := config.LoadConfig()
 	sanitizedName := sanitizeBranchName(sessionName)
 	branchName := fmt.Sprintf("%s%s", cfg.BranchPrefix, sanitizedName)
+
+	// Use default parent branch if not specified
+	if parentBranch == "" {
+		parentBranch = cfg.DefaultParentBranch
+		if parentBranch == "" {
+			parentBranch = "HEAD" // fallback to current behavior
+		}
+	}
 
 	// Convert repoPath to absolute path
 	absPath, err := filepath.Abs(repoPath)
@@ -73,6 +87,7 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 		sessionName:  sessionName,
 		branchName:   branchName,
 		worktreePath: worktreePath,
+		parentBranch: parentBranch,
 	}, branchName, nil
 }
 
@@ -99,4 +114,41 @@ func (g *GitWorktree) GetRepoName() string {
 // GetBaseCommitSHA returns the base commit SHA for the worktree
 func (g *GitWorktree) GetBaseCommitSHA() string {
 	return g.baseCommitSHA
+}
+
+// GetParentBranch returns the parent branch for the worktree
+func (g *GitWorktree) GetParentBranch() string {
+	return g.parentBranch
+}
+
+// GetAvailableBranches returns a list of available branches in the repository
+func (g *GitWorktree) GetAvailableBranches() ([]string, error) {
+	return GetAvailableBranches(g.repoPath)
+}
+
+// GetAvailableBranches returns a list of available branches for a given repository path
+func GetAvailableBranches(repoPath string) ([]string, error) {
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	refs, err := repo.References()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get references: %w", err)
+	}
+
+	var branches []string
+	err = refs.ForEach(func(ref *plumbing.Reference) error {
+		if ref.Name().IsBranch() {
+			branchName := ref.Name().Short()
+			branches = append(branches, branchName)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to iterate references: %w", err)
+	}
+
+	return branches, nil
 }

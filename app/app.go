@@ -5,6 +5,7 @@ import (
 	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/session"
+	"claude-squad/session/git"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
 	"context"
@@ -42,6 +43,8 @@ const (
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
+	// stateBranchSelection is the state when the user is selecting a parent branch.
+	stateBranchSelection
 )
 
 type home struct {
@@ -69,6 +72,8 @@ type home struct {
 
 	// promptAfterName tracks if we should enter prompt mode after naming
 	promptAfterName bool
+	// pendingParentBranch is the parent branch selected for a new instance
+	pendingParentBranch string
 
 	// keySent is used to manage underlining menu items
 	keySent bool
@@ -91,6 +96,8 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// branchSelectionOverlay displays branch selection interface
+	branchSelectionOverlay *overlay.BranchSelectionOverlay
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -161,6 +168,9 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	}
 	if m.textOverlay != nil {
 		m.textOverlay.SetWidth(int(float32(msg.Width) * 0.6))
+	}
+	if m.branchSelectionOverlay != nil {
+		m.branchSelectionOverlay.SetSize(int(float32(msg.Width)*0.8), int(float32(msg.Height)*0.8))
 	}
 
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
@@ -270,7 +280,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateBranchSelection {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -344,8 +354,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.autoYes {
 				instance.AutoYes = true
 			}
-
-			m.newInstanceFinalizer()
 			m.state = stateDefault
 			if m.promptAfterName {
 				m.state = statePrompt
@@ -437,6 +445,25 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle branch selection state
+	if m.state == stateBranchSelection {
+		shouldClose := m.branchSelectionOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			// Check if branch selection was submitted or canceled before clearing
+			wasCanceled := m.branchSelectionOverlay.IsCanceled()
+			m.branchSelectionOverlay = nil
+
+			if wasCanceled {
+				// If canceled, go back to default state
+				m.state = stateDefault
+			}
+			// If branch was selected, the callback already set state to stateNew
+			// No need to change state here for successful submission
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// Exit scrolling mode when ESC is pressed and preview pane is in scrolling mode
 	// Check if Escape key was pressed and we're not in the diff tab (meaning we're in preview tab)
 	// Always check for escape key first to ensure it doesn't get intercepted elsewhere
@@ -507,6 +534,33 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.menu.SetState(ui.StateNewInstance)
 
 		return m, nil
+	case keys.KeyBranchSelection:
+		if m.list.NumInstances() >= GlobalInstanceLimit {
+			return m, m.handleError(
+				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
+		}
+		return m.showBranchSelectionOverlay(".", func(parentBranch string) {
+			// Store selected parent branch for use during instance creation
+			m.pendingParentBranch = parentBranch
+
+			instance, err := session.NewInstance(session.InstanceOptions{
+				Title:   "",
+				Path:    ".",
+				Program: m.program,
+			})
+			if err != nil {
+				// TODO: handle error properly
+				return
+			}
+			if err := instance.SetParentBranch(parentBranch); err != nil {
+				// TODO: handle error properly
+				return
+			}
+			m.newInstanceFinalizer = m.list.AddInstance(instance)
+			m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+			m.state = stateNew
+			m.menu.SetState(ui.StateNewInstance)
+		})
 	case keys.KeyUp:
 		m.list.Up()
 		return m, m.instanceChanged()
@@ -719,6 +773,33 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 	return nil
 }
 
+// showBranchSelectionOverlay displays the branch selection overlay
+func (m *home) showBranchSelectionOverlay(path string, onSubmit func(string)) (tea.Model, tea.Cmd) {
+	// Get available branches for the repository
+	branches, err := git.GetAvailableBranches(path)
+	if err != nil {
+		return m, m.handleError(fmt.Errorf("failed to get available branches: %w", err))
+	}
+
+	// Get default parent branch from config
+	cfg := config.LoadConfig()
+	defaultBranch := cfg.DefaultParentBranch
+	if defaultBranch == "" {
+		defaultBranch = "HEAD"
+	}
+
+	// Create branch selection overlay
+	m.branchSelectionOverlay = overlay.NewBranchSelectionOverlay(
+		"Select Parent Branch",
+		branches,
+		defaultBranch,
+	)
+	m.branchSelectionOverlay.SetOnSubmit(onSubmit)
+	m.branchSelectionOverlay.SetSize(60, 30) // Fixed size for now
+	m.state = stateBranchSelection
+	return m, nil
+}
+
 func (m *home) View() string {
 	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.list.String())
 	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.tabbedWindow.String())
@@ -746,6 +827,11 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("confirmation overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
+	} else if m.state == stateBranchSelection {
+		if m.branchSelectionOverlay == nil {
+			log.ErrorLog.Printf("branch selection overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.branchSelectionOverlay.Render(), mainView, true, true)
 	}
 
 	return mainView
