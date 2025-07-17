@@ -22,8 +22,8 @@ const (
 
 	KeyCheckout
 	KeyResume
-	KeyPrompt          // New key for entering a prompt
-	KeyHelp            // Key for showing help screen
+	KeyPrompt // New key for entering a prompt
+	KeyHelp   // Key for showing help screen
 
 	// Diff keybindings
 	KeyShiftUp

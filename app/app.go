@@ -508,11 +508,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if err != nil {
 			return m, m.handleError(err)
 		}
-		
+
 		// Add instance to list and set state to stateNew immediately
 		m.newInstanceFinalizer = m.list.AddInstance(instance)
 		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
-		
+
 		// Show branch selection overlay over the new instance
 		return m.showBranchSelectionOverlay(".", func(parentBranch string) {
 			// Update the existing instance's parent branch
@@ -539,11 +539,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if err != nil {
 			return m, m.handleError(err)
 		}
-		
+
 		// Add instance to list and set state to stateNew immediately
 		m.newInstanceFinalizer = m.list.AddInstance(instance)
 		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
-		
+
 		// Show branch selection overlay over the new instance
 		return m.showBranchSelectionOverlay(".", func(parentBranch string) {
 			// Update the existing instance's parent branch

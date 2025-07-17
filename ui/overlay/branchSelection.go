@@ -20,18 +20,18 @@ func (i branchItem) Description() string { return "" }
 
 // BranchSelectionOverlay represents a branch selection overlay with state management.
 type BranchSelectionOverlay struct {
-	list          list.Model
-	branches      []string
-	allBranches   []string // Keep original list for filtering
-	Title         string
-	Submitted     bool
-	Canceled      bool
+	list           list.Model
+	branches       []string
+	allBranches    []string // Keep original list for filtering
+	Title          string
+	Submitted      bool
+	Canceled       bool
 	selectedBranch string
-	OnSubmit      func(string)
-	width, height int
-	fixedWidth    int // Calculated fixed width based on content
-	filterText    string // Current filter text
-	currentBranch string // Currently checked-out branch
+	OnSubmit       func(string)
+	width, height  int
+	fixedWidth     int    // Calculated fixed width based on content
+	filterText     string // Current filter text
+	currentBranch  string // Currently checked-out branch
 }
 
 // getCurrentBranch gets the currently checked-out branch
@@ -50,15 +50,15 @@ func sortBranchesWithCurrentFirst(branches []string, defaultBranch string) []str
 	if defaultBranch != "" && defaultBranch != "HEAD" {
 		return branches
 	}
-	
+
 	currentBranch := getCurrentBranch()
 	if currentBranch == "" {
 		return branches
 	}
-	
+
 	// Create new slice with current branch first
 	sorted := make([]string, 0, len(branches))
-	
+
 	// Add current branch first if it exists in the list
 	for _, branch := range branches {
 		if branch == currentBranch {
@@ -66,14 +66,14 @@ func sortBranchesWithCurrentFirst(branches []string, defaultBranch string) []str
 			break
 		}
 	}
-	
+
 	// Add all other branches
 	for _, branch := range branches {
 		if branch != currentBranch {
 			sorted = append(sorted, branch)
 		}
 	}
-	
+
 	return sorted
 }
 
@@ -81,7 +81,7 @@ func sortBranchesWithCurrentFirst(branches []string, defaultBranch string) []str
 func NewBranchSelectionOverlay(title string, branches []string, defaultBranch string) *BranchSelectionOverlay {
 	// Sort branches to put current branch first (if no default branch)
 	sortedBranches := sortBranchesWithCurrentFirst(branches, defaultBranch)
-	
+
 	items := make([]list.Item, len(sortedBranches))
 	for i, branch := range sortedBranches {
 		items[i] = branchItem{name: branch}
@@ -101,7 +101,7 @@ func NewBranchSelectionOverlay(title string, branches []string, defaultBranch st
 			selectedBranch = sortedBranches[0] // This will be current branch if it exists
 		}
 	}
-	
+
 	// Set list selection
 	for i, branch := range sortedBranches {
 		if branch == selectedBranch {
@@ -111,32 +111,32 @@ func NewBranchSelectionOverlay(title string, branches []string, defaultBranch st
 	}
 
 	overlay := &BranchSelectionOverlay{
-		list:          l,
-		branches:      sortedBranches,
-		allBranches:   make([]string, len(sortedBranches)), // Store sorted list
-		Title:         title,
-		Submitted:     false,
-		Canceled:      false,
+		list:           l,
+		branches:       sortedBranches,
+		allBranches:    make([]string, len(sortedBranches)), // Store sorted list
+		Title:          title,
+		Submitted:      false,
+		Canceled:       false,
 		selectedBranch: selectedBranch,
-		filterText:    "",
-		currentBranch: getCurrentBranch(),
+		filterText:     "",
+		currentBranch:  getCurrentBranch(),
 	}
-	
+
 	// Copy sorted branches to allBranches
 	copy(overlay.allBranches, sortedBranches)
-	
+
 	// Calculate fixed width based on content
 	overlay.fixedWidth = overlay.calculateFixedWidth()
-	
+
 	return overlay
 }
 
 func (b *BranchSelectionOverlay) SetSize(width, height int) {
 	b.width = width
 	b.height = height
-	
+
 	// Use fixed width for the list, but respect the provided height
-	listHeight := height - 6 // Leave room for title and submit button
+	listHeight := height - 6      // Leave room for title and submit button
 	listWidth := b.fixedWidth - 4 // Account for border and padding
 	if listWidth < 20 {
 		listWidth = 20 // Minimum width
@@ -147,14 +147,14 @@ func (b *BranchSelectionOverlay) SetSize(width, height int) {
 // calculateFixedWidth determines the optimal fixed width for the overlay
 func (b *BranchSelectionOverlay) calculateFixedWidth() int {
 	maxWidth := len(b.Title) // Start with title width
-	
+
 	// Check all branch names to find the longest
 	for _, branch := range b.branches {
 		if len(branch) > maxWidth {
 			maxWidth = len(branch)
 		}
 	}
-	
+
 	// Check the selection info text (longest possible branch name + "Selected: ")
 	longestBranch := ""
 	for _, branch := range b.branches {
@@ -166,13 +166,13 @@ func (b *BranchSelectionOverlay) calculateFixedWidth() int {
 	if selectionInfoWidth > maxWidth {
 		maxWidth = selectionInfoWidth
 	}
-	
+
 	// Check instructions width
 	instructionsWidth := len("Press Enter to select • Press Esc to cancel")
 	if instructionsWidth > maxWidth {
 		maxWidth = instructionsWidth
 	}
-	
+
 	// Add padding for borders and spacing (border + padding + margin)
 	return maxWidth + 8
 }
@@ -194,14 +194,14 @@ func (b *BranchSelectionOverlay) filterBranches() {
 		}
 		b.branches = filtered
 	}
-	
+
 	// Update the list with filtered branches
 	items := make([]list.Item, len(b.branches))
 	for i, branch := range b.branches {
 		items[i] = branchItem{name: branch}
 	}
 	b.list.SetItems(items)
-	
+
 	// Reset selection to first item if available
 	if len(b.branches) > 0 {
 		b.list.Select(0)
@@ -315,7 +315,7 @@ func (b *BranchSelectionOverlay) Render() string {
 
 	// Build the view with fixed-width content
 	content := titleStyle.Render(b.Title) + "\n"
-	
+
 	// Show filter text if user is typing
 	if b.filterText != "" {
 		filterStyle := lipgloss.NewStyle().
@@ -325,7 +325,7 @@ func (b *BranchSelectionOverlay) Render() string {
 		filterInfo := fmt.Sprintf("Filter: %s", b.filterText)
 		content += filterStyle.Render(filterInfo) + "\n"
 	}
-	
+
 	content += b.list.View() + "\n"
 
 	// Current selection info with fixed width
@@ -337,7 +337,7 @@ func (b *BranchSelectionOverlay) Render() string {
 		noMatchInfo := "No matching branches"
 		content += infoStyle.Render(noMatchInfo) + "\n"
 	}
-	
+
 	// Instructions with fixed width
 	instructions := "Type to filter • Enter to select • Esc to cancel"
 	content += infoStyle.Render(instructions)
