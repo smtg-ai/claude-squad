@@ -2,6 +2,7 @@ package overlay
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -20,6 +21,7 @@ func (i branchItem) Description() string { return "" }
 type BranchSelectionOverlay struct {
 	list          list.Model
 	branches      []string
+	allBranches   []string // Keep original list for filtering
 	Title         string
 	Submitted     bool
 	Canceled      bool
@@ -27,6 +29,7 @@ type BranchSelectionOverlay struct {
 	OnSubmit      func(string)
 	width, height int
 	fixedWidth    int // Calculated fixed width based on content
+	filterText    string // Current filter text
 }
 
 // NewBranchSelectionOverlay creates a new branch selection overlay.
@@ -54,11 +57,16 @@ func NewBranchSelectionOverlay(title string, branches []string, defaultBranch st
 	overlay := &BranchSelectionOverlay{
 		list:          l,
 		branches:      branches,
+		allBranches:   make([]string, len(branches)), // Store original list
 		Title:         title,
 		Submitted:     false,
 		Canceled:      false,
 		selectedBranch: defaultBranch,
+		filterText:    "",
 	}
+	
+	// Copy branches to allBranches
+	copy(overlay.allBranches, branches)
 	
 	// Calculate fixed width based on content
 	overlay.fixedWidth = overlay.calculateFixedWidth()
@@ -112,6 +120,39 @@ func (b *BranchSelectionOverlay) calculateFixedWidth() int {
 	return maxWidth + 8
 }
 
+// filterBranches filters the branch list based on the current filter text
+func (b *BranchSelectionOverlay) filterBranches() {
+	if b.filterText == "" {
+		// No filter, show all branches
+		b.branches = make([]string, len(b.allBranches))
+		copy(b.branches, b.allBranches)
+	} else {
+		// Filter branches that start with the filter text
+		var filtered []string
+		for _, branch := range b.allBranches {
+			if strings.HasPrefix(strings.ToLower(branch), strings.ToLower(b.filterText)) {
+				filtered = append(filtered, branch)
+			}
+		}
+		b.branches = filtered
+	}
+	
+	// Update the list with filtered branches
+	items := make([]list.Item, len(b.branches))
+	for i, branch := range b.branches {
+		items[i] = branchItem{name: branch}
+	}
+	b.list.SetItems(items)
+	
+	// Reset selection to first item if available
+	if len(b.branches) > 0 {
+		b.list.Select(0)
+		b.selectedBranch = b.branches[0]
+	} else {
+		b.selectedBranch = ""
+	}
+}
+
 // Init initializes the branch selection overlay model
 func (b *BranchSelectionOverlay) Init() tea.Cmd {
 	return nil
@@ -130,15 +171,25 @@ func (b *BranchSelectionOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 		b.Canceled = true
 		return true
 	case tea.KeyEnter:
-		// Submit the currently selected branch
-		b.Submitted = true
-		if b.OnSubmit != nil {
-			selectedBranch := b.GetSelectedBranch()
-			b.OnSubmit(selectedBranch)
+		// Submit the currently selected branch (only if we have branches)
+		if len(b.branches) > 0 {
+			b.Submitted = true
+			if b.OnSubmit != nil {
+				selectedBranch := b.GetSelectedBranch()
+				b.OnSubmit(selectedBranch)
+			}
+			return true
 		}
-		return true
-	default:
-		// Forward key events to the list
+		return false
+	case tea.KeyBackspace:
+		// Handle backspace in filter
+		if len(b.filterText) > 0 {
+			b.filterText = b.filterText[:len(b.filterText)-1]
+			b.filterBranches()
+		}
+		return false
+	case tea.KeyUp, tea.KeyDown:
+		// Handle navigation in the list
 		var cmd tea.Cmd
 		b.list, cmd = b.list.Update(msg)
 		// Update selected branch when list selection changes
@@ -148,6 +199,18 @@ func (b *BranchSelectionOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 			}
 		}
 		_ = cmd
+		return false
+	default:
+		// Handle character input for filtering
+		if msg.Type == tea.KeyRunes {
+			for _, r := range msg.Runes {
+				// Only add printable characters to filter
+				if r >= 32 && r < 127 {
+					b.filterText += string(r)
+					b.filterBranches()
+				}
+			}
+		}
 		return false
 	}
 }
@@ -194,15 +257,31 @@ func (b *BranchSelectionOverlay) Render() string {
 
 	// Build the view with fixed-width content
 	content := titleStyle.Render(b.Title) + "\n"
+	
+	// Show filter text if user is typing
+	if b.filterText != "" {
+		filterStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("yellow")).
+			Bold(true).
+			Width(b.fixedWidth - 4)
+		filterInfo := fmt.Sprintf("Filter: %s", b.filterText)
+		content += filterStyle.Render(filterInfo) + "\n"
+	}
+	
 	content += b.list.View() + "\n"
 
 	// Current selection info with fixed width
 	selectedBranch := b.GetSelectedBranch()
-	selectionInfo := fmt.Sprintf("Selected: %s", selectedBranch)
-	content += infoStyle.Render(selectionInfo) + "\n"
+	if selectedBranch != "" {
+		selectionInfo := fmt.Sprintf("Selected: %s", selectedBranch)
+		content += infoStyle.Render(selectionInfo) + "\n"
+	} else if len(b.branches) == 0 {
+		noMatchInfo := "No matching branches"
+		content += infoStyle.Render(noMatchInfo) + "\n"
+	}
 	
 	// Instructions with fixed width
-	instructions := "Press Enter to select • Press Esc to cancel"
+	instructions := "Type to filter • Enter to select • Esc to cancel"
 	content += infoStyle.Render(instructions)
 
 	return style.Render(content)
