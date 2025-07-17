@@ -499,6 +499,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
+		// Create instance immediately to show in UI
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:   "",
 			Path:    ".",
@@ -507,35 +508,24 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if err != nil {
 			return m, m.handleError(err)
 		}
-
+		
+		// Add instance to list and set state to stateNew immediately
 		m.newInstanceFinalizer = m.list.AddInstance(instance)
 		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
-		m.state = stateNew
-		m.menu.SetState(ui.StateNewInstance)
-		m.promptAfterName = true
-
-		return m, nil
+		
+		// Show branch selection overlay over the new instance
+		return m.showBranchSelectionOverlay(".", func(parentBranch string) {
+			// Update the existing instance's parent branch
+			if err := instance.SetParentBranch(parentBranch); err != nil {
+				// TODO: handle error properly
+				return
+			}
+			// Set state to stateNew so user can name the instance, then prompt
+			m.state = stateNew
+			m.menu.SetState(ui.StateNewInstance)
+			m.promptAfterName = true
+		})
 	case keys.KeyNew:
-		if m.list.NumInstances() >= GlobalInstanceLimit {
-			return m, m.handleError(
-				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
-		}
-		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
-		})
-		if err != nil {
-			return m, m.handleError(err)
-		}
-
-		m.newInstanceFinalizer = m.list.AddInstance(instance)
-		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
-		m.state = stateNew
-		m.menu.SetState(ui.StateNewInstance)
-
-		return m, nil
-	case keys.KeyBranchSelection:
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))

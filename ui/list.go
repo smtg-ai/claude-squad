@@ -216,7 +216,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	parentBranch := i.GetParentBranch()
 	var parentBranchLine string
 	if parentBranch != "" && parentBranch != "HEAD" {
-		parentBranchLine = fmt.Sprintf("%s   └─ parent: %s", strings.Repeat(" ", len(prefix)), parentBranch)
+		parentBranchLine = fmt.Sprintf("%s   └─ parent branch: %s", strings.Repeat(" ", len(prefix)), parentBranch)
 	}
 
 	// join title, branch line, and parent branch line

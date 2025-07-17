@@ -24,7 +24,6 @@ const (
 	KeyResume
 	KeyPrompt          // New key for entering a prompt
 	KeyHelp            // Key for showing help screen
-	KeyBranchSelection // Key for selecting parent branch
 
 	// Diff keybindings
 	KeyShiftUp
@@ -50,7 +49,6 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"r":          KeyResume,
 	"p":          KeySubmit,
 	"?":          KeyHelp,
-	"b":          KeyBranchSelection,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -77,7 +75,7 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeyNew: key.NewBinding(
 		key.WithKeys("n"),
-		key.WithHelp("n", "new"),
+		key.WithHelp("n", "new with branch selection"),
 	),
 	KeyKill: key.NewBinding(
 		key.WithKeys("D"),
@@ -97,7 +95,7 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeyPrompt: key.NewBinding(
 		key.WithKeys("N"),
-		key.WithHelp("N", "new with prompt"),
+		key.WithHelp("N", "new with branch selection + prompt"),
 	),
 	KeyCheckout: key.NewBinding(
 		key.WithKeys("c"),
@@ -110,10 +108,6 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyResume: key.NewBinding(
 		key.WithKeys("r"),
 		key.WithHelp("r", "resume"),
-	),
-	KeyBranchSelection: key.NewBinding(
-		key.WithKeys("b"),
-		key.WithHelp("b", "new with parent branch"),
 	),
 
 	// -- Special keybindings --
