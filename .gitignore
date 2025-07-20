@@ -4,3 +4,4 @@ claude-squad
 **.DS_Store
 cs
 **/*_pro.go
+**/*_pro_test.go

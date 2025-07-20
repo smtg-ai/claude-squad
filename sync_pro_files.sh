@@ -3,11 +3,11 @@ set -euo pipefail
 
 DEST_DIR="_pro"
 
-echo "Copying *_pro.go files into '$DEST_DIR/'..."
+echo "Copying *_pro.go and *_pro_test.go files into '$DEST_DIR/'..."
 
-# Find all *_pro.go files, excluding the 'pro/' directory itself. Copy these files into the pro directory and
+# Find all *_pro.go and *_pro_test.go files, excluding the 'pro/' directory itself. Copy these files into the pro directory and
 # proper subdirectories.
-find . -type f -name '*_pro.go' ! -path "./$DEST_DIR/*" | while read -r src_file; do
+find . -type f \( -name '*_pro.go' -o -name '*_pro_test.go' \) ! -path "./$DEST_DIR/*" | while read -r src_file; do
     # Strip the leading ./ and get the relative path
     relative_path="${src_file#./}"
 
@@ -23,4 +23,4 @@ find . -type f -name '*_pro.go' ! -path "./$DEST_DIR/*" | while read -r src_file
     echo "Copied: $src_file → $dest_path"
 done
 
-echo "✅ Done copying *_pro.go files to '$DEST_DIR/'"
+echo "✅ Done copying *_pro.go and *_pro_test.go files to '$DEST_DIR/'"
