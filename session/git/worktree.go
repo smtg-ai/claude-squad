@@ -15,13 +15,28 @@ func sessionNameToBranchAndPath(sessionName string) (branch string, path string)
 	return fmt.Sprintf("%s%s", cfg.BranchPrefix, sanitizedName), sanitizedName
 }
 
-func getWorktreeDirectory() (string, error) {
+// getWorktreeDirectory returns the worktree directory for a specific repository
+// if repoPath is empty, returns the base worktrees directory
+// if cache is true, returns the worktrees-cache directory
+func getWorktreeDirectory(repoPath string, cache bool) (string, error) {
 	configDir, err := config.GetConfigDir()
 	if err != nil {
 		return "", err
 	}
 
-	return filepath.Join(configDir, "worktrees"), nil
+	var worktreeDir string
+	if cache {
+		worktreeDir = "worktrees-cache"
+	} else {
+		worktreeDir = "worktrees"
+	}
+
+	if repoPath == "" {
+		return filepath.Join(configDir, worktreeDir), nil
+	}
+
+	repoName := filepath.Base(repoPath)
+	return filepath.Join(configDir, worktreeDir, repoName), nil
 }
 
 // GitWorktree manages git worktree operations for a session
@@ -67,7 +82,7 @@ func newGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, err
 		return nil, err
 	}
 
-	worktreeDir, err := getWorktreeDirectory()
+	worktreeDir, err := getWorktreeDirectory(repoPath, false)
 	if err != nil {
 		return nil, err
 	}

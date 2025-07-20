@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# Check for any _pro.go files in the repository
-if git ls-files --cached --others --exclude-standard | grep -q '_pro\.go$'; then
-    echo "Error: Found _pro.go files in the working tree."
-    echo "These files should not be committed to the repository."
-    echo "Please remove these files before pushing:"
-    git ls-files --cached --others --exclude-standard | grep '_pro\.go$'
-    exit 1
+# Check for any _pro files that are staged and remove them
+staged_pro_files=$(git diff --cached --name-only | grep '_pro')
+if [ -n "$staged_pro_files" ]; then
+    echo "Warning: Found staged _pro files. Removing them from staging area:"
+    echo "$staged_pro_files"
+    echo "$staged_pro_files" | xargs git reset HEAD --
+    echo "_pro files have been unstaged and push will continue."
 fi
 
 # Check for any _pro.go files in the commits being pushed

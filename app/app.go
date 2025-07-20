@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -113,6 +114,12 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		os.Exit(1)
 	}
 
+	repoAbsPath, err := filepath.Abs(repoPath)
+	if err != nil {
+		fmt.Printf("Failed to get absolute path for repo %s: %v\n", repoPath, err)
+		os.Exit(1)
+	}
+
 	h := &home{
 		ctx:            ctx,
 		spinner:        spinner.New(spinner.WithSpinner(spinner.MiniDot)),
@@ -121,7 +128,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		errBox:         ui.NewErrBox(),
 		storage:        storage,
 		appConfig:      appConfig,
-		worktreeSource: git.NewTreeSource(repoPath),
+		worktreeSource: git.NewTreeSource(repoAbsPath),
 		program:        program,
 		autoYes:        autoYes,
 		state:          stateDefault,

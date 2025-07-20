@@ -6,6 +6,10 @@ func NewTreeSource(_ string) WorktreeSource {
 	return &SimpleWorktreeSource{}
 }
 
+func CleanupWorktreeCache() error {
+	return nil
+}
+
 // SimpleWorktreeSource is a passthrough for newGitWorktree.
 type SimpleWorktreeSource struct{}
 
