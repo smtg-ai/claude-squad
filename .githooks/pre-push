@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Check for any _pro.go files in the repository
+if git ls-files --cached --others --exclude-standard | grep -q '_pro\.go$'; then
+    echo "Error: Found _pro.go files in the working tree."
+    echo "These files should not be committed to the repository."
+    echo "Please remove these files before pushing:"
+    git ls-files --cached --others --exclude-standard | grep '_pro\.go$'
+    exit 1
+fi
+
+# Check for any _pro.go files in the commits being pushed
+while read local_ref local_sha remote_ref remote_sha; do
+    if [ "$local_sha" != "0000000000000000000000000000000000000000" ]; then
+        if git show --pretty=format: --name-only "$local_sha" | grep -q '_pro\.go$'; then
+            echo "Error: Found _pro.go files in commit $local_sha"
+            echo "These files should not be pushed to the repository."
+            echo "Please remove these files from your commits before pushing."
+            git show --pretty=format: --name-only "$local_sha" | grep '_pro\.go$'
+            exit 1
+        fi
+    fi
+done
+
+exit 0
