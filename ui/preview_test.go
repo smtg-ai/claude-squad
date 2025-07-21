@@ -4,6 +4,7 @@ import (
 	"claude-squad/cmd/cmd_test"
 	"claude-squad/log"
 	"claude-squad/session"
+	"claude-squad/session/git"
 	"claude-squad/session/tmux"
 	"fmt"
 	"os"
@@ -47,10 +48,11 @@ func setupTestEnvironment(t *testing.T, cmdExec cmd_test.MockCmdExec) *testSetup
 
 	// Create instance
 	instance, err := session.NewInstance(session.InstanceOptions{
-		Title:   sessionName,
-		Path:    workdir,
-		Program: "bash",
-		AutoYes: false,
+		Title:          sessionName,
+		Path:           workdir,
+		Program:        "bash",
+		AutoYes:        false,
+		WorktreeSource: git.NewTreeSource(workdir),
 	})
 	require.NoError(t, err)
 
@@ -123,6 +125,7 @@ func setupGitRepo(t *testing.T, workdir string) {
 
 // TestPreviewScrolling tests the scrolling functionality in the preview pane
 func TestPreviewScrolling(t *testing.T) {
+	debug := false
 	// Track what commands were executed and their order
 	var executedCommands []string
 	inCopyMode := false
@@ -251,8 +254,10 @@ func TestPreviewScrolling(t *testing.T) {
 	require.True(t, previewPane.isScrolling, "Should be in scrolling mode after ScrollUp")
 
 	// Step 4: Get the content directly from the viewport
-	viewportContent := previewPane.viewport.View()
-	t.Logf("Viewport content: %q", viewportContent)
+	if debug {
+		viewportContent := previewPane.viewport.View()
+		t.Logf("Viewport content: %q", viewportContent)
+	}
 
 	// With proper implementation, the viewport should have the full history content
 	// Note: The viewport will be positioned at the bottom initially, so we need to scroll up
@@ -264,8 +269,10 @@ func TestPreviewScrolling(t *testing.T) {
 	}
 
 	// Now get the viewport content after scrolling up
-	viewportAfterScrollUp := previewPane.viewport.View()
-	t.Logf("Viewport after scrolling up: %q", viewportAfterScrollUp)
+	if debug {
+		viewportAfterScrollUp := previewPane.viewport.View()
+		t.Logf("Viewport after scrolling up: %q", viewportAfterScrollUp)
+	}
 
 	// Step 6: Scroll down multiple times
 	for range 25 {
@@ -274,8 +281,10 @@ func TestPreviewScrolling(t *testing.T) {
 	}
 
 	// Get updated viewport content after scrolling down
-	viewportAfterScrollDown := previewPane.viewport.View()
-	t.Logf("Viewport after scrolling down: %q", viewportAfterScrollDown)
+	if debug {
+		viewportAfterScrollDown := previewPane.viewport.View()
+		t.Logf("Viewport after scrolling down: %q", viewportAfterScrollDown)
+	}
 
 	// Step 7: Reset to normal mode
 	err = previewPane.ResetToNormalMode(setup.instance)
