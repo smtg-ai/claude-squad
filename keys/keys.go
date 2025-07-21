@@ -28,6 +28,8 @@ const (
 	// Diff keybindings
 	KeyShiftUp
 	KeyShiftDown
+
+	// DO NOT ADD MORE KEYS HERE WITHOUT UPDATING init_pro.go, which adds pro keybindings.
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
