@@ -109,19 +109,22 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("error starting tmux session: %w", err)
 	}
 
-	// We need to close the ptmx, but we shouldn't close it before the command above finishes.
-	// So, we poll for completion before closing.
+	// Poll for session existence with exponential backoff
 	timeout := time.After(2 * time.Second)
+	sleepDuration := 5 * time.Millisecond
 	for !t.DoesSessionExist() {
 		select {
 		case <-timeout:
-			// Cleanup on window size update failure
 			if cleanupErr := t.Close(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
 			}
 			return fmt.Errorf("timed out waiting for tmux session %s: %v", t.sanitizedName, err)
 		default:
-			time.Sleep(time.Millisecond * 10)
+			time.Sleep(sleepDuration)
+			// Exponential backoff up to 50ms max
+			if sleepDuration < 50*time.Millisecond {
+				sleepDuration *= 2
+			}
 		}
 	}
 	ptmx.Close()
@@ -140,29 +143,49 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("error restoring tmux session: %w", err)
 	}
 
+	// Handle trust prompts with timeout-based approach instead of fixed iterations
 	if t.program == ProgramClaude || strings.HasPrefix(t.program, ProgramAider) || strings.HasPrefix(t.program, ProgramGemini) {
-		searchString := "Do you trust the files in this folder?"
-		tapFunc := t.TapEnter
-		iterations := 5
-		if t.program != ProgramClaude {
-			searchString = "Open documentation url for more info"
-			tapFunc = t.TapDAndEnter
-			iterations = 10 // Aider takes longer to start :/
-		}
-		// Deal with "do you trust the files" screen by sending an enter keystroke.
-		for i := 0; i < iterations; i++ {
-			time.Sleep(200 * time.Millisecond)
-			content, err := t.CapturePaneContent()
-			if err != nil {
-				log.ErrorLog.Printf("could not check 'do you trust the files screen': %v", err)
+		go func() {
+			var searchString string
+			var tapFunc func() error
+			var maxDuration time.Duration
+
+			if t.program == ProgramClaude {
+				searchString = "Do you trust the files in this folder?"
+				tapFunc = t.TapEnter
+				maxDuration = 1 * time.Second // Claude usually shows prompt quickly
+			} else {
+				searchString = "Open documentation url for more info"
+				tapFunc = t.TapDAndEnter
+				maxDuration = 2 * time.Second // Aider takes longer
 			}
-			if strings.Contains(content, searchString) {
-				if err := tapFunc(); err != nil {
-					log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
+
+			timeout := time.After(maxDuration)
+			ticker := time.NewTicker(50 * time.Millisecond)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-timeout:
+					log.WarningLog.Printf("trust prompt timeout for %s after %v", t.program, maxDuration)
+					return
+				case <-ticker.C:
+					content, err := t.CapturePaneContent()
+					if err != nil {
+						continue // Skip this check, try again
+					}
+
+					if strings.Contains(content, searchString) {
+						if err := tapFunc(); err != nil {
+							log.ErrorLog.Printf("could not respond to trust prompt: %v", err)
+						} else {
+							log.InfoLog.Printf("automatically accepted trust prompt for %s", t.program)
+						}
+						return
+					}
 				}
-				break
 			}
-		}
+		}()
 	}
 	return nil
 }

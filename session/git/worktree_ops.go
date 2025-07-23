@@ -14,32 +14,52 @@ import (
 
 // Setup creates a new worktree for the session
 func (g *GitWorktree) Setup() error {
-	// Check if branch exists first
-	repo, err := git.PlainOpen(g.repoPath)
+	// Ensure worktrees directory exists early (can be done in parallel with branch check)
+	worktreesDir, err := getWorktreeDirectory(g.repoPath, false)
 	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
+		return fmt.Errorf("failed to get worktree directory: %w", err)
 	}
 
-	branchRef := plumbing.NewBranchReferenceName(g.branchName)
-	if _, err := repo.Reference(branchRef, false); err == nil {
-		// Branch exists, use SetupFromExistingBranch
+	// Create directory and check branch existence in parallel
+	errChan := make(chan error, 2)
+	var branchExists bool
+
+	// Goroutine for directory creation
+	go func() {
+		errChan <- os.MkdirAll(worktreesDir, 0755)
+	}()
+
+	// Goroutine for branch check
+	go func() {
+		repo, err := git.PlainOpen(g.repoPath)
+		if err != nil {
+			errChan <- fmt.Errorf("failed to open repository: %w", err)
+			return
+		}
+
+		branchRef := plumbing.NewBranchReferenceName(g.branchName)
+		if _, err := repo.Reference(branchRef, false); err == nil {
+			branchExists = true
+		}
+		errChan <- nil
+	}()
+
+	// Wait for both operations
+	for i := 0; i < 2; i++ {
+		if err := <-errChan; err != nil {
+			return err
+		}
+	}
+
+	if branchExists {
 		return g.setupFromExistingBranch()
 	}
-
-	// Branch doesn't exist, create new worktree from HEAD
 	return g.setupNewWorktree()
 }
 
 // SetupFromExistingBranch creates a worktree from an existing branch
 func (g *GitWorktree) setupFromExistingBranch() error {
-	// Ensure worktrees directory exists
-	worktreesDir, err := getWorktreeDirectory(g.repoPath, false)
-	if err != nil {
-		return fmt.Errorf("failed to get worktree directory: %w", err)
-	}
-	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
-		return fmt.Errorf("failed to create worktrees directory: %w", err)
-	}
+	// Directory already created in Setup(), skip duplicate creation
 
 	// Clean up any existing worktree first
 	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath) // Ignore error if worktree doesn't exist
