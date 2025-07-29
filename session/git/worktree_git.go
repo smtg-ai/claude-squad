@@ -4,6 +4,7 @@ import (
 	"claude-squad/log"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -26,6 +27,11 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 		return err
 	}
 
+	// If we have a cached URL and just want to open it, do that directly
+	if g.githubURL != "" && open && !g.hasUnpushedCommits() {
+		return g.OpenBranchURL()
+	}
+
 	// Check if there are any changes to commit
 	isDirty, err := g.IsDirty()
 	if err != nil {
@@ -46,25 +52,33 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 		}
 	}
 
-	// First push the branch to remote to ensure it exists
-	pushCmd := exec.Command("gh", "repo", "sync", "--source", "-b", g.branchName)
-	pushCmd.Dir = g.worktreePath
-	if err := pushCmd.Run(); err != nil {
-		// If sync fails, try creating the branch on remote first
-		gitPushCmd := exec.Command("git", "push", "-u", "origin", g.branchName)
-		gitPushCmd.Dir = g.worktreePath
-		if pushOutput, pushErr := gitPushCmd.CombinedOutput(); pushErr != nil {
-			log.ErrorLog.Print(pushErr)
-			return fmt.Errorf("failed to push branch: %s (%w)", pushOutput, pushErr)
-		}
+	// Check if this is the first push (branch doesn't exist on remote)
+	isFirstPush := false
+	checkCmd := exec.Command("git", "ls-remote", "--heads", "origin", g.branchName)
+	checkCmd.Dir = g.worktreePath
+	checkOutput, _ := checkCmd.Output()
+	if len(checkOutput) == 0 {
+		isFirstPush = true
 	}
 
-	// Now sync with remote
-	syncCmd := exec.Command("gh", "repo", "sync", "-b", g.branchName)
-	syncCmd.Dir = g.worktreePath
-	if output, err := syncCmd.CombinedOutput(); err != nil {
+	// Push the branch to remote
+	gitPushCmd := exec.Command("git", "push", "-u", "origin", g.branchName)
+	gitPushCmd.Dir = g.worktreePath
+	pushOutput, err := gitPushCmd.CombinedOutput()
+	if err != nil {
 		log.ErrorLog.Print(err)
-		return fmt.Errorf("failed to sync changes: %s (%w)", output, err)
+		return fmt.Errorf("failed to push branch: %s (%w)", pushOutput, err)
+	}
+
+	// Parse the PR creation URL from git push output if this is the first push
+	if isFirstPush && g.githubURL == "" {
+		if prURL := g.parsePRCreationURL(string(pushOutput)); prURL != "" {
+			g.githubURL = prURL
+			log.InfoLog.Printf("Captured PR creation URL: %s", prURL)
+		} else {
+			// Log the output to help debug if URL parsing fails
+			log.InfoLog.Printf("Could not find PR URL in git push output: %s", string(pushOutput))
+		}
 	}
 
 	// Open the branch in the browser
@@ -112,6 +126,18 @@ func (g *GitWorktree) IsDirty() (bool, error) {
 	return len(output) > 0, nil
 }
 
+// hasUnpushedCommits checks if there are commits that haven't been pushed to remote
+func (g *GitWorktree) hasUnpushedCommits() bool {
+	// Check if we have commits ahead of origin
+	output, err := g.runGitCommand(g.worktreePath, "rev-list", "--count", fmt.Sprintf("origin/%s..HEAD", g.branchName))
+	if err != nil {
+		// If the command fails (e.g., branch doesn't exist on remote), assume we need to push
+		return true
+	}
+	count := strings.TrimSpace(output)
+	return count != "0"
+}
+
 // IsBranchCheckedOut checks if the instance branch is currently checked out
 func (g *GitWorktree) IsBranchCheckedOut() (bool, error) {
 	output, err := g.runGitCommand(g.repoPath, "branch", "--show-current")
@@ -121,17 +147,62 @@ func (g *GitWorktree) IsBranchCheckedOut() (bool, error) {
 	return strings.TrimSpace(string(output)) == g.branchName, nil
 }
 
+// parsePRCreationURL extracts the PR creation URL from git push output
+func (g *GitWorktree) parsePRCreationURL(output string) string {
+	// Git push output typically contains a line like:
+	// remote: Create a pull request for 'branch-name' on GitHub by visiting:
+	// remote:      https://github.com/owner/repo/pull/new/branch-name
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, "Create a pull request") && i+1 < len(lines) {
+			// The URL is typically on the next line
+			urlLine := strings.TrimSpace(lines[i+1])
+			// Remove "remote:" prefix if present
+			urlLine = strings.TrimPrefix(urlLine, "remote:")
+			urlLine = strings.TrimSpace(urlLine)
+			if strings.HasPrefix(urlLine, "http") {
+				return urlLine
+			}
+		}
+	}
+	
+	// If we can't find the PR URL in output, return empty
+	return ""
+}
+
 // OpenBranchURL opens the branch URL in the default browser
 func (g *GitWorktree) OpenBranchURL() error {
-	// Check if GitHub CLI is available
-	if err := checkGHCLI(); err != nil {
-		return err
+	urlToOpen := g.githubURL
+	
+	// If we don't have a cached PR URL, fall back to gh browse
+	if urlToOpen == "" {
+		if err := checkGHCLI(); err != nil {
+			return err
+		}
+
+		cmd := exec.Command("gh", "browse", "--branch", g.branchName)
+		cmd.Dir = g.worktreePath
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to open branch URL: %w", err)
+		}
+		return nil
 	}
 
-	cmd := exec.Command("gh", "browse", "--branch", g.branchName)
-	cmd.Dir = g.worktreePath
+	// Open the cached URL
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", urlToOpen)
+	case "linux":
+		cmd = exec.Command("xdg-open", urlToOpen)
+	case "windows":
+		cmd = exec.Command("cmd", "/c", "start", urlToOpen)
+	default:
+		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)
+	}
+	
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to open branch URL: %w", err)
+		return fmt.Errorf("failed to open URL: %w", err)
 	}
 	return nil
 }

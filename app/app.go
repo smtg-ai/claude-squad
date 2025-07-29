@@ -576,6 +576,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if err = worktree.PushChanges(commitMsg, true); err != nil {
 				return err
 			}
+			// Save the instance to persist the cached GitHub URL
+			if err := m.storage.UpdateInstance(selected); err != nil {
+				// Log but don't fail the operation
+				log.ErrorLog.Printf("failed to save GitHub URL: %v", err)
+			}
 			return nil
 		}
 

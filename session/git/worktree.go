@@ -29,15 +29,18 @@ type GitWorktree struct {
 	branchName string
 	// Base commit hash for the worktree
 	baseCommitSHA string
+	// GitHub URL for the branch (cached after first push)
+	githubURL string
 }
 
-func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string) *GitWorktree {
+func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string, githubURL string) *GitWorktree {
 	return &GitWorktree{
 		repoPath:      repoPath,
 		worktreePath:  worktreePath,
 		sessionName:   sessionName,
 		branchName:    branchName,
 		baseCommitSHA: baseCommitSHA,
+		githubURL:     githubURL,
 	}
 }
 
@@ -99,4 +102,14 @@ func (g *GitWorktree) GetRepoName() string {
 // GetBaseCommitSHA returns the base commit SHA for the worktree
 func (g *GitWorktree) GetBaseCommitSHA() string {
 	return g.baseCommitSHA
+}
+
+// GetGithubURL returns the cached GitHub URL for the branch
+func (g *GitWorktree) GetGithubURL() string {
+	return g.githubURL
+}
+
+// SetGithubURL sets the GitHub URL for the branch
+func (g *GitWorktree) SetGithubURL(url string) {
+	g.githubURL = url
 }
