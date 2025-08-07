@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"text/template"
 	"time"
 )
 
@@ -29,33 +30,58 @@ func parseWorktreePattern(pattern string, vars PatternVariables) string {
 		vars.Timestamp = fmt.Sprintf("%x", time.Now().UnixNano())
 	}
 
-	// Create a map of variable names to their values
-	replacements := map[string]string{
-		"{repo_root}":    vars.RepoRoot,
-		"{repo_name}":    vars.RepoName,
-		"{issue_number}": vars.IssueNumber,
-		"{title}":        vars.Title,
-		"{timestamp}":    vars.Timestamp,
+	// Convert the pattern from {variable} format to {{.Variable}} format for text/template
+	templatePattern := convertToTemplateFormat(pattern)
+
+	// Create and parse the template
+	tmpl, err := template.New("worktree").Parse(templatePattern)
+	if err != nil {
+		// If template parsing fails, fallback to original pattern
+		return pattern
 	}
 
-	result := pattern
-	for placeholder, value := range replacements {
-		result = strings.ReplaceAll(result, placeholder, value)
+	// Execute the template with the variables
+	var result strings.Builder
+	err = tmpl.Execute(&result, vars)
+	if err != nil {
+		// If template execution fails, fallback to original pattern
+		return pattern
 	}
+
+	output := result.String()
 
 	// Clean up delimiters from empty variables
-	result = cleanupDelimiters(result)
+	output = cleanupDelimiters(output)
 
 	// Expand tilde to home directory
-	if strings.HasPrefix(result, "~/") {
+	if strings.HasPrefix(output, "~/") {
 		homeDir, err := os.UserHomeDir()
 		if err == nil {
-			result = filepath.Join(homeDir, result[2:])
+			output = filepath.Join(homeDir, output[2:])
 		}
 	}
 
 	// Clean up the path
-	result = filepath.Clean(result)
+	output = filepath.Clean(output)
+
+	return output
+}
+
+// convertToTemplateFormat converts {variable} format to {{.Variable}} format for text/template
+func convertToTemplateFormat(pattern string) string {
+	// Map of old format to new format
+	replacements := map[string]string{
+		"{repo_root}":    "{{.RepoRoot}}",
+		"{repo_name}":    "{{.RepoName}}",
+		"{issue_number}": "{{.IssueNumber}}",
+		"{title}":        "{{.Title}}",
+		"{timestamp}":    "{{.Timestamp}}",
+	}
+
+	result := pattern
+	for old, new := range replacements {
+		result = strings.ReplaceAll(result, old, new)
+	}
 
 	return result
 }
