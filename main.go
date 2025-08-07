@@ -116,6 +116,9 @@ var (
 		Use:   "debug",
 		Short: "Print debug information like config paths",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			log.Initialize(false)
+			defer log.Close()
+
 			cfg := config.LoadConfig()
 
 			configDir, err := config.GetConfigDir()
