@@ -36,6 +36,10 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// WorktreePattern is the pattern used to determine worktree location.
+	// Supports variables: {repo_root}, {repo_name}, {issue_number}, {title}, {timestamp}
+	// Example: "{repo_root}/worktree/{issue_number}-{title}"
+	WorktreePattern string `json:"worktree_pattern"`
 }
 
 // DefaultConfig returns the default configuration
