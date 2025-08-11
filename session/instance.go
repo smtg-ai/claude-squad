@@ -54,6 +54,8 @@ type Instance struct {
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
+	// pendingParentBranch is the parent branch selected for this instance
+	pendingParentBranch string
 
 	// The below fields are initialized upon calling Start().
 
@@ -87,6 +89,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 			SessionName:   i.Title,
 			BranchName:    i.gitWorktree.GetBranchName(),
 			BaseCommitSHA: i.gitWorktree.GetBaseCommitSHA(),
+			ParentBranch:  i.gitWorktree.GetParentBranch(),
 		}
 	}
 
@@ -120,6 +123,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 			data.Worktree.SessionName,
 			data.Worktree.BranchName,
 			data.Worktree.BaseCommitSHA,
+			data.Worktree.ParentBranch,
 		),
 		diffStats: &git.DiffStats{
 			Added:   data.DiffStats.Added,
@@ -202,7 +206,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	i.tmuxSession = tmuxSession
 
 	if firstTimeSetup {
-		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
+		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title, i.pendingParentBranch) // Use selected parent branch
 		if err != nil {
 			return fmt.Errorf("failed to create git worktree: %w", err)
 		}
@@ -355,12 +359,24 @@ func (i *Instance) SetTitle(title string) error {
 	return nil
 }
 
+// SetParentBranch sets the parent branch for the instance. Returns an error if the instance has started.
+func (i *Instance) SetParentBranch(parentBranch string) error {
+	if i.started {
+		return fmt.Errorf("cannot change parent branch of a started instance")
+	}
+	i.pendingParentBranch = parentBranch
+	return nil
+}
+
 func (i *Instance) Paused() bool {
 	return i.Status == Paused
 }
 
 // TmuxAlive returns true if the tmux session is alive. This is a sanity check before attaching.
 func (i *Instance) TmuxAlive() bool {
+	if i.tmuxSession == nil {
+		return false
+	}
 	return i.tmuxSession.DoesSessionExist()
 }
 
@@ -509,6 +525,14 @@ func (i *Instance) UpdateDiffStats() error {
 // GetDiffStats returns the current git diff statistics
 func (i *Instance) GetDiffStats() *git.DiffStats {
 	return i.diffStats
+}
+
+// GetParentBranch returns the parent branch for the instance
+func (i *Instance) GetParentBranch() string {
+	if i.gitWorktree != nil {
+		return i.gitWorktree.GetParentBranch()
+	}
+	return i.pendingParentBranch
 }
 
 // SendPrompt sends a prompt to the tmux session
