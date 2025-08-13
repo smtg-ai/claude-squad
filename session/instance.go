@@ -128,6 +128,16 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		},
 	}
 
+	// Check if the worktree still exists on disk if the instance is not paused
+	if !instance.Paused() && instance.gitWorktree != nil {
+		worktreePath := instance.gitWorktree.GetWorktreePath()
+		if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+			// Worktree has been deleted, mark instance as paused
+			log.WarningLog.Printf("Worktree directory for '%s' doesn't exist at '%s', marking as paused", instance.Title, worktreePath)
+			instance.Status = Paused
+		}
+	}
+
 	if instance.Paused() {
 		instance.started = true
 		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program)
