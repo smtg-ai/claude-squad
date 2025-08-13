@@ -1,0 +1,2732 @@
+[
+  {
+    "owner": "quuu",
+    "name": "claude-squad",
+    "full_name": "quuu/claude-squad",
+    "pushed_at": "2025-08-12T05:38:59Z",
+    "updated_at": "2025-08-12T05:39:04Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "KingInYellow18",
+    "name": "claude-squad",
+    "full_name": "KingInYellow18/claude-squad",
+    "pushed_at": "2025-08-11T19:29:43Z",
+    "updated_at": "2025-08-09T20:54:18Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "dctanner",
+    "name": "claude-squad",
+    "full_name": "dctanner/claude-squad",
+    "pushed_at": "2025-08-11T09:27:46Z",
+    "updated_at": "2025-08-11T09:26:16Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "danield9tqh",
+    "name": "claude-squad",
+    "full_name": "danield9tqh/claude-squad",
+    "pushed_at": "2025-08-10T04:47:58Z",
+    "updated_at": "2025-08-10T04:04:36Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "andsnw",
+    "name": "claude-squad",
+    "full_name": "andsnw/claude-squad",
+    "pushed_at": "2025-08-09T05:05:27Z",
+    "updated_at": "2025-08-09T05:05:32Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "pchaganti",
+    "name": "gx-claude-squad",
+    "full_name": "pchaganti/gx-claude-squad",
+    "pushed_at": "2025-08-09T02:26:59Z",
+    "updated_at": "2025-08-09T02:27:03Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "itsbrex",
+    "name": "claude-squad",
+    "full_name": "itsbrex/claude-squad",
+    "pushed_at": "2025-08-09T02:15:10Z",
+    "updated_at": "2025-08-09T02:15:14Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "jasonkneen",
+    "name": "claude-squad",
+    "full_name": "jasonkneen/claude-squad",
+    "pushed_at": "2025-08-09T02:04:06Z",
+    "updated_at": "2025-08-09T02:04:10Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 1
+  },
+  {
+    "owner": "100kgforest",
+    "name": "claude-squad",
+    "full_name": "100kgforest/claude-squad",
+    "pushed_at": "2025-08-09T00:33:54Z",
+    "updated_at": "2025-08-09T04:59:13Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "CommiAI",
+    "name": "claude-squad",
+    "full_name": "CommiAI/claude-squad",
+    "pushed_at": "2025-08-09T00:33:54Z",
+    "updated_at": "2025-08-10T12:43:52Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "big-mas",
+    "name": "claude-squad",
+    "full_name": "big-mas/claude-squad",
+    "pushed_at": "2025-08-09T00:33:54Z",
+    "updated_at": "2025-08-10T17:24:59Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "TuggleDigital",
+    "name": "claude-squad",
+    "full_name": "TuggleDigital/claude-squad",
+    "pushed_at": "2025-08-09T00:33:54Z",
+    "updated_at": "2025-08-10T21:15:52Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "finnoh",
+    "name": "claude-squad",
+    "full_name": "finnoh/claude-squad",
+    "pushed_at": "2025-08-09T00:33:54Z",
+    "updated_at": "2025-08-12T05:42:32Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "TylerStaplerAtFanatics",
+    "name": "claude-squad",
+    "full_name": "TylerStaplerAtFanatics/claude-squad",
+    "pushed_at": "2025-08-09T00:33:54Z",
+    "updated_at": "2025-08-12T23:20:56Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "nbperry",
+    "name": "claude-squad",
+    "full_name": "nbperry/claude-squad",
+    "pushed_at": "2025-08-07T20:50:49Z",
+    "updated_at": "2025-06-20T15:25:25Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Tsopic",
+    "name": "claude-squad",
+    "full_name": "Tsopic/claude-squad",
+    "pushed_at": "2025-08-07T11:29:20Z",
+    "updated_at": "2025-08-07T11:26:11Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "HMB-research",
+    "name": "claude-squad",
+    "full_name": "HMB-research/claude-squad",
+    "pushed_at": "2025-08-07T11:29:15Z",
+    "updated_at": "2025-07-24T11:34:28Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 1
+  },
+  {
+    "owner": "HarleyCoops",
+    "name": "claude-squad",
+    "full_name": "HarleyCoops/claude-squad",
+    "pushed_at": "2025-08-06T22:41:45Z",
+    "updated_at": "2025-04-19T19:40:22Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "mark2685",
+    "name": "claude-squad",
+    "full_name": "mark2685/claude-squad",
+    "pushed_at": "2025-08-01T21:53:01Z",
+    "updated_at": "2025-08-01T19:17:42Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "kabrony",
+    "name": "claude-squad",
+    "full_name": "kabrony/claude-squad",
+    "pushed_at": "2025-07-31T22:44:55Z",
+    "updated_at": "2025-07-31T22:44:59Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "austinamorusoyardstick",
+    "name": "claude-squad",
+    "full_name": "austinamorusoyardstick/claude-squad",
+    "pushed_at": "2025-07-31T01:34:45Z",
+    "updated_at": "2025-08-06T19:05:42Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 1
+  },
+  {
+    "owner": "kayaozkur",
+    "name": "proj_dep_claude-squad",
+    "full_name": "kayaozkur/proj_dep_claude-squad",
+    "pushed_at": "2025-07-30T23:30:38Z",
+    "updated_at": "2025-08-12T05:41:56Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "FanaHOVA",
+    "name": "claude-squad",
+    "full_name": "FanaHOVA/claude-squad",
+    "pushed_at": "2025-07-29T03:51:29Z",
+    "updated_at": "2025-07-28T18:09:35Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "syntax-syndicate",
+    "name": "claude-squad",
+    "full_name": "syntax-syndicate/claude-squad",
+    "pushed_at": "2025-07-26T18:28:07Z",
+    "updated_at": "2025-07-26T18:28:15Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "wizd100",
+    "name": "claude-squad",
+    "full_name": "wizd100/claude-squad",
+    "pushed_at": "2025-07-25T11:58:26Z",
+    "updated_at": "2025-07-25T11:46:30Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "EdwardTang",
+    "name": "claude-squad",
+    "full_name": "EdwardTang/claude-squad",
+    "pushed_at": "2025-07-24T13:53:43Z",
+    "updated_at": "2025-07-24T13:53:47Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "mineclover",
+    "name": "claude-squad",
+    "full_name": "mineclover/claude-squad",
+    "pushed_at": "2025-07-24T03:03:46Z",
+    "updated_at": "2025-07-24T03:03:51Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "you112ef",
+    "name": "claude-squad",
+    "full_name": "you112ef/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-24T11:02:34Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "kvcop",
+    "name": "claude-squad",
+    "full_name": "kvcop/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-25T10:47:58Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "younghai",
+    "name": "claude-squad",
+    "full_name": "younghai/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-25T15:17:13Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "tuanduongdn1504",
+    "name": "claude-squad",
+    "full_name": "tuanduongdn1504/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-25T16:54:24Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "AB-TigersHive",
+    "name": "claude-squad",
+    "full_name": "AB-TigersHive/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-25T23:30:11Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "LORDBurnItUp",
+    "name": "claude-squad",
+    "full_name": "LORDBurnItUp/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-26T20:02:33Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Nbanks-4",
+    "name": "claude-squad",
+    "full_name": "Nbanks-4/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-27T11:20:28Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "kevinfealey",
+    "name": "claude-squad",
+    "full_name": "kevinfealey/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-29T12:22:46Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "rokrokss",
+    "name": "claude-squad",
+    "full_name": "rokrokss/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-29T17:07:49Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "fourpartswater",
+    "name": "claude-squad",
+    "full_name": "fourpartswater/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-29T18:41:52Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "BunsDev",
+    "name": "claude-squad-cli",
+    "full_name": "BunsDev/claude-squad-cli",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-30T00:47:34Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "maivanteo",
+    "name": "claude-squad",
+    "full_name": "maivanteo/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-30T09:00:31Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "young-hwang",
+    "name": "claude-squad",
+    "full_name": "young-hwang/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-31T00:42:47Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "sifnoc",
+    "name": "claude-squad",
+    "full_name": "sifnoc/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-31T16:21:38Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "flamaso",
+    "name": "claude-squad",
+    "full_name": "flamaso/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-07-31T22:54:42Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "kerwinruby",
+    "name": "claude-squad",
+    "full_name": "kerwinruby/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-08-01T05:40:09Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "seco",
+    "name": "claude-squad",
+    "full_name": "seco/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-08-01T23:51:06Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "seco-ai",
+    "name": "claude-squad",
+    "full_name": "seco-ai/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-08-01T23:54:23Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "techjuicelab",
+    "name": "claude-squad",
+    "full_name": "techjuicelab/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-08-02T09:25:01Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "kapros",
+    "name": "claude-squad",
+    "full_name": "kapros/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-08-02T19:47:55Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "chair300",
+    "name": "claude-squad",
+    "full_name": "chair300/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-08-02T20:47:53Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "mishaal79",
+    "name": "claude-squad",
+    "full_name": "mishaal79/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-08-04T23:50:48Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "wdEffort",
+    "name": "claude-squad",
+    "full_name": "wdEffort/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-08-05T04:17:11Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "varun86",
+    "name": "claude-squad",
+    "full_name": "varun86/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-08-05T18:43:59Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "EGDongAn",
+    "name": "claude-squad",
+    "full_name": "EGDongAn/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-08-06T15:34:13Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "granolacowboy",
+    "name": "claude-squad",
+    "full_name": "granolacowboy/claude-squad",
+    "pushed_at": "2025-07-23T18:16:44Z",
+    "updated_at": "2025-08-07T17:24:10Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ArtificialPB",
+    "name": "claude-squad",
+    "full_name": "ArtificialPB/claude-squad",
+    "pushed_at": "2025-07-23T11:43:48Z",
+    "updated_at": "2025-07-23T11:41:03Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "harshsaver",
+    "name": "claude-squad",
+    "full_name": "harshsaver/claude-squad",
+    "pushed_at": "2025-07-22T18:10:34Z",
+    "updated_at": "2025-07-22T21:05:07Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "DILIP3524",
+    "name": "claude-squad",
+    "full_name": "DILIP3524/claude-squad",
+    "pushed_at": "2025-07-22T18:10:34Z",
+    "updated_at": "2025-07-23T10:09:35Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "edmundmiller",
+    "name": "claude-squad",
+    "full_name": "edmundmiller/claude-squad",
+    "pushed_at": "2025-07-22T03:16:36Z",
+    "updated_at": "2025-07-17T17:39:11Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "bellyfat",
+    "name": "claude-squad",
+    "full_name": "bellyfat/claude-squad",
+    "pushed_at": "2025-07-22T03:02:23Z",
+    "updated_at": "2025-07-22T03:02:29Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "k161196",
+    "name": "claude-squad",
+    "full_name": "k161196/claude-squad",
+    "pushed_at": "2025-07-21T23:15:13Z",
+    "updated_at": "2025-07-22T13:04:40Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "MauleshSTrivedi",
+    "name": "claude-squad",
+    "full_name": "MauleshSTrivedi/claude-squad",
+    "pushed_at": "2025-07-21T23:15:13Z",
+    "updated_at": "2025-07-22T13:50:54Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "robertguss",
+    "name": "claude-squad",
+    "full_name": "robertguss/claude-squad",
+    "pushed_at": "2025-07-21T23:15:13Z",
+    "updated_at": "2025-07-22T14:17:45Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "codebeat",
+    "name": "claude-squad",
+    "full_name": "codebeat/claude-squad",
+    "pushed_at": "2025-07-20T23:33:32Z",
+    "updated_at": "2025-07-21T00:42:08Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "rancar2",
+    "name": "claude-squad",
+    "full_name": "rancar2/claude-squad",
+    "pushed_at": "2025-07-20T23:33:32Z",
+    "updated_at": "2025-07-21T00:52:54Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "siathalysedI",
+    "name": "claude-squad",
+    "full_name": "siathalysedI/claude-squad",
+    "pushed_at": "2025-07-20T23:33:32Z",
+    "updated_at": "2025-07-21T01:36:39Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "faridlab",
+    "name": "claude-squad",
+    "full_name": "faridlab/claude-squad",
+    "pushed_at": "2025-07-20T23:33:32Z",
+    "updated_at": "2025-07-21T02:32:36Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "orinocoz",
+    "name": "claude-squad",
+    "full_name": "orinocoz/claude-squad",
+    "pushed_at": "2025-07-20T23:33:32Z",
+    "updated_at": "2025-07-21T11:19:11Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "tokwalabs",
+    "name": "claude-squad",
+    "full_name": "tokwalabs/claude-squad",
+    "pushed_at": "2025-07-20T23:33:32Z",
+    "updated_at": "2025-07-21T16:42:33Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "HildaM",
+    "name": "claude-squad",
+    "full_name": "HildaM/claude-squad",
+    "pushed_at": "2025-07-20T08:19:26Z",
+    "updated_at": "2025-07-20T07:52:23Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "hitesh97",
+    "name": "claude-squad",
+    "full_name": "hitesh97/claude-squad",
+    "pushed_at": "2025-07-20T06:57:29Z",
+    "updated_at": "2025-07-20T10:11:20Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "cosmosality",
+    "name": "claude-squad0",
+    "full_name": "cosmosality/claude-squad0",
+    "pushed_at": "2025-07-20T06:57:29Z",
+    "updated_at": "2025-07-20T13:54:17Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "lucasstorelink",
+    "name": "claude-squad",
+    "full_name": "lucasstorelink/claude-squad",
+    "pushed_at": "2025-07-20T06:57:29Z",
+    "updated_at": "2025-07-20T15:43:33Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "marklabz",
+    "name": "claude-squad",
+    "full_name": "marklabz/claude-squad",
+    "pushed_at": "2025-07-20T06:57:29Z",
+    "updated_at": "2025-07-20T15:53:55Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 1
+  },
+  {
+    "owner": "asiri92",
+    "name": "claude-squad",
+    "full_name": "asiri92/claude-squad",
+    "pushed_at": "2025-07-20T06:57:29Z",
+    "updated_at": "2025-07-20T18:43:51Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "fijimunkii",
+    "name": "claude-squad",
+    "full_name": "fijimunkii/claude-squad",
+    "pushed_at": "2025-07-18T18:27:33Z",
+    "updated_at": "2025-07-18T18:27:39Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ddfourtwo",
+    "name": "claude-squad",
+    "full_name": "ddfourtwo/claude-squad",
+    "pushed_at": "2025-07-17T06:51:55Z",
+    "updated_at": "2025-07-17T06:51:59Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "pokerhaze",
+    "name": "claude-squad",
+    "full_name": "pokerhaze/claude-squad",
+    "pushed_at": "2025-07-15T22:17:53Z",
+    "updated_at": "2025-07-16T05:01:50Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ayman8jebari",
+    "name": "claude-squad",
+    "full_name": "ayman8jebari/claude-squad",
+    "pushed_at": "2025-07-15T22:17:53Z",
+    "updated_at": "2025-07-16T08:32:16Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "phuhao00",
+    "name": "claude-squad",
+    "full_name": "phuhao00/claude-squad",
+    "pushed_at": "2025-07-15T22:17:53Z",
+    "updated_at": "2025-07-16T16:11:41Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "yordyi",
+    "name": "claude-squad",
+    "full_name": "yordyi/claude-squad",
+    "pushed_at": "2025-07-15T22:17:53Z",
+    "updated_at": "2025-07-18T21:35:12Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "codesbytaimoor",
+    "name": "claude-squad",
+    "full_name": "codesbytaimoor/claude-squad",
+    "pushed_at": "2025-07-15T22:17:53Z",
+    "updated_at": "2025-07-19T22:30:14Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "sebakc",
+    "name": "claude-squad",
+    "full_name": "sebakc/claude-squad",
+    "pushed_at": "2025-07-15T22:17:53Z",
+    "updated_at": "2025-07-20T00:45:57Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "casualuser",
+    "name": "claude-squad",
+    "full_name": "casualuser/claude-squad",
+    "pushed_at": "2025-07-15T22:17:53Z",
+    "updated_at": "2025-07-20T02:56:13Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "jeffdev2018",
+    "name": "claude-squad",
+    "full_name": "jeffdev2018/claude-squad",
+    "pushed_at": "2025-07-15T22:17:53Z",
+    "updated_at": "2025-07-20T04:40:25Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "sayyidisal",
+    "name": "claude-squad",
+    "full_name": "sayyidisal/claude-squad",
+    "pushed_at": "2025-07-15T22:17:53Z",
+    "updated_at": "2025-07-20T04:57:36Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "grabby",
+    "name": "claude-squad",
+    "full_name": "grabby/claude-squad",
+    "pushed_at": "2025-07-15T22:17:53Z",
+    "updated_at": "2025-07-20T06:22:49Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "stevengonsalvez",
+    "name": "claude-squad",
+    "full_name": "stevengonsalvez/claude-squad",
+    "pushed_at": "2025-07-14T23:53:07Z",
+    "updated_at": "2025-07-13T14:07:36Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "meistro57",
+    "name": "claude-squad-unginged",
+    "full_name": "meistro57/claude-squad-unginged",
+    "pushed_at": "2025-07-14T16:57:44Z",
+    "updated_at": "2025-07-14T16:57:48Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "carnivoroustoad",
+    "name": "orzbob",
+    "full_name": "carnivoroustoad/orzbob",
+    "pushed_at": "2025-07-14T05:54:40Z",
+    "updated_at": "2025-07-14T05:45:10Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "S-Nakamur-a",
+    "name": "claude-squad",
+    "full_name": "S-Nakamur-a/claude-squad",
+    "pushed_at": "2025-07-13T14:57:58Z",
+    "updated_at": "2025-07-15T11:03:54Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 1
+  },
+  {
+    "owner": "walteh",
+    "name": "claude-squad",
+    "full_name": "walteh/claude-squad",
+    "pushed_at": "2025-07-13T13:31:48Z",
+    "updated_at": "2025-07-13T13:31:52Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "TrevorS",
+    "name": "claude-squad",
+    "full_name": "TrevorS/claude-squad",
+    "pushed_at": "2025-07-13T05:13:20Z",
+    "updated_at": "2025-07-11T14:40:12Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "mmmikko",
+    "name": "claude-squad",
+    "full_name": "mmmikko/claude-squad",
+    "pushed_at": "2025-07-13T03:50:12Z",
+    "updated_at": "2025-07-13T15:55:38Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "SLOWRAINMDML",
+    "name": "claude-squad",
+    "full_name": "SLOWRAINMDML/claude-squad",
+    "pushed_at": "2025-07-13T03:50:12Z",
+    "updated_at": "2025-07-15T02:38:25Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "shizonic",
+    "name": "claude-squad",
+    "full_name": "shizonic/claude-squad",
+    "pushed_at": "2025-07-13T03:50:12Z",
+    "updated_at": "2025-07-15T12:08:35Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "alex4nder1998",
+    "name": "claude-squad",
+    "full_name": "alex4nder1998/claude-squad",
+    "pushed_at": "2025-07-13T03:50:12Z",
+    "updated_at": "2025-07-15T15:30:46Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "hongsw",
+    "name": "claude-squad",
+    "full_name": "hongsw/claude-squad",
+    "pushed_at": "2025-07-13T03:50:12Z",
+    "updated_at": "2025-07-15T18:09:51Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "mackermedia",
+    "name": "claude-squad",
+    "full_name": "mackermedia/claude-squad",
+    "pushed_at": "2025-07-11T16:23:10Z",
+    "updated_at": "2025-07-11T16:23:13Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "bensons",
+    "name": "claude-squad",
+    "full_name": "bensons/claude-squad",
+    "pushed_at": "2025-07-11T00:24:10Z",
+    "updated_at": "2025-07-12T02:10:23Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "mihirpenugonda",
+    "name": "claude-squad",
+    "full_name": "mihirpenugonda/claude-squad",
+    "pushed_at": "2025-07-10T00:38:03Z",
+    "updated_at": "2025-07-10T00:37:39Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "registered2nd",
+    "name": "claude-squad",
+    "full_name": "registered2nd/claude-squad",
+    "pushed_at": "2025-07-09T00:35:20Z",
+    "updated_at": "2025-07-09T20:48:26Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "dokeet",
+    "name": "claude-squad",
+    "full_name": "dokeet/claude-squad",
+    "pushed_at": "2025-07-09T00:35:20Z",
+    "updated_at": "2025-07-10T00:26:02Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "jordantaylorfuller",
+    "name": "claude-squad",
+    "full_name": "jordantaylorfuller/claude-squad",
+    "pushed_at": "2025-07-09T00:35:20Z",
+    "updated_at": "2025-07-10T21:50:24Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "conorbranagan",
+    "name": "claude-squad",
+    "full_name": "conorbranagan/claude-squad",
+    "pushed_at": "2025-07-07T21:57:06Z",
+    "updated_at": "2025-07-02T18:15:25Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "adenisdesa",
+    "name": "claude-squad",
+    "full_name": "adenisdesa/claude-squad",
+    "pushed_at": "2025-07-06T21:49:45Z",
+    "updated_at": "2025-07-07T00:26:31Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "rencryptofish",
+    "name": "claude-squad",
+    "full_name": "rencryptofish/claude-squad",
+    "pushed_at": "2025-07-06T21:49:45Z",
+    "updated_at": "2025-07-07T18:26:58Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "jayshrivastava",
+    "name": "claude-squad",
+    "full_name": "jayshrivastava/claude-squad",
+    "pushed_at": "2025-07-06T21:46:45Z",
+    "updated_at": "2025-07-05T22:44:07Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "JensMombaerts",
+    "name": "claude-squad",
+    "full_name": "JensMombaerts/claude-squad",
+    "pushed_at": "2025-07-05T22:43:31Z",
+    "updated_at": "2025-07-06T14:08:20Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "mintmcqueen",
+    "name": "claude-squad",
+    "full_name": "mintmcqueen/claude-squad",
+    "pushed_at": "2025-07-04T01:33:51Z",
+    "updated_at": "2025-07-17T22:59:25Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 1
+  },
+  {
+    "owner": "cpsquonk",
+    "name": "claude-squad",
+    "full_name": "cpsquonk/claude-squad",
+    "pushed_at": "2025-07-01T17:11:42Z",
+    "updated_at": "2025-07-02T00:40:43Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "sasigit7",
+    "name": "claude-squad",
+    "full_name": "sasigit7/claude-squad",
+    "pushed_at": "2025-07-01T17:11:42Z",
+    "updated_at": "2025-07-02T08:29:15Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "csikosjanos",
+    "name": "claude-squad",
+    "full_name": "csikosjanos/claude-squad",
+    "pushed_at": "2025-07-01T17:11:42Z",
+    "updated_at": "2025-07-03T12:50:52Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "solanian",
+    "name": "claude-squad",
+    "full_name": "solanian/claude-squad",
+    "pushed_at": "2025-07-01T17:11:42Z",
+    "updated_at": "2025-07-03T16:37:38Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "tnagjei",
+    "name": "claude-squad",
+    "full_name": "tnagjei/claude-squad",
+    "pushed_at": "2025-07-01T17:11:42Z",
+    "updated_at": "2025-07-04T12:41:33Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Hostingglobal-Tech",
+    "name": "claude-squad",
+    "full_name": "Hostingglobal-Tech/claude-squad",
+    "pushed_at": "2025-06-30T03:27:23Z",
+    "updated_at": "2025-06-30T07:01:19Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "TGreen87",
+    "name": "claude-squad",
+    "full_name": "TGreen87/claude-squad",
+    "pushed_at": "2025-06-30T03:27:23Z",
+    "updated_at": "2025-06-30T10:40:28Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ofirnatan",
+    "name": "claude-squad",
+    "full_name": "ofirnatan/claude-squad",
+    "pushed_at": "2025-06-30T03:27:23Z",
+    "updated_at": "2025-06-30T17:04:17Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ricable",
+    "name": "claude-squad",
+    "full_name": "ricable/claude-squad",
+    "pushed_at": "2025-06-30T03:27:23Z",
+    "updated_at": "2025-06-30T20:33:52Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "abdalhadi21",
+    "name": "claude-squad",
+    "full_name": "abdalhadi21/claude-squad",
+    "pushed_at": "2025-06-30T03:27:23Z",
+    "updated_at": "2025-07-01T07:32:00Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "zkcpku",
+    "name": "claude-squad",
+    "full_name": "zkcpku/claude-squad",
+    "pushed_at": "2025-06-30T03:27:23Z",
+    "updated_at": "2025-07-01T11:21:50Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ClayWarren",
+    "name": "claude-squad",
+    "full_name": "ClayWarren/claude-squad",
+    "pushed_at": "2025-06-29T19:41:06Z",
+    "updated_at": "2025-06-29T04:31:05Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ehynds2077",
+    "name": "claude-squad",
+    "full_name": "ehynds2077/claude-squad",
+    "pushed_at": "2025-06-29T06:16:26Z",
+    "updated_at": "2025-06-29T06:16:29Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "z23cc",
+    "name": "claude-squad",
+    "full_name": "z23cc/claude-squad",
+    "pushed_at": "2025-06-28T17:26:36Z",
+    "updated_at": "2025-06-28T17:26:41Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "getmissionctrl",
+    "name": "claude-squad",
+    "full_name": "getmissionctrl/claude-squad",
+    "pushed_at": "2025-06-28T13:32:13Z",
+    "updated_at": "2025-06-28T13:32:17Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "dairui1",
+    "name": "claude-squad",
+    "full_name": "dairui1/claude-squad",
+    "pushed_at": "2025-06-28T04:09:46Z",
+    "updated_at": "2025-06-28T04:09:18Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "WebsiteMobil",
+    "name": "claude-squad",
+    "full_name": "WebsiteMobil/claude-squad",
+    "pushed_at": "2025-06-26T16:21:37Z",
+    "updated_at": "2025-06-26T23:28:57Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "SingularityAI-Dev",
+    "name": "claude-squad",
+    "full_name": "SingularityAI-Dev/claude-squad",
+    "pushed_at": "2025-06-26T16:21:37Z",
+    "updated_at": "2025-06-28T11:56:30Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ezcat207",
+    "name": "claude-squad",
+    "full_name": "ezcat207/claude-squad",
+    "pushed_at": "2025-06-26T16:21:37Z",
+    "updated_at": "2025-06-28T20:05:53Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "meridianp",
+    "name": "claude-squad",
+    "full_name": "meridianp/claude-squad",
+    "pushed_at": "2025-06-26T16:21:37Z",
+    "updated_at": "2025-06-29T04:55:11Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ichizero",
+    "name": "claude-squad",
+    "full_name": "ichizero/claude-squad",
+    "pushed_at": "2025-06-24T15:21:32Z",
+    "updated_at": "2025-06-24T15:06:32Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "codeaudit",
+    "name": "claude-squad",
+    "full_name": "codeaudit/claude-squad",
+    "pushed_at": "2025-06-23T13:50:10Z",
+    "updated_at": "2025-06-23T13:50:15Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "jackcooperz",
+    "name": "claude-squad",
+    "full_name": "jackcooperz/claude-squad",
+    "pushed_at": "2025-06-23T03:19:12Z",
+    "updated_at": "2025-06-23T03:19:15Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "aigorahub",
+    "name": "claude-squad",
+    "full_name": "aigorahub/claude-squad",
+    "pushed_at": "2025-06-21T23:21:20Z",
+    "updated_at": "2025-06-21T23:21:23Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "heaveninhellx",
+    "name": "claude-squad",
+    "full_name": "heaveninhellx/claude-squad",
+    "pushed_at": "2025-06-21T11:59:07Z",
+    "updated_at": "2025-06-21T13:27:13Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "pabranch",
+    "name": "claude-squad",
+    "full_name": "pabranch/claude-squad",
+    "pushed_at": "2025-06-21T11:59:07Z",
+    "updated_at": "2025-06-24T15:36:06Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "kisielewiczs",
+    "name": "claude-squad",
+    "full_name": "kisielewiczs/claude-squad",
+    "pushed_at": "2025-06-21T11:59:07Z",
+    "updated_at": "2025-06-24T18:49:01Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "tracy-codes",
+    "name": "claude-squad",
+    "full_name": "tracy-codes/claude-squad",
+    "pushed_at": "2025-06-21T03:15:06Z",
+    "updated_at": "2025-06-21T03:12:33Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "jlwainwright",
+    "name": "claude-squad",
+    "full_name": "jlwainwright/claude-squad",
+    "pushed_at": "2025-06-20T20:59:24Z",
+    "updated_at": "2025-06-21T11:35:58Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "gabadi",
+    "name": "claude-squad",
+    "full_name": "gabadi/claude-squad",
+    "pushed_at": "2025-06-20T17:16:06Z",
+    "updated_at": "2025-06-20T07:49:13Z",
+    "default_branch": "nightly",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Kabilan108",
+    "name": "claude-squad",
+    "full_name": "Kabilan108/claude-squad",
+    "pushed_at": "2025-06-18T21:52:19Z",
+    "updated_at": "2025-06-19T02:32:27Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "eagurin",
+    "name": "claude-squad",
+    "full_name": "eagurin/claude-squad",
+    "pushed_at": "2025-06-14T16:54:17Z",
+    "updated_at": "2025-06-12T12:18:30Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Hakimba",
+    "name": "claude-squad",
+    "full_name": "Hakimba/claude-squad",
+    "pushed_at": "2025-06-13T18:51:14Z",
+    "updated_at": "2025-05-22T10:18:38Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Coder-RL",
+    "name": "claude-squad",
+    "full_name": "Coder-RL/claude-squad",
+    "pushed_at": "2025-06-13T18:50:59Z",
+    "updated_at": "2025-06-14T17:08:59Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "MihiroH",
+    "name": "claude-squad-custom",
+    "full_name": "MihiroH/claude-squad-custom",
+    "pushed_at": "2025-06-13T18:50:59Z",
+    "updated_at": "2025-06-15T06:29:17Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "cb400sp2",
+    "name": "claude-squad",
+    "full_name": "cb400sp2/claude-squad",
+    "pushed_at": "2025-06-13T18:50:59Z",
+    "updated_at": "2025-06-15T13:49:28Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ks0318-p",
+    "name": "claude-squad",
+    "full_name": "ks0318-p/claude-squad",
+    "pushed_at": "2025-06-13T18:50:59Z",
+    "updated_at": "2025-06-15T15:43:12Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "motogururec",
+    "name": "claude-squad",
+    "full_name": "motogururec/claude-squad",
+    "pushed_at": "2025-06-13T18:50:59Z",
+    "updated_at": "2025-06-16T10:28:53Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "aorwall",
+    "name": "claude-squad",
+    "full_name": "aorwall/claude-squad",
+    "pushed_at": "2025-06-13T18:50:59Z",
+    "updated_at": "2025-06-16T13:14:55Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Jibbscript",
+    "name": "claude-squad",
+    "full_name": "Jibbscript/claude-squad",
+    "pushed_at": "2025-06-13T18:50:59Z",
+    "updated_at": "2025-06-17T01:56:19Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "zan-12",
+    "name": "claude-squad",
+    "full_name": "zan-12/claude-squad",
+    "pushed_at": "2025-06-13T18:50:59Z",
+    "updated_at": "2025-06-17T02:59:57Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "acumenix",
+    "name": "claude-squad",
+    "full_name": "acumenix/claude-squad",
+    "pushed_at": "2025-06-13T18:50:59Z",
+    "updated_at": "2025-06-17T07:48:30Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "nobita2041",
+    "name": "claude-squad",
+    "full_name": "nobita2041/claude-squad",
+    "pushed_at": "2025-06-13T18:50:59Z",
+    "updated_at": "2025-06-17T13:02:32Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "linkedlist771",
+    "name": "claude-squad",
+    "full_name": "linkedlist771/claude-squad",
+    "pushed_at": "2025-06-13T18:50:59Z",
+    "updated_at": "2025-06-17T15:29:31Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "TeamADAPT",
+    "name": "claude-squad",
+    "full_name": "TeamADAPT/claude-squad",
+    "pushed_at": "2025-06-12T22:16:03Z",
+    "updated_at": "2025-06-12T22:16:07Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "imnotfancy",
+    "name": "claude-squad",
+    "full_name": "imnotfancy/claude-squad",
+    "pushed_at": "2025-06-12T12:22:28Z",
+    "updated_at": "2025-06-12T12:22:31Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "jimprince",
+    "name": "claude-squad",
+    "full_name": "jimprince/claude-squad",
+    "pushed_at": "2025-06-12T06:26:41Z",
+    "updated_at": "2025-06-12T04:57:32Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "jeremy-apollo",
+    "name": "claude-squad",
+    "full_name": "jeremy-apollo/claude-squad",
+    "pushed_at": "2025-06-11T07:53:05Z",
+    "updated_at": "2025-06-11T07:53:09Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "hsb3",
+    "name": "claude-squad",
+    "full_name": "hsb3/claude-squad",
+    "pushed_at": "2025-06-10T21:33:44Z",
+    "updated_at": "2025-04-15T03:33:45Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "H0ARK",
+    "name": "claude-squad",
+    "full_name": "H0ARK/claude-squad",
+    "pushed_at": "2025-06-10T04:20:10Z",
+    "updated_at": "2025-06-10T04:20:13Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "inzi",
+    "name": "claude-squad",
+    "full_name": "inzi/claude-squad",
+    "pushed_at": "2025-06-10T03:08:04Z",
+    "updated_at": "2025-06-10T03:08:07Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "mufeez-amjad",
+    "name": "claude-squad",
+    "full_name": "mufeez-amjad/claude-squad",
+    "pushed_at": "2025-06-10T03:02:34Z",
+    "updated_at": "2025-06-10T02:13:19Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "epicsagas",
+    "name": "claude-squad",
+    "full_name": "epicsagas/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-10T04:40:36Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "seolks88",
+    "name": "claude-squad",
+    "full_name": "seolks88/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-10T10:09:08Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "digitalapplied",
+    "name": "claude-squad",
+    "full_name": "digitalapplied/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-10T23:26:35Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "kamekamek",
+    "name": "claude-squad",
+    "full_name": "kamekamek/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-10T23:59:21Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "B-00",
+    "name": "claude-squad",
+    "full_name": "B-00/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-11T01:24:28Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "mumer92",
+    "name": "claude-squad",
+    "full_name": "mumer92/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-11T08:45:58Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "joargp",
+    "name": "claude-squad",
+    "full_name": "joargp/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-11T10:43:41Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "SergioRubio01",
+    "name": "claude-squad",
+    "full_name": "SergioRubio01/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-11T17:40:28Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "evolv3ai",
+    "name": "claude-squad",
+    "full_name": "evolv3ai/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-11T22:36:44Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "orcasai",
+    "name": "claude-squad-lavachicken",
+    "full_name": "orcasai/claude-squad-lavachicken",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-12T11:30:43Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "DevPE2024",
+    "name": "claude-squad-ClaudCode",
+    "full_name": "DevPE2024/claude-squad-ClaudCode",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-08-05T10:21:59Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 1
+  },
+  {
+    "owner": "andrew-housebets",
+    "name": "claude-squad",
+    "full_name": "andrew-housebets/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-12T14:32:32Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "amogower",
+    "name": "claude-squad",
+    "full_name": "amogower/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-12T14:32:58Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ideabrian",
+    "name": "claude-squad",
+    "full_name": "ideabrian/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-12T17:05:55Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "opvexe",
+    "name": "claude-squad",
+    "full_name": "opvexe/claude-squad",
+    "pushed_at": "2025-06-10T03:00:50Z",
+    "updated_at": "2025-06-13T03:24:13Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "50lo",
+    "name": "claude-squad",
+    "full_name": "50lo/claude-squad",
+    "pushed_at": "2025-06-09T07:23:21Z",
+    "updated_at": "2025-06-09T07:23:25Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "teuri",
+    "name": "claude-squad",
+    "full_name": "teuri/claude-squad",
+    "pushed_at": "2025-06-07T05:04:10Z",
+    "updated_at": "2025-06-07T05:20:44Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ChristianBirke",
+    "name": "claude-squad",
+    "full_name": "ChristianBirke/claude-squad",
+    "pushed_at": "2025-06-07T05:04:10Z",
+    "updated_at": "2025-06-07T06:10:23Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "dxd214",
+    "name": "claude-squad",
+    "full_name": "dxd214/claude-squad",
+    "pushed_at": "2025-06-07T05:04:10Z",
+    "updated_at": "2025-06-07T07:09:01Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Mydudeclaps",
+    "name": "claude-squad-claps",
+    "full_name": "Mydudeclaps/claude-squad-claps",
+    "pushed_at": "2025-06-07T05:04:10Z",
+    "updated_at": "2025-06-07T17:49:11Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "sengokudaikon",
+    "name": "claude-squad",
+    "full_name": "sengokudaikon/claude-squad",
+    "pushed_at": "2025-06-07T05:04:10Z",
+    "updated_at": "2025-06-08T11:53:37Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "galligan",
+    "name": "claude-squad",
+    "full_name": "galligan/claude-squad",
+    "pushed_at": "2025-06-06T16:28:35Z",
+    "updated_at": "2025-06-06T16:43:02Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Marmalade118",
+    "name": "claude-squad",
+    "full_name": "Marmalade118/claude-squad",
+    "pushed_at": "2025-06-06T16:28:35Z",
+    "updated_at": "2025-06-06T22:37:26Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "maxgoff",
+    "name": "claude-squad",
+    "full_name": "maxgoff/claude-squad",
+    "pushed_at": "2025-06-05T11:24:15Z",
+    "updated_at": "2025-06-05T11:24:20Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Michaelzag",
+    "name": "claude-squad",
+    "full_name": "Michaelzag/claude-squad",
+    "pushed_at": "2025-06-05T02:33:27Z",
+    "updated_at": "2025-06-05T15:26:52Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "thorstone137",
+    "name": "claude-squad",
+    "full_name": "thorstone137/claude-squad",
+    "pushed_at": "2025-06-05T02:33:27Z",
+    "updated_at": "2025-06-05T15:58:41Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "leonj1",
+    "name": "claude-squad",
+    "full_name": "leonj1/claude-squad",
+    "pushed_at": "2025-06-05T02:33:27Z",
+    "updated_at": "2025-06-05T20:17:08Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "montgemory",
+    "name": "claude-squad",
+    "full_name": "montgemory/claude-squad",
+    "pushed_at": "2025-06-05T02:33:27Z",
+    "updated_at": "2025-06-05T21:23:33Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "comercialtoddy",
+    "name": "claude-squad",
+    "full_name": "comercialtoddy/claude-squad",
+    "pushed_at": "2025-06-05T02:33:27Z",
+    "updated_at": "2025-06-05T22:18:51Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "commonality2u",
+    "name": "claude-squad",
+    "full_name": "commonality2u/claude-squad",
+    "pushed_at": "2025-06-05T02:33:27Z",
+    "updated_at": "2025-06-05T22:52:16Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Nonfungiblefuturist",
+    "name": "claude-squad",
+    "full_name": "Nonfungiblefuturist/claude-squad",
+    "pushed_at": "2025-06-05T02:33:27Z",
+    "updated_at": "2025-06-06T01:03:17Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Tech0001",
+    "name": "claude-squad",
+    "full_name": "Tech0001/claude-squad",
+    "pushed_at": "2025-06-04T19:01:45Z",
+    "updated_at": "2025-06-04T19:01:47Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "gosthell",
+    "name": "claude-squad",
+    "full_name": "gosthell/claude-squad",
+    "pushed_at": "2025-06-04T15:00:24Z",
+    "updated_at": "2025-06-04T15:00:26Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "mateoreynores",
+    "name": "claude-squad",
+    "full_name": "mateoreynores/claude-squad",
+    "pushed_at": "2025-06-04T05:22:11Z",
+    "updated_at": "2025-06-04T15:08:02Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "kennyfrc",
+    "name": "claude-squad",
+    "full_name": "kennyfrc/claude-squad",
+    "pushed_at": "2025-06-04T04:19:36Z",
+    "updated_at": "2025-06-04T02:14:03Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "SuperCodeTool",
+    "name": "squad",
+    "full_name": "SuperCodeTool/squad",
+    "pushed_at": "2025-06-02T14:36:37Z",
+    "updated_at": "2025-06-02T14:36:59Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "SuperCodeTool",
+    "name": "claude-squad",
+    "full_name": "SuperCodeTool/claude-squad",
+    "pushed_at": "2025-06-02T14:35:06Z",
+    "updated_at": "2025-06-02T14:36:35Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "wjdix",
+    "name": "claude-squad",
+    "full_name": "wjdix/claude-squad",
+    "pushed_at": "2025-06-02T14:33:22Z",
+    "updated_at": "2025-06-02T14:34:25Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ifangdar",
+    "name": "claude-squad",
+    "full_name": "ifangdar/claude-squad",
+    "pushed_at": "2025-06-02T01:40:03Z",
+    "updated_at": "2025-06-02T11:14:25Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ssushant0011",
+    "name": "claude-squad",
+    "full_name": "ssushant0011/claude-squad",
+    "pushed_at": "2025-06-02T01:40:03Z",
+    "updated_at": "2025-06-02T15:52:25Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 1
+  },
+  {
+    "owner": "Tidianed1",
+    "name": "claude-squad",
+    "full_name": "Tidianed1/claude-squad",
+    "pushed_at": "2025-06-02T01:40:03Z",
+    "updated_at": "2025-06-02T22:25:13Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Zorlin",
+    "name": "claude-squad",
+    "full_name": "Zorlin/claude-squad",
+    "pushed_at": "2025-06-02T01:40:03Z",
+    "updated_at": "2025-06-02T22:49:32Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Sinity",
+    "name": "claude-squad",
+    "full_name": "Sinity/claude-squad",
+    "pushed_at": "2025-05-31T10:05:56Z",
+    "updated_at": "2025-05-31T09:17:07Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "BryanJBryce",
+    "name": "claude-squad",
+    "full_name": "BryanJBryce/claude-squad",
+    "pushed_at": "2025-05-30T22:02:49Z",
+    "updated_at": "2025-05-31T03:56:52Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "aitchwhy",
+    "name": "claude-squad",
+    "full_name": "aitchwhy/claude-squad",
+    "pushed_at": "2025-05-29T04:56:04Z",
+    "updated_at": "2025-06-06T11:28:59Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 1
+  },
+  {
+    "owner": "VariousForks",
+    "name": "claude-squad",
+    "full_name": "VariousForks/claude-squad",
+    "pushed_at": "2025-05-25T21:46:09Z",
+    "updated_at": "2025-05-25T21:41:11Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "devflowinc",
+    "name": "claude-squad",
+    "full_name": "devflowinc/claude-squad",
+    "pushed_at": "2025-05-24T20:04:40Z",
+    "updated_at": "2025-07-07T11:30:44Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 1
+  },
+  {
+    "owner": "umerrcodes",
+    "name": "claude-squad",
+    "full_name": "umerrcodes/claude-squad",
+    "pushed_at": "2025-05-24T20:04:40Z",
+    "updated_at": "2025-05-24T21:45:49Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Ahmed-Ali",
+    "name": "claude-squad",
+    "full_name": "Ahmed-Ali/claude-squad",
+    "pushed_at": "2025-05-24T20:04:40Z",
+    "updated_at": "2025-05-27T03:10:13Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "awkronos",
+    "name": "claude-squad",
+    "full_name": "awkronos/claude-squad",
+    "pushed_at": "2025-05-24T03:45:32Z",
+    "updated_at": "2025-05-24T03:45:35Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "jttdev",
+    "name": "claude-squad",
+    "full_name": "jttdev/claude-squad",
+    "pushed_at": "2025-05-23T02:42:56Z",
+    "updated_at": "2025-05-23T03:42:19Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "bjcoombs",
+    "name": "claude-squad",
+    "full_name": "bjcoombs/claude-squad",
+    "pushed_at": "2025-05-23T02:42:56Z",
+    "updated_at": "2025-05-23T05:06:50Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "FellowTraveler",
+    "name": "claude-squad",
+    "full_name": "FellowTraveler/claude-squad",
+    "pushed_at": "2025-05-22T20:07:42Z",
+    "updated_at": "2025-05-22T20:07:46Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "yokesh-ks",
+    "name": "claude-squad",
+    "full_name": "yokesh-ks/claude-squad",
+    "pushed_at": "2025-05-21T19:35:32Z",
+    "updated_at": "2025-05-22T16:50:38Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "darinkishore",
+    "name": "claude-squad",
+    "full_name": "darinkishore/claude-squad",
+    "pushed_at": "2025-05-20T03:07:27Z",
+    "updated_at": "2025-05-20T03:07:31Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "adamk-au",
+    "name": "claude-squad",
+    "full_name": "adamk-au/claude-squad",
+    "pushed_at": "2025-05-18T23:34:07Z",
+    "updated_at": "2025-05-19T03:09:22Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "0xrinegade",
+    "name": "claude-squad",
+    "full_name": "0xrinegade/claude-squad",
+    "pushed_at": "2025-05-18T23:34:07Z",
+    "updated_at": "2025-05-20T10:32:35Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "machuwey",
+    "name": "claude-squad",
+    "full_name": "machuwey/claude-squad",
+    "pushed_at": "2025-05-18T23:34:07Z",
+    "updated_at": "2025-05-20T11:12:41Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "scottdensmore",
+    "name": "claude-squad",
+    "full_name": "scottdensmore/claude-squad",
+    "pushed_at": "2025-05-18T23:34:07Z",
+    "updated_at": "2025-05-21T02:09:56Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "rizalgowandy",
+    "name": "claude-squad",
+    "full_name": "rizalgowandy/claude-squad",
+    "pushed_at": "2025-05-18T04:47:39Z",
+    "updated_at": "2025-05-18T04:47:42Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "yshaaban",
+    "name": "claude-squad",
+    "full_name": "yshaaban/claude-squad",
+    "pushed_at": "2025-05-07T19:33:03Z",
+    "updated_at": "2025-06-24T22:15:36Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 2
+  },
+  {
+    "owner": "entrepeneur4lyf",
+    "name": "claude-squad",
+    "full_name": "entrepeneur4lyf/claude-squad",
+    "pushed_at": "2025-05-05T01:54:51Z",
+    "updated_at": "2025-05-05T01:54:55Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "twilwa",
+    "name": "claude-squad",
+    "full_name": "twilwa/claude-squad",
+    "pushed_at": "2025-04-28T00:12:56Z",
+    "updated_at": "2025-04-29T22:29:55Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "starke-icu",
+    "name": "claude-squad",
+    "full_name": "starke-icu/claude-squad",
+    "pushed_at": "2025-04-28T00:12:56Z",
+    "updated_at": "2025-04-30T05:42:32Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "afneyman",
+    "name": "claude-squad",
+    "full_name": "afneyman/claude-squad",
+    "pushed_at": "2025-04-28T00:12:56Z",
+    "updated_at": "2025-05-02T12:29:04Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "maxim-romanovsky",
+    "name": "claude-squad",
+    "full_name": "maxim-romanovsky/claude-squad",
+    "pushed_at": "2025-04-28T00:12:56Z",
+    "updated_at": "2025-05-02T19:28:49Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "yarstann",
+    "name": "claude-squad",
+    "full_name": "yarstann/claude-squad",
+    "pushed_at": "2025-04-28T00:12:56Z",
+    "updated_at": "2025-05-03T07:22:04Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "wojohowitz00",
+    "name": "claude-squad",
+    "full_name": "wojohowitz00/claude-squad",
+    "pushed_at": "2025-04-28T00:12:56Z",
+    "updated_at": "2025-05-03T09:51:29Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "MIkeCall1986",
+    "name": "claude-squad",
+    "full_name": "MIkeCall1986/claude-squad",
+    "pushed_at": "2025-04-28T00:12:56Z",
+    "updated_at": "2025-05-03T14:56:25Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "HangryPanda",
+    "name": "claude-squad",
+    "full_name": "HangryPanda/claude-squad",
+    "pushed_at": "2025-04-28T00:12:56Z",
+    "updated_at": "2025-05-04T18:38:30Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "kvnloo",
+    "name": "claude-squad",
+    "full_name": "kvnloo/claude-squad",
+    "pushed_at": "2025-04-28T00:12:56Z",
+    "updated_at": "2025-05-05T10:21:21Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "jj3ny",
+    "name": "claude-squad",
+    "full_name": "jj3ny/claude-squad",
+    "pushed_at": "2025-04-28T00:12:56Z",
+    "updated_at": "2025-05-16T14:55:03Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ajbmachon",
+    "name": "claude-squad",
+    "full_name": "ajbmachon/claude-squad",
+    "pushed_at": "2025-04-28T00:12:56Z",
+    "updated_at": "2025-05-17T11:46:57Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "doji-kr",
+    "name": "claude-squad",
+    "full_name": "doji-kr/claude-squad",
+    "pushed_at": "2025-04-28T00:12:56Z",
+    "updated_at": "2025-05-17T15:10:33Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "mindmakr",
+    "name": "claude-squad",
+    "full_name": "mindmakr/claude-squad",
+    "pushed_at": "2025-04-22T03:39:28Z",
+    "updated_at": "2025-04-24T08:28:53Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "khushal38",
+    "name": "claude-squad",
+    "full_name": "khushal38/claude-squad",
+    "pushed_at": "2025-04-22T03:39:28Z",
+    "updated_at": "2025-04-25T08:56:09Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "j4redux",
+    "name": "claude-squad",
+    "full_name": "j4redux/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-17T03:01:59Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "lvcster",
+    "name": "claude-squad",
+    "full_name": "lvcster/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-17T09:22:38Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "mannuiitd",
+    "name": "claude-squad",
+    "full_name": "mannuiitd/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-17T10:10:33Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "dmitriz",
+    "name": "claude-squad",
+    "full_name": "dmitriz/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-17T14:51:21Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "arosstale",
+    "name": "claude-squad",
+    "full_name": "arosstale/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-17T15:05:56Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Machiavelli-DaVinci",
+    "name": "claude-squad",
+    "full_name": "Machiavelli-DaVinci/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-17T15:47:21Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "sachsom95",
+    "name": "claude-squad",
+    "full_name": "sachsom95/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-17T17:40:34Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "babaswananda",
+    "name": "claude-squad",
+    "full_name": "babaswananda/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-17T19:07:53Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Connoropolous",
+    "name": "claude-squad",
+    "full_name": "Connoropolous/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-18T00:51:42Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 1
+  },
+  {
+    "owner": "chrisnienart",
+    "name": "claude-squad",
+    "full_name": "chrisnienart/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-18T01:47:09Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "wblech",
+    "name": "claude-squad",
+    "full_name": "wblech/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-18T14:17:50Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Fguedes90",
+    "name": "claude-squad",
+    "full_name": "Fguedes90/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-19T02:16:19Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "kevinktg",
+    "name": "claude-squad",
+    "full_name": "kevinktg/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-19T11:34:40Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "bungphe",
+    "name": "claude-squad",
+    "full_name": "bungphe/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-20T02:50:08Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "flaviorsp",
+    "name": "claude-squad",
+    "full_name": "flaviorsp/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-20T04:06:33Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "iN0mad89",
+    "name": "claude-squad",
+    "full_name": "iN0mad89/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-20T09:22:35Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "christokur",
+    "name": "claude-squad",
+    "full_name": "christokur/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-20T14:18:31Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "zisan34",
+    "name": "claude-squad",
+    "full_name": "zisan34/claude-squad",
+    "pushed_at": "2025-04-16T23:34:22Z",
+    "updated_at": "2025-04-21T08:50:18Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "ilyazub",
+    "name": "claude-squad",
+    "full_name": "ilyazub/claude-squad",
+    "pushed_at": "2025-04-09T11:27:05Z",
+    "updated_at": "2025-04-05T14:09:12Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "gmh5225",
+    "name": "claude-squad",
+    "full_name": "gmh5225/claude-squad",
+    "pushed_at": "2025-04-05T18:30:38Z",
+    "updated_at": "2025-04-06T01:21:16Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "subslink326",
+    "name": "claude-squad",
+    "full_name": "subslink326/claude-squad",
+    "pushed_at": "2025-04-05T18:30:38Z",
+    "updated_at": "2025-04-06T06:41:33Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "Hobie1Kenobi",
+    "name": "claude-squad",
+    "full_name": "Hobie1Kenobi/claude-squad",
+    "pushed_at": "2025-04-05T18:30:38Z",
+    "updated_at": "2025-04-06T15:01:36Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "belinwu",
+    "name": "claude-squad",
+    "full_name": "belinwu/claude-squad",
+    "pushed_at": "2025-04-05T18:30:38Z",
+    "updated_at": "2025-04-07T04:49:56Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "helloprkr",
+    "name": "claude-squad",
+    "full_name": "helloprkr/claude-squad",
+    "pushed_at": "2025-04-05T18:30:38Z",
+    "updated_at": "2025-04-07T15:07:17Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "16francej",
+    "name": "claude-squad",
+    "full_name": "16francej/claude-squad",
+    "pushed_at": "2025-04-05T18:30:38Z",
+    "updated_at": "2025-04-08T17:36:06Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "vabole",
+    "name": "claude-squad",
+    "full_name": "vabole/claude-squad",
+    "pushed_at": "2025-04-05T18:30:38Z",
+    "updated_at": "2025-04-11T13:06:01Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "d3f4ultt",
+    "name": "claude-squad",
+    "full_name": "d3f4ultt/claude-squad",
+    "pushed_at": "2025-04-05T05:47:40Z",
+    "updated_at": "2025-07-12T15:53:53Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 1
+  },
+  {
+    "owner": "nxpatterns",
+    "name": "claude-squad",
+    "full_name": "nxpatterns/claude-squad",
+    "pushed_at": "2025-04-05T05:47:40Z",
+    "updated_at": "2025-04-05T07:09:01Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "HermenySantos",
+    "name": "claude-squad",
+    "full_name": "HermenySantos/claude-squad",
+    "pushed_at": "2025-04-05T05:47:40Z",
+    "updated_at": "2025-04-05T10:59:10Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "0xi4o",
+    "name": "claude-squad",
+    "full_name": "0xi4o/claude-squad",
+    "pushed_at": "2025-04-05T05:47:40Z",
+    "updated_at": "2025-04-05T13:50:35Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "nghtraidr86",
+    "name": "claude-squad",
+    "full_name": "nghtraidr86/claude-squad",
+    "pushed_at": "2025-04-05T05:47:40Z",
+    "updated_at": "2025-04-05T14:30:36Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "lytv",
+    "name": "claude-squad",
+    "full_name": "lytv/claude-squad",
+    "pushed_at": "2025-04-05T05:47:40Z",
+    "updated_at": "2025-04-05T14:44:13Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "MaTriXy",
+    "name": "claude-squad",
+    "full_name": "MaTriXy/claude-squad",
+    "pushed_at": "2025-04-05T05:47:40Z",
+    "updated_at": "2025-04-05T16:33:46Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "tunahorse",
+    "name": "claude-squad",
+    "full_name": "tunahorse/claude-squad",
+    "pushed_at": "2025-04-05T04:17:59Z",
+    "updated_at": "2025-04-05T04:20:30Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "docxology",
+    "name": "claude-squad",
+    "full_name": "docxology/claude-squad",
+    "pushed_at": "2025-04-03T20:25:14Z",
+    "updated_at": "2025-04-04T18:57:47Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "lamardealmaker",
+    "name": "claude-squad",
+    "full_name": "lamardealmaker/claude-squad",
+    "pushed_at": "2025-04-03T20:25:14Z",
+    "updated_at": "2025-04-04T19:33:15Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 0
+  },
+  {
+    "owner": "24601",
+    "name": "claude-squad",
+    "full_name": "24601/claude-squad",
+    "pushed_at": "2025-04-03T20:25:14Z",
+    "updated_at": "2025-08-01T03:22:57Z",
+    "default_branch": "main",
+    "forks_count": 0,
+    "stargazers_count": 2
+  }
+]

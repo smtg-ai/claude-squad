@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "mcp__github__search_repositories",
+      "WebFetch(domain:api.github.com)",
+      "Bash(gh api:*)",
+      "Bash(for fork in \"quuu/claude-squad\" \"KingInYellow18/claude-squad\" \"dctanner/claude-squad\" \"danield9tqh/claude-squad\")",
+      "Bash(do)",
+      "Bash(echo:*)",
+      "Bash(done)",
+      "Bash(for fork in \"gabadi/claude-squad\" \"yshaaban/claude-squad\" \"d3f4ultt/claude-squad\" \"24601/claude-squad\")",
+      "mcp__github__list_pull_requests",
+      "Bash(mkdir:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
