@@ -184,11 +184,15 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 
 	branch := i.Branch
 	if i.Started() && hasMultipleRepos {
-		repoName, err := i.RepoName()
-		if err != nil {
-			log.ErrorLog.Printf("could not get repo name in instance renderer: %v", err)
-		} else {
-			branch += fmt.Sprintf(" (%s)", repoName)
+		// Skip repo name retrieval for paused instances
+		if !i.Paused() {
+			repoName, err := i.RepoName()
+			if err != nil {
+				// Log at warning level but don't break rendering
+				log.WarningLog.Printf("could not get repo name in instance renderer: %v", err)
+			} else {
+				branch += fmt.Sprintf(" (%s)", repoName)
+			}
 		}
 	}
 	// Don't show branch if there's no space for it. Or show ellipsis if it's too long.
@@ -286,12 +290,14 @@ func (l *List) Kill() {
 		defer l.Up()
 	}
 
-	// Unregister the reponame.
-	repoName, err := targetInstance.RepoName()
-	if err != nil {
-		log.ErrorLog.Printf("could not get repo name: %v", err)
-	} else {
-		l.rmRepo(repoName)
+	// Unregister the reponame if the instance is not paused
+	if !targetInstance.Paused() {
+		repoName, err := targetInstance.RepoName()
+		if err != nil {
+			log.WarningLog.Printf("could not get repo name: %v", err)
+		} else {
+			l.rmRepo(repoName)
+		}
 	}
 
 	// Since there's items after this, the selectedIdx can stay the same.
@@ -338,9 +344,14 @@ func (l *List) AddInstance(instance *session.Instance) (finalize func()) {
 	l.items = append(l.items, instance)
 	// The finalizer registers the repo name once the instance is started.
 	return func() {
+		// Skip repo registration for paused instances
+		if instance.Paused() {
+			return
+		}
+		
 		repoName, err := instance.RepoName()
 		if err != nil {
-			log.ErrorLog.Printf("could not get repo name: %v", err)
+			log.WarningLog.Printf("could not get repo name in finalizer: %v", err)
 			return
 		}
 
