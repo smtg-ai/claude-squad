@@ -188,6 +188,12 @@ func (i *Instance) RepoName() (string, error) {
 	if !i.started {
 		return "", fmt.Errorf("cannot get repo name for instance that has not been started")
 	}
+	if i.Status == Paused {
+		return "", fmt.Errorf("cannot get repo name for paused instance")
+	}
+	if i.gitWorktree == nil {
+		return "", fmt.Errorf("gitWorktree is nil")
+	}
 	return i.gitWorktree.GetRepoName(), nil
 }
 
@@ -312,9 +318,15 @@ func (i *Instance) Preview() (string, error) {
 }
 
 func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
-	if !i.started {
+	if !i.started || i.Status == Paused {
 		return false, false
 	}
+
+	// Check if the tmux session is still alive
+	if !i.TmuxAlive() {
+		return false, false
+	}
+
 	return i.tmuxSession.HasUpdated()
 }
 
@@ -371,6 +383,9 @@ func (i *Instance) Paused() bool {
 
 // TmuxAlive returns true if the tmux session is alive. This is a sanity check before attaching.
 func (i *Instance) TmuxAlive() bool {
+	if i.Status == Paused || !i.started || i.tmuxSession == nil {
+		return false
+	}
 	return i.tmuxSession.DoesSessionExist()
 }
 
@@ -499,6 +514,21 @@ func (i *Instance) UpdateDiffStats() error {
 
 	if i.Status == Paused {
 		// Keep the previous diff stats if the instance is paused
+		return nil
+	}
+
+	// Check if the worktree directory exists before attempting git operations
+	if i.gitWorktree == nil {
+		i.diffStats = nil
+		return nil
+	}
+
+	worktreePath := i.gitWorktree.GetWorktreePath()
+	if _, err := os.Stat(worktreePath); os.IsNotExist(err) {
+		// The worktree directory doesn't exist, mark the instance as paused
+		log.WarningLog.Printf("Worktree directory for '%s' doesn't exist at '%s', marking as paused", i.Title, worktreePath)
+		i.Status = Paused
+		i.diffStats = nil
 		return nil
 	}
 

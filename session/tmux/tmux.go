@@ -461,9 +461,27 @@ func (t *TmuxSession) updateWindowSize(cols, rows int) error {
 }
 
 func (t *TmuxSession) DoesSessionExist() bool {
+	if t == nil {
+		return false
+	}
+
 	// Using "-t name" does a prefix match, which is wrong. `-t=` does an exact match.
 	existsCmd := exec.Command("tmux", "has-session", fmt.Sprintf("-t=%s", t.sanitizedName))
-	return t.cmdExec.Run(existsCmd) == nil
+	
+	// Add a timeout to the command execution to prevent hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	
+	existsCmd = exec.CommandContext(ctx, "tmux", "has-session", fmt.Sprintf("-t=%s", t.sanitizedName))
+	err := t.cmdExec.Run(existsCmd)
+	
+	// Check if error is due to timeout
+	if ctx.Err() == context.DeadlineExceeded {
+		log.WarningLog.Printf("Timeout checking if tmux session exists: %s", t.sanitizedName)
+		return false
+	}
+	
+	return err == nil
 }
 
 // CapturePaneContent captures the content of the tmux pane
