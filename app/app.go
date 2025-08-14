@@ -42,6 +42,8 @@ const (
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
+	// stateCreatingSession is the state when a session is being created asynchronously.
+	stateCreatingSession
 )
 
 type home struct {
@@ -72,6 +74,9 @@ type home struct {
 
 	// keySent is used to manage underlining menu items
 	keySent bool
+
+	// asyncSessionCreation is used for tracking async session creation
+	asyncSessionCreationActive bool
 
 	// -- UI Components --
 
@@ -185,9 +190,54 @@ func (m *home) Init() tea.Cmd {
 
 func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case sessionCreationResultMsg:
+		m.asyncSessionCreationActive = false
+		
+		// Handle error if session creation failed
+		if msg.err != nil {
+			m.list.Kill()
+			m.state = stateDefault
+			return m, m.handleError(msg.err)
+		}
+		
+		// Save after adding new instance
+		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+			return m, m.handleError(err)
+		}
+		
+		// Instance added successfully, call the finalizer.
+		m.newInstanceFinalizer()
+		if msg.autoYes {
+			msg.instance.AutoYes = true
+		}
+
+		// Reset state
+		m.state = stateDefault
+		if msg.promptAfterName {
+			m.state = statePrompt
+			m.menu.SetState(ui.StatePrompt)
+			// Initialize the text input overlay
+			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+			m.promptAfterName = false
+		} else {
+			m.menu.SetState(ui.StateDefault)
+			m.showHelpScreen(helpStart(msg.instance), nil)
+		}
+
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 	case hideErrMsg:
 		m.errBox.Clear()
 	case previewTickMsg:
+		// First check if the selected instance exists and isn't paused before updating
+		selected := m.list.GetSelectedInstance()
+		if selected == nil || selected.Paused() {
+			return m, func() tea.Msg {
+				time.Sleep(500 * time.Millisecond) // Slower refresh for paused/empty instances
+				return previewTickMsg{}
+			}
+		}
+
+		// Update the UI with the selected instance
 		cmd := m.instanceChanged()
 		return m, tea.Batch(
 			cmd,
@@ -201,9 +251,35 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tickUpdateMetadataMessage:
 		for _, instance := range m.list.GetInstances() {
-			if !instance.Started() || instance.Paused() {
+			if !instance.Started() {
 				continue
 			}
+			
+			// Check if the instance is paused before updating
+			if instance.Paused() {
+				continue
+			}
+			
+			// Track if the instance was already paused before updating diff stats
+			wasPaused := instance.Paused()
+
+			// Check if worktree path exists (if it doesn't, the UpdateDiffStats call will mark it as paused)
+			if err := instance.UpdateDiffStats(); err != nil {
+				log.WarningLog.Printf("could not update diff stats: %v", err)
+				continue // Skip the rest of the updates if we can't update diff stats
+			}
+
+			// If the instance was newly marked as paused by UpdateDiffStats, trigger UI refresh
+			if !wasPaused && instance.Paused() {
+				// Force refresh UI layout to handle the changed state
+				return m, tea.Sequence(tea.WindowSize(), tickUpdateMetadataCmd)
+			}
+
+			// If the instance is now paused, skip the rest of the updates
+			if instance.Paused() {
+				continue
+			}
+			
 			updated, prompt := instance.HasUpdated()
 			if updated {
 				instance.SetStatus(session.Running)
@@ -213,9 +289,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					instance.SetStatus(session.Ready)
 				}
-			}
-			if err := instance.UpdateDiffStats(); err != nil {
-				log.WarningLog.Printf("could not update diff stats: %v", err)
 			}
 		}
 		return m, tickUpdateMetadataCmd
@@ -330,35 +403,31 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
-			if err := instance.Start(true); err != nil {
-				m.list.Kill()
-				m.state = stateDefault
-				return m, m.handleError(err)
+			// Set state to creating session and update menu
+			m.state = stateCreatingSession
+			m.asyncSessionCreationActive = true
+			m.menu.SetState(ui.StateCreatingInstance)
+			
+			// Start session creation in a goroutine
+			// Store important values before the goroutine starts
+			promptAfterName := m.promptAfterName
+			autoYes := m.autoYes
+			
+			// Return the tick command to send a message after session is created
+			return m, func() tea.Msg {
+				// Start the instance in a blocking operation
+				err := instance.Start(true)
+				
+				// Return a message with the result
+				return sessionCreationResultMsg{
+					instance:        instance,
+					err:            err,
+					promptAfterName: promptAfterName,
+					autoYes:         autoYes,
+				}
 			}
-			// Save after adding new instance
-			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-				return m, m.handleError(err)
-			}
-			// Instance added successfully, call the finalizer.
-			m.newInstanceFinalizer()
-			if m.autoYes {
-				instance.AutoYes = true
-			}
-
-			m.newInstanceFinalizer()
-			m.state = stateDefault
-			if m.promptAfterName {
-				m.state = statePrompt
-				m.menu.SetState(ui.StatePrompt)
-				// Initialize the text input overlay
-				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
-				m.promptAfterName = false
-			} else {
-				m.menu.SetState(ui.StateDefault)
-				m.showHelpScreen(helpStart(instance), nil)
-			}
-
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+			
+			return m, nil
 		case tea.KeyRunes:
 			if len(instance.Title) >= 32 {
 				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
@@ -672,6 +741,14 @@ type tickUpdateMetadataMessage struct{}
 
 type instanceChangedMsg struct{}
 
+// sessionCreationResultMsg is sent when async session creation completes
+type sessionCreationResultMsg struct {
+	instance        *session.Instance
+	err             error
+	promptAfterName bool
+	autoYes         bool
+}
+
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
 // overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.
 var tickUpdateMetadataCmd = func() tea.Msg {
@@ -746,6 +823,10 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("confirmation overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
+	} else if m.state == stateCreatingSession {
+		// Show spinner or progress indicator when creating session
+		creatingMsg := lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true).Render(m.spinner.View() + " Creating session...")
+		return overlay.PlaceOverlay(0, 0, creatingMsg, mainView, true, false)
 	}
 
 	return mainView

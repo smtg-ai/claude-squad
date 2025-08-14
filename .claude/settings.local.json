@@ -11,7 +11,12 @@
       "Bash(done)",
       "Bash(for fork in \"gabadi/claude-squad\" \"yshaaban/claude-squad\" \"d3f4ultt/claude-squad\" \"24601/claude-squad\")",
       "mcp__github__list_pull_requests",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(go build:*)",
+      "Bash(cat:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

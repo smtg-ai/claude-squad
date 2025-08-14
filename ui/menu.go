@@ -40,6 +40,7 @@ const (
 	StateEmpty
 	StateNewInstance
 	StatePrompt
+	StateCreatingInstance
 )
 
 type Menu struct {
@@ -117,6 +118,9 @@ func (m *Menu) updateOptions() {
 		m.options = newInstanceMenuOptions
 	case StatePrompt:
 		m.options = promptMenuOptions
+	case StateCreatingInstance:
+		// No menu options during session creation
+		m.options = []keys.KeyName{}
 	}
 }
 
