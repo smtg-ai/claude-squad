@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/go-git/go-git/v5"
+	git "github.com/go-git/go-git/v5"
 )
 
 // sanitizeBranchName transforms an arbitrary string into a Git branch name friendly string.

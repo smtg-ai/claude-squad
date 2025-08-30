@@ -26,8 +26,8 @@ func TestGetClaudeCommand(t *testing.T) {
 	originalShell := os.Getenv("SHELL")
 	originalPath := os.Getenv("PATH")
 	defer func() {
-		os.Setenv("SHELL", originalShell)
-		os.Setenv("PATH", originalPath)
+		_ = os.Setenv("SHELL", originalShell)
+		_ = os.Setenv("PATH", originalPath)
 	}()
 
 	t.Run("finds claude in PATH", func(t *testing.T) {
@@ -40,8 +40,8 @@ func TestGetClaudeCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		// Set PATH to include our temp directory
-		os.Setenv("PATH", tempDir+":"+originalPath)
-		os.Setenv("SHELL", "/bin/bash")
+		_ = os.Setenv("PATH", tempDir+":"+originalPath)
+		_ = os.Setenv("SHELL", "/bin/bash")
 
 		result, err := GetClaudeCommand()
 
@@ -52,8 +52,8 @@ func TestGetClaudeCommand(t *testing.T) {
 	t.Run("handles missing claude command", func(t *testing.T) {
 		// Set PATH to a directory that doesn't contain claude
 		tempDir := t.TempDir()
-		os.Setenv("PATH", tempDir)
-		os.Setenv("SHELL", "/bin/bash")
+		_ = os.Setenv("PATH", tempDir)
+		_ = os.Setenv("SHELL", "/bin/bash")
 
 		result, err := GetClaudeCommand()
 
@@ -72,8 +72,8 @@ func TestGetClaudeCommand(t *testing.T) {
 		require.NoError(t, err)
 
 		// Set PATH and unset SHELL
-		os.Setenv("PATH", tempDir+":"+originalPath)
-		os.Unsetenv("SHELL")
+		_ = os.Setenv("PATH", tempDir+":"+originalPath)
+		_ = os.Unsetenv("SHELL")
 
 		result, err := GetClaudeCommand()
 
@@ -130,8 +130,8 @@ func TestLoadConfig(t *testing.T) {
 		// Use a temporary home directory to avoid interfering with real config
 		originalHome := os.Getenv("HOME")
 		tempHome := t.TempDir()
-		os.Setenv("HOME", tempHome)
-		defer os.Setenv("HOME", originalHome)
+		_ = os.Setenv("HOME", tempHome)
+		defer func() { _ = os.Setenv("HOME", originalHome) }()
 
 		config := LoadConfig()
 
@@ -162,8 +162,8 @@ func TestLoadConfig(t *testing.T) {
 
 		// Override HOME environment
 		originalHome := os.Getenv("HOME")
-		os.Setenv("HOME", tempHome)
-		defer os.Setenv("HOME", originalHome)
+		_ = os.Setenv("HOME", tempHome)
+		defer func() { _ = os.Setenv("HOME", originalHome) }()
 
 		config := LoadConfig()
 
@@ -189,8 +189,8 @@ func TestLoadConfig(t *testing.T) {
 
 		// Override HOME environment
 		originalHome := os.Getenv("HOME")
-		os.Setenv("HOME", tempHome)
-		defer os.Setenv("HOME", originalHome)
+		_ = os.Setenv("HOME", tempHome)
+		defer func() { _ = os.Setenv("HOME", originalHome) }()
 
 		config := LoadConfig()
 
@@ -209,8 +209,8 @@ func TestSaveConfig(t *testing.T) {
 
 		// Override HOME environment
 		originalHome := os.Getenv("HOME")
-		os.Setenv("HOME", tempHome)
-		defer os.Setenv("HOME", originalHome)
+		_ = os.Setenv("HOME", tempHome)
+		defer func() { _ = os.Setenv("HOME", originalHome) }()
 
 		// Create a test config
 		testConfig := &Config{

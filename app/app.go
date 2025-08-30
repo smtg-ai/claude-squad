@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -42,6 +43,10 @@ const (
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
+	// stateBranch is the state when the user is entering branch information.
+	stateBranch
+	// stateSourceBranch is the state when the user is selecting the source branch.
+	stateSourceBranch
 )
 
 type home struct {
@@ -69,6 +74,10 @@ type home struct {
 
 	// promptAfterName tracks if we should enter prompt mode after naming
 	promptAfterName bool
+	// branchAfterName tracks if we should enter branch input mode after naming
+	branchAfterName bool
+	// pendingBranchName stores the branch name while we collect source branch info
+	pendingBranchName string
 
 	// keySent is used to manage underlining menu items
 	keySent bool
@@ -307,7 +316,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m.handleHelpState(msg)
 	}
 
-	if m.state == stateNew {
+	switch m.state {
+	case stateNew:
 		// Handle quit commands first. Don't handle q because the user might want to type that.
 		if msg.String() == "ctrl+c" {
 			m.state = stateDefault
@@ -330,32 +340,40 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
-			if err := instance.Start(true); err != nil {
-				m.list.Kill()
-				m.state = stateDefault
-				return m, m.handleError(err)
+			// Only start the instance if we don't need to collect additional info
+			if !m.branchAfterName && !m.promptAfterName {
+				if err := instance.Start(true); err != nil {
+					m.list.Kill()
+					m.state = stateDefault
+					return m, m.handleError(err)
+				}
 			}
-			// Save after adding new instance
-			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-				return m, m.handleError(err)
-			}
-			// Instance added successfully, call the finalizer.
-			m.newInstanceFinalizer()
-			if m.autoYes {
-				instance.AutoYes = true
-			}
-
-			m.newInstanceFinalizer()
-			m.state = stateDefault
 			if m.promptAfterName {
 				m.state = statePrompt
 				m.menu.SetState(ui.StatePrompt)
 				// Initialize the text input overlay
 				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
 				m.promptAfterName = false
+			} else if m.branchAfterName {
+				m.state = stateBranch
+				m.menu.SetState(ui.StateNewInstance)
+				// Initialize the text input overlay for branch input
+				m.textInputOverlay = overlay.NewTextInputOverlay("Enter branch name (e.g., feat/new-feature, fix/bug-123)", "")
+				m.branchAfterName = false
 			} else {
+				// Instance is complete, finalize it
+				m.newInstanceFinalizer()
+				if m.autoYes {
+					instance.AutoYes = true
+				}
+				m.state = stateDefault
 				m.menu.SetState(ui.StateDefault)
 				m.showHelpScreen(helpStart(instance), nil)
+			}
+
+			// Save after adding new instance
+			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+				return m, m.handleError(err)
 			}
 
 			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
@@ -392,7 +410,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		default:
 		}
 		return m, nil
-	} else if m.state == statePrompt {
+	case statePrompt:
 		// Use the new TextInputOverlay component to handle all key events
 		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
 
@@ -421,6 +439,117 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					return nil
 				},
 			)
+		}
+
+		return m, nil
+	case stateBranch:
+		// Handle branch input state using TextInputOverlay
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+
+		// Check if the form was submitted or canceled
+		if shouldClose {
+			selected := m.list.GetSelectedInstance()
+			if selected == nil {
+				return m, nil
+			}
+
+			wasSubmitted := m.textInputOverlay.IsSubmitted()
+
+			if wasSubmitted {
+				// Parse the branch name (simplified - no "from" parsing)
+				branchName, err := m.simplifyBranchInput(m.textInputOverlay.GetValue())
+				if err != nil {
+					return m, m.handleError(err)
+				}
+
+				// Store the branch name temporarily and move to source branch selection
+				m.pendingBranchName = branchName
+				m.state = stateSourceBranch
+				m.menu.SetState(ui.StateNewInstance)
+
+				// Get default source branch
+				defaultSource := m.getDefaultSourceBranch()
+
+				// Initialize the text input overlay for source branch selection
+				m.textInputOverlay = overlay.NewTextInputOverlay("Enter source branch", defaultSource)
+
+				return m, nil
+			} else {
+				// User canceled - remove the instance
+				m.list.Kill()
+			}
+
+			// Close the overlay and reset state
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+		}
+
+		return m, nil
+	case stateSourceBranch:
+		// Handle source branch input state using TextInputOverlay
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+
+		// Check if the form was submitted or canceled
+		if shouldClose {
+			selected := m.list.GetSelectedInstance()
+			if selected == nil {
+				return m, nil
+			}
+
+			wasSubmitted := m.textInputOverlay.IsSubmitted()
+
+			if wasSubmitted {
+				// Get the source branch (with default if empty)
+				sourceBranch := strings.TrimSpace(m.textInputOverlay.GetValue())
+				if sourceBranch == "" {
+					sourceBranch = m.getDefaultSourceBranch()
+				}
+
+				// Set the branch name as the instance title
+				if err := selected.SetTitle(m.pendingBranchName); err != nil {
+					return m, m.handleError(err)
+				}
+
+				// Store the custom branch and source branch information
+				selected.CustomBranch = m.pendingBranchName
+				selected.SourceBranch = sourceBranch
+
+				// Start the instance
+				if err := selected.Start(true); err != nil {
+					m.list.Kill()
+					m.state = stateDefault
+					return m, m.handleError(err)
+				}
+
+				// Save after adding new instance
+				if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+					return m, m.handleError(err)
+				}
+
+				// Instance added successfully
+				m.newInstanceFinalizer()
+				if m.autoYes {
+					selected.AutoYes = true
+				}
+			} else {
+				// User canceled - remove the instance
+				m.list.Kill()
+			}
+
+			// Close the overlay and reset state
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			m.pendingBranchName = "" // Clear the pending branch name
+
+			if wasSubmitted {
+				m.showHelpScreen(helpStart(selected), nil)
+			}
+
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 		}
 
 		return m, nil
@@ -505,6 +634,29 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
 		m.state = stateNew
 		m.menu.SetState(ui.StateNewInstance)
+
+		return m, nil
+	case keys.KeyBranch:
+		if m.list.NumInstances() >= GlobalInstanceLimit {
+			return m, m.handleError(
+				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
+		}
+		instance, err := session.NewInstance(session.InstanceOptions{
+			Title:   "",
+			Path:    ".",
+			Program: m.program,
+		})
+		if err != nil {
+			return m, m.handleError(err)
+		}
+
+		m.newInstanceFinalizer = m.list.AddInstance(instance)
+		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+		m.state = stateNew
+		m.menu.SetState(ui.StateNewInstance)
+		// Set flags to indicate we want branch input after naming
+		m.promptAfterName = false
+		m.branchAfterName = true
 
 		return m, nil
 	case keys.KeyUp:
@@ -647,6 +799,92 @@ func (m *home) instanceChanged() tea.Cmd {
 	return nil
 }
 
+// parseBranchInput parses user input like "feat/new-feature from main"
+// Returns: branchName, sourceBranch, error
+func (m *home) parseBranchInput(input string) (string, string, error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", "", fmt.Errorf("branch name cannot be empty")
+	}
+
+	parts := strings.Split(input, " from ")
+	branchName := strings.TrimSpace(parts[0])
+	var sourceBranch string
+
+	// Check for multiple from clauses first
+	if len(parts) > 2 {
+		return "", "", fmt.Errorf("invalid format: use 'branch-name' or 'branch-name from source-branch'")
+	}
+
+	// Handle source branch if provided
+	if len(parts) == 2 {
+		sourceBranch = strings.TrimSpace(parts[1])
+		if sourceBranch == "" {
+			return "", "", fmt.Errorf("source branch cannot be empty")
+		}
+	}
+
+	// Validate branch name format
+	if err := m.validateBranchName(branchName); err != nil {
+		return "", "", err
+	}
+
+	return branchName, sourceBranch, nil
+}
+
+// validateBranchName validates git branch name format
+func (m *home) validateBranchName(branchName string) error {
+	if branchName == "" {
+		return fmt.Errorf("branch name cannot be empty")
+	}
+
+	// Basic git branch name validation
+	if strings.HasPrefix(branchName, "-") || strings.HasPrefix(branchName, "/") || strings.HasPrefix(branchName, ".") {
+		return fmt.Errorf("branch name cannot start with -, /, or")
+	}
+
+	if strings.HasSuffix(branchName, ".lock") {
+		return fmt.Errorf("branch name cannot end with .lock")
+	}
+
+	if strings.Contains(branchName, "..") || strings.Contains(branchName, "@{") {
+		return fmt.Errorf("branch name cannot contain .. or @{")
+	}
+
+	// Check for invalid characters (spaces and some special chars)
+	if strings.ContainsAny(branchName, " \t\n\r\f\v~^:?*[\\") {
+		return fmt.Errorf("branch name contains invalid characters")
+	}
+
+	return nil
+}
+
+// getDefaultSourceBranch detects the default source branch (main, master, develop, dev)
+func (m *home) getDefaultSourceBranch() string {
+	// Common default branch names in order of preference
+	// defaultBranches := []string{"main", "master", "develop", "dev"}
+
+	// For now, return "main" as default - in a full implementation,
+	// we would check git remote branches to see which exists
+	// TODO: Add git remote branch checking logic
+	return "main"
+}
+
+// simplifyBranchInput removes complex parsing and just asks for branch name
+func (m *home) simplifyBranchInput(input string) (string, error) {
+	branchName := strings.TrimSpace(input)
+	if branchName == "" {
+		return "", fmt.Errorf("branch name cannot be empty")
+	}
+
+	// Validate branch name format
+	if err := m.validateBranchName(branchName); err != nil {
+		return "", err
+	}
+
+	return branchName, nil
+}
+
 type keyupMsg struct{}
 
 // keydownCallback clears the menu option highlighting after 500ms.
@@ -731,17 +969,28 @@ func (m *home) View() string {
 		m.errBox.String(),
 	)
 
-	if m.state == statePrompt {
+	switch m.state {
+	case statePrompt:
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	} else if m.state == stateHelp {
+	case stateBranch:
+		if m.textInputOverlay == nil {
+			log.ErrorLog.Printf("text input overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	case stateSourceBranch:
+		if m.textInputOverlay == nil {
+			log.ErrorLog.Printf("text input overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	case stateHelp:
 		if m.textOverlay == nil {
 			log.ErrorLog.Printf("text overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
-	} else if m.state == stateConfirm {
+	case stateConfirm:
 		if m.confirmationOverlay == nil {
 			log.ErrorLog.Printf("confirmation overlay is nil")
 		}
