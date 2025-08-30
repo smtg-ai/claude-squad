@@ -127,7 +127,7 @@ func (t *TmuxSession) Start(workDir string) error {
 			}
 		}
 	}
-	ptmx.Close()
+	_ = ptmx.Close()
 
 	// Set history limit to enable scrollback (default is 2000, we'll use 10000 for more history)
 	historyCmd := exec.Command("tmux", "set-option", "-t", t.sanitizedName, "history-limit", "10000")

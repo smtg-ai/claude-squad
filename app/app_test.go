@@ -464,3 +464,255 @@ func TestConfirmationModalVisualAppearance(t *testing.T) {
 	// Test that the danger indicator is preserved
 	assert.Contains(t, rendered, "[!")
 }
+
+// TestParseBranchInput tests the branch input parsing functionality
+func TestParseBranchInput(t *testing.T) {
+	h := &home{
+		ctx:       context.Background(),
+		state:     stateDefault,
+		appConfig: config.DefaultConfig(),
+	}
+
+	testCases := []struct {
+		name             string
+		input            string
+		expectedBranch   string
+		expectedSource   string
+		expectError      bool
+		expectedErrorMsg string
+	}{
+		{
+			name:           "simple branch name",
+			input:          "feat/new-feature",
+			expectedBranch: "feat/new-feature",
+			expectedSource: "",
+			expectError:    false,
+		},
+		{
+			name:           "branch with source",
+			input:          "feat/new-feature from main",
+			expectedBranch: "feat/new-feature",
+			expectedSource: "main",
+			expectError:    false,
+		},
+		{
+			name:           "branch with source dev",
+			input:          "fix/bug-123 from dev",
+			expectedBranch: "fix/bug-123",
+			expectedSource: "dev",
+			expectError:    false,
+		},
+		{
+			name:             "empty input",
+			input:            "",
+			expectError:      true,
+			expectedErrorMsg: "branch name cannot be empty",
+		},
+		{
+			name:             "only whitespace",
+			input:            "   ",
+			expectError:      true,
+			expectedErrorMsg: "branch name cannot be empty",
+		},
+		{
+			name:             "multiple from clauses",
+			input:            "feat/test from main from dev",
+			expectError:      true,
+			expectedErrorMsg: "invalid format: use 'branch-name' or 'branch-name from source-branch'",
+		},
+		{
+			name:             "branch with spaces - invalid",
+			input:            "feat/test feature",
+			expectError:      true,
+			expectedErrorMsg: "branch name contains invalid characters",
+		},
+		{
+			name:             "branch starting with dash - invalid",
+			input:            "-feat/test",
+			expectError:      true,
+			expectedErrorMsg: "branch name cannot start with -, /, or",
+		},
+		{
+			name:             "branch ending with .lock - invalid",
+			input:            "feat/test.lock",
+			expectError:      true,
+			expectedErrorMsg: "branch name cannot end with .lock",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			branchName, sourceBranch, err := h.parseBranchInput(tc.input)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.expectedErrorMsg != "" {
+					assert.Contains(t, err.Error(), tc.expectedErrorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedBranch, branchName)
+				assert.Equal(t, tc.expectedSource, sourceBranch)
+			}
+		})
+	}
+}
+
+// TestValidateBranchName tests the branch name validation function
+func TestValidateBranchName(t *testing.T) {
+	h := &home{
+		ctx:       context.Background(),
+		state:     stateDefault,
+		appConfig: config.DefaultConfig(),
+	}
+
+	testCases := []struct {
+		name         string
+		branchName   string
+		expectError  bool
+		errorMessage string
+	}{
+		{
+			name:        "valid branch name",
+			branchName:  "feat/new-feature",
+			expectError: false,
+		},
+		{
+			name:        "valid branch with hyphens",
+			branchName:  "fix/bug-123",
+			expectError: false,
+		},
+		{
+			name:        "valid branch with underscores",
+			branchName:  "feature/user_auth",
+			expectError: false,
+		},
+		{
+			name:         "empty branch name",
+			branchName:   "",
+			expectError:  true,
+			errorMessage: "branch name cannot be empty",
+		},
+		{
+			name:         "starts with dash",
+			branchName:   "-invalid",
+			expectError:  true,
+			errorMessage: "branch name cannot start with -, /, or",
+		},
+		{
+			name:         "starts with slash",
+			branchName:   "/invalid",
+			expectError:  true,
+			errorMessage: "branch name cannot start with -, /, or",
+		},
+		{
+			name:         "starts with dot",
+			branchName:   ".invalid",
+			expectError:  true,
+			errorMessage: "branch name cannot start with -, /, or",
+		},
+		{
+			name:         "ends with .lock",
+			branchName:   "branch.lock",
+			expectError:  true,
+			errorMessage: "branch name cannot end with .lock",
+		},
+		{
+			name:         "contains double dots",
+			branchName:   "feat..invalid",
+			expectError:  true,
+			errorMessage: "branch name cannot contain .. or @{",
+		},
+		{
+			name:         "contains @{",
+			branchName:   "feat@{invalid",
+			expectError:  true,
+			errorMessage: "branch name cannot contain .. or @{",
+		},
+		{
+			name:         "contains space",
+			branchName:   "feat invalid",
+			expectError:  true,
+			errorMessage: "branch name contains invalid characters",
+		},
+		{
+			name:         "contains tilde",
+			branchName:   "feat~invalid",
+			expectError:  true,
+			errorMessage: "branch name contains invalid characters",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := h.validateBranchName(tc.branchName)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorMessage != "" {
+					assert.Contains(t, err.Error(), tc.errorMessage)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestSimplifyBranchInput tests the simplified branch input function
+func TestSimplifyBranchInput(t *testing.T) {
+	h := &home{
+		ctx:       context.Background(),
+		state:     stateDefault,
+		appConfig: config.DefaultConfig(),
+	}
+
+	testCases := []struct {
+		name           string
+		input          string
+		expectedBranch string
+		expectError    bool
+		errorMessage   string
+	}{
+		{
+			name:           "valid branch name",
+			input:          "feat/new-feature",
+			expectedBranch: "feat/new-feature",
+			expectError:    false,
+		},
+		{
+			name:           "branch with whitespace",
+			input:          "  fix/bug-123  ",
+			expectedBranch: "fix/bug-123",
+			expectError:    false,
+		},
+		{
+			name:         "empty input",
+			input:        "",
+			expectError:  true,
+			errorMessage: "branch name cannot be empty",
+		},
+		{
+			name:         "invalid characters",
+			input:        "feat invalid",
+			expectError:  true,
+			errorMessage: "branch name contains invalid characters",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			branchName, err := h.simplifyBranchInput(tc.input)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorMessage != "" {
+					assert.Contains(t, err.Error(), tc.errorMessage)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedBranch, branchName)
+			}
+		})
+	}
+}

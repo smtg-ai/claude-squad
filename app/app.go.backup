@@ -316,8 +316,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m.handleHelpState(msg)
 	}
 
-	switch m.state {
-	case stateNew:
+	if m.state == stateNew {
 		// Handle quit commands first. Don't handle q because the user might want to type that.
 		if msg.String() == "ctrl+c" {
 			m.state = stateDefault
@@ -340,14 +339,23 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
-			// Only start the instance if we don't need to collect additional info
-			if !m.branchAfterName && !m.promptAfterName {
-				if err := instance.Start(true); err != nil {
-					m.list.Kill()
-					m.state = stateDefault
-					return m, m.handleError(err)
-				}
+			if err := instance.Start(true); err != nil {
+				m.list.Kill()
+				m.state = stateDefault
+				return m, m.handleError(err)
 			}
+			// Save after adding new instance
+			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+				return m, m.handleError(err)
+			}
+			// Instance added successfully, call the finalizer.
+			m.newInstanceFinalizer()
+			if m.autoYes {
+				instance.AutoYes = true
+			}
+
+			m.newInstanceFinalizer()
+			m.state = stateDefault
 			if m.promptAfterName {
 				m.state = statePrompt
 				m.menu.SetState(ui.StatePrompt)
@@ -361,19 +369,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.textInputOverlay = overlay.NewTextInputOverlay("Enter branch name (e.g., feat/new-feature, fix/bug-123)", "")
 				m.branchAfterName = false
 			} else {
-				// Instance is complete, finalize it
-				m.newInstanceFinalizer()
-				if m.autoYes {
-					instance.AutoYes = true
-				}
-				m.state = stateDefault
 				m.menu.SetState(ui.StateDefault)
 				m.showHelpScreen(helpStart(instance), nil)
-			}
-
-			// Save after adding new instance
-			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-				return m, m.handleError(err)
 			}
 
 			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
@@ -410,7 +407,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		default:
 		}
 		return m, nil
-	case statePrompt:
+	} else if m.state == statePrompt {
 		// Use the new TextInputOverlay component to handle all key events
 		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
 
@@ -442,7 +439,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		return m, nil
-	case stateBranch:
+	} else if m.state == stateBranch {
 		// Handle branch input state using TextInputOverlay
 		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
 
@@ -488,7 +485,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		return m, nil
-	case stateSourceBranch:
+	} else if m.state == stateSourceBranch {
 		// Handle source branch input state using TextInputOverlay
 		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
 
@@ -969,28 +966,27 @@ func (m *home) View() string {
 		m.errBox.String(),
 	)
 
-	switch m.state {
-	case statePrompt:
+	if m.state == statePrompt {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case stateBranch:
+	} else if m.state == stateBranch {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case stateSourceBranch:
+	} else if m.state == stateSourceBranch {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	case stateHelp:
+	} else if m.state == stateHelp {
 		if m.textOverlay == nil {
 			log.ErrorLog.Printf("text overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
-	case stateConfirm:
+	} else if m.state == stateConfirm {
 		if m.confirmationOverlay == nil {
 			log.ErrorLog.Printf("confirmation overlay is nil")
 		}
