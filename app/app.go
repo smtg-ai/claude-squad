@@ -605,6 +605,22 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(err)
 		}
 		return m, tea.WindowSize()
+	case keys.KeyShell:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+
+		m.showHelpScreen(helpTypeInstanceShell{}, func() {
+			m.state = stateDefault
+			ch, err := m.list.AttachShell()
+			if err != nil {
+				log.ErrorLog.Printf("failed to attach shell: %v", err)
+				return
+			}
+			<-ch
+		})
+		return m, nil
 	case keys.KeyEnter:
 		if m.list.NumInstances() == 0 {
 			return m, nil

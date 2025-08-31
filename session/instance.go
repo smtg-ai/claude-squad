@@ -8,6 +8,7 @@ import (
 
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -551,4 +552,46 @@ func (i *Instance) SendKeys(keys string) error {
 		return fmt.Errorf("cannot send keys to instance that has not been started or is paused")
 	}
 	return i.tmuxSession.SendKeys(keys)
+}
+
+func (i *Instance) AttachShell() (chan struct{}, error) {
+	if !i.started {
+		return nil, fmt.Errorf("cannot attach shell for instance that has not been started")
+	}
+	if i.Status == Paused {
+		return nil, fmt.Errorf("cannot attach shell to paused instance - resume first")
+	}
+
+	worktreePath := i.gitWorktree.GetWorktreePath()
+
+	shell := detectInteractiveShell()
+	shellSession := tmux.NewTmuxSession(fmt.Sprintf("%s-shell", i.Title), shell)
+	if err := shellSession.Start(worktreePath); err != nil {
+		return nil, fmt.Errorf("failed to start shell session: %w", err)
+	}
+
+	ch, err := shellSession.Attach()
+	if err != nil {
+		return nil, fmt.Errorf("failed to attach to shell session: %w", err)
+	}
+
+	cleanupCh := make(chan struct{})
+	go func() {
+		defer close(cleanupCh)
+		<-ch
+		if err := shellSession.Close(); err != nil {
+			log.ErrorLog.Printf("failed to close shell session: %v", err)
+		}
+	}()
+
+	return cleanupCh, nil
+}
+
+func detectInteractiveShell() string {
+	if shell := os.Getenv("SHELL"); shell != "" {
+		if _, err := exec.LookPath(shell); err == nil {
+			return shell
+		}
+	}
+	return "/bin/bash"
 }
