@@ -75,7 +75,7 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeyNew: key.NewBinding(
 		key.WithKeys("n"),
-		key.WithHelp("n", "new"),
+		key.WithHelp("n", "new with branch selection"),
 	),
 	KeyKill: key.NewBinding(
 		key.WithKeys("D"),
@@ -95,7 +95,7 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeyPrompt: key.NewBinding(
 		key.WithKeys("N"),
-		key.WithHelp("N", "new with prompt"),
+		key.WithHelp("N", "new with branch selection + prompt"),
 	),
 	KeyCheckout: key.NewBinding(
 		key.WithKeys("c"),
