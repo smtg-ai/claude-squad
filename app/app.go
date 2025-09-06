@@ -515,6 +515,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				// Store source branch for potential sync confirmation
 				m.pendingSourceBranch = sourceBranch
 
+				// Check for edge case: same branch name for source and target
+				if sourceBranch == m.pendingBranchName {
+					// User wants to create session from existing branch with same name
+					// This is just checking out existing branch, not creating new one
+					return m.handleSameBranchCheckout(selected, sourceBranch)
+				}
+
 				// First check if the SOURCE branch needs sync with remote origin
 				sourceExists, sourceNeedsSync, err := session.CheckRemoteBranchStatic(".", sourceBranch)
 				if err != nil {
@@ -958,6 +965,95 @@ func (m *home) syncSourceThenCheckTarget(selected *session.Instance, sourceBranc
 
 	// Now check target branch and proceed
 	_, _ = m.checkTargetBranchAndProceed(selected, sourceBranch)
+}
+
+// handleSameBranchCheckout handles the edge case where source and target branch are the same
+func (m *home) handleSameBranchCheckout(selected *session.Instance, branchName string) (tea.Model, tea.Cmd) {
+	// Check if the branch needs sync with remote
+	exists, needsSync, err := session.CheckRemoteBranchStatic(".", branchName)
+	if err != nil {
+		return m, m.handleError(fmt.Errorf("failed to check remote branch: %w", err))
+	}
+
+	if exists && needsSync {
+		// Branch exists and differs - ask user if they want to sync
+		m.state = stateSyncConfirm
+		message := fmt.Sprintf("Branch '%s' is out of sync with remote. Sync before checkout? (y/n)", branchName)
+		m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
+		m.confirmationOverlay.SetWidth(60)
+
+		m.confirmationOverlay.OnConfirm = func() {
+			// Sync branch then checkout
+			m.finalizeSameBranchCheckout(selected, branchName, true)
+		}
+		m.confirmationOverlay.OnCancel = func() {
+			// Skip sync, just checkout
+			m.finalizeSameBranchCheckout(selected, branchName, false)
+		}
+
+		// Close text input overlay
+		m.textInputOverlay = nil
+		return m, nil
+	} else {
+		// No remote branch or no sync needed, proceed with checkout
+		return m.finalizeExistingBranchCheckout(selected, branchName)
+	}
+}
+
+// finalizeSameBranchCheckout handles sync and checkout for same-name branches
+func (m *home) finalizeSameBranchCheckout(selected *session.Instance, branchName string, shouldSync bool) {
+	if shouldSync {
+		// Sync with remote branch first
+		if err := session.SyncWithRemoteBranchStatic(".", branchName); err != nil {
+			m.handleError(fmt.Errorf("failed to sync branch: %w", err))
+			return
+		}
+	}
+
+	// Now proceed with existing branch checkout
+	_, _ = m.finalizeExistingBranchCheckout(selected, branchName)
+}
+
+// finalizeExistingBranchCheckout sets up session to use existing branch (no new branch creation)
+func (m *home) finalizeExistingBranchCheckout(selected *session.Instance, branchName string) (tea.Model, tea.Cmd) {
+	// Only set the branch name as the instance title if no title was provided
+	// This preserves user-entered session names from the 'b' key workflow
+	if selected.Title == "" {
+		if err := selected.SetTitle(branchName); err != nil {
+			return m, m.handleError(err)
+		}
+	}
+
+	// Set branch info - this is an existing branch checkout, not creation
+	selected.CustomBranch = branchName
+	selected.SourceBranch = branchName // Source and target are the same
+
+	// Start the instance
+	if err := selected.Start(true); err != nil {
+		m.list.Kill()
+		m.state = stateDefault
+		return m, m.handleError(err)
+	}
+
+	// Save after adding new instance
+	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+		return m, m.handleError(err)
+	}
+
+	// Instance added successfully
+	m.newInstanceFinalizer()
+	if m.autoYes {
+		selected.AutoYes = true
+	}
+
+	// Reset state
+	m.state = stateDefault
+	m.menu.SetState(ui.StateDefault)
+	m.pendingBranchName = ""
+	m.pendingSourceBranch = ""
+
+	m.showHelpScreen(helpStart(selected), nil)
+	return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 }
 
 // checkTargetBranchAndProceed checks if target branch needs sync and proceeds with creation

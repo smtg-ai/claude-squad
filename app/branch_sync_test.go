@@ -365,6 +365,76 @@ func TestSessionTitlePreservation(t *testing.T) {
 	})
 }
 
+// TestSameBranchEdgeCase tests the edge case where source and target branch are the same
+func TestSameBranchEdgeCase(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "same-branch-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
+	list := ui.NewList(&spinner, false)
+	storage, err := session.NewStorage(config.LoadState())
+	require.NoError(t, err)
+
+	h := &home{
+		ctx:               context.Background(),
+		state:             stateDefault,
+		appConfig:         config.DefaultConfig(),
+		list:              list,
+		menu:              ui.NewMenu(),
+		storage:           storage,
+		pendingBranchName: "main",
+		errBox:            ui.NewErrBox(),
+	}
+
+	// Create test instance
+	instance, err := session.NewInstance(session.InstanceOptions{
+		Title:   "same-branch-session",
+		Path:    tempDir,
+		Program: "claude",
+		AutoYes: false,
+	})
+	require.NoError(t, err)
+
+	t.Run("handles same branch name for source and target", func(t *testing.T) {
+		// Test the handleSameBranchCheckout method
+		// This should work without panicking even if git operations fail
+		assert.NotPanics(t, func() {
+			_, _ = h.handleSameBranchCheckout(instance, "main")
+		})
+	})
+
+	t.Run("finalizes existing branch checkout", func(t *testing.T) {
+		// Test the finalizeExistingBranchCheckout method
+		assert.NotPanics(t, func() {
+			_, _ = h.finalizeExistingBranchCheckout(instance, "main")
+		})
+
+		// Verify that both CustomBranch and SourceBranch are set to the same value
+		assert.Equal(t, "main", instance.CustomBranch)
+		assert.Equal(t, "main", instance.SourceBranch)
+	})
+
+	t.Run("preserves session title in same branch checkout", func(t *testing.T) {
+		// Create instance with custom title
+		instanceWithTitle, err := session.NewInstance(session.InstanceOptions{
+			Title:   "my-main-session",
+			Path:    tempDir,
+			Program: "claude",
+			AutoYes: false,
+		})
+		require.NoError(t, err)
+
+		// Test that existing title is preserved
+		_, _ = h.finalizeExistingBranchCheckout(instanceWithTitle, "main")
+
+		// Title should remain the original, not be overwritten with branch name
+		assert.Equal(t, "my-main-session", instanceWithTitle.Title)
+		assert.Equal(t, "main", instanceWithTitle.CustomBranch)
+		assert.Equal(t, "main", instanceWithTitle.SourceBranch)
+	})
+}
+
 // TestSourceBranchSyncCheck tests checking source branch for remote sync needs
 func TestSourceBranchSyncCheck(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "source-sync-test-*")
