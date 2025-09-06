@@ -1101,6 +1101,14 @@ func (m *home) finalizeBranchCreationWithSync(selected *session.Instance, should
 
 type keyupMsg struct{}
 
+// showUpstreamTrackingMessage displays helpful guidance for setting up git tracking
+func (m *home) showUpstreamTrackingMessage(branchName string) {
+	// Check if this branch might need upstream tracking setup
+	// This is especially helpful for same-name branches or existing branches
+	fmt.Printf("\n💡 If you need to set up git pull/push tracking for this branch, run:\n")
+	fmt.Printf("  git branch --set-upstream-to=origin/%s %s\n\n", branchName, branchName)
+}
+
 // keydownCallback clears the menu option highlighting after 500ms.
 func (m *home) keydownCallback(name keys.KeyName) tea.Cmd {
 	m.menu.Keydown(name)
