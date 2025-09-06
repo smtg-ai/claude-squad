@@ -81,10 +81,25 @@ func (g *GitWorktree) setupFromExistingBranch() error {
 		if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, "origin/"+g.branchName); err != nil {
 			return fmt.Errorf("failed to create worktree from remote branch %s: %w", g.branchName, err)
 		}
+		
+		// Explicitly set upstream tracking for the newly created branch
+		if _, err := g.runGitCommand(g.worktreePath, "branch", "--set-upstream-to=origin/"+g.branchName, g.branchName); err != nil {
+			// Log warning but don't fail - branch is still functional
+			fmt.Printf("Warning: failed to set upstream tracking for branch %s: %v\n", g.branchName, err)
+		}
 	} else {
 		// Create a new worktree from the existing local branch
 		if _, err := g.runGitCommand(g.repoPath, "worktree", "add", g.worktreePath, g.branchName); err != nil {
 			return fmt.Errorf("failed to create worktree from branch %s: %w", g.branchName, err)
+		}
+		
+		// Check if this local branch should track a remote branch
+		if remoteErr == nil {
+			// Remote branch exists, ensure tracking is set up
+			if _, err := g.runGitCommand(g.worktreePath, "branch", "--set-upstream-to=origin/"+g.branchName, g.branchName); err != nil {
+				// Log warning but don't fail
+				fmt.Printf("Warning: failed to set upstream tracking for branch %s: %v\n", g.branchName, err)
+			}
 		}
 	}
 
