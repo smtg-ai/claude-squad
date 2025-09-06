@@ -361,6 +361,16 @@ func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {
 	return i.gitWorktree, nil
 }
 
+// CheckRemoteBranchStatic checks if a branch exists on remote without requiring an instance to be started
+func CheckRemoteBranchStatic(repoPath, branchName string) (exists bool, needsSync bool, err error) {
+	return git.CheckRemoteBranchStatic(repoPath, branchName)
+}
+
+// SyncWithRemoteBranchStatic fetches a remote branch without requiring an instance to be started
+func SyncWithRemoteBranchStatic(repoPath, branchName string) error {
+	return git.SyncWithRemoteBranchStatic(repoPath, branchName)
+}
+
 func (i *Instance) Started() bool {
 	return i.started
 }

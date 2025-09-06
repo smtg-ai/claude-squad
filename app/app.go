@@ -47,6 +47,8 @@ const (
 	stateBranch
 	// stateSourceBranch is the state when the user is selecting the source branch.
 	stateSourceBranch
+	// stateSyncConfirm is the state when asking user to sync with remote branch.
+	stateSyncConfirm
 )
 
 type home struct {
@@ -78,6 +80,8 @@ type home struct {
 	branchAfterName bool
 	// pendingBranchName stores the branch name while we collect source branch info
 	pendingBranchName string
+	// pendingSourceBranch stores the source branch while we handle sync confirmation
+	pendingSourceBranch string
 
 	// keySent is used to manage underlining menu items
 	keySent bool
@@ -508,31 +512,37 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					sourceBranch = m.getDefaultSourceBranch()
 				}
 
-				// Set the branch name as the instance title
-				if err := selected.SetTitle(m.pendingBranchName); err != nil {
-					return m, m.handleError(err)
+				// Store source branch for potential sync confirmation
+				m.pendingSourceBranch = sourceBranch
+
+				// First check if the SOURCE branch needs sync with remote origin
+				sourceExists, sourceNeedsSync, err := session.CheckRemoteBranchStatic(".", sourceBranch)
+				if err != nil {
+					return m, m.handleError(fmt.Errorf("failed to check remote source branch: %w", err))
 				}
 
-				// Store the custom branch and source branch information
-				selected.CustomBranch = m.pendingBranchName
-				selected.SourceBranch = sourceBranch
+				if sourceExists && sourceNeedsSync {
+					// Source branch exists on remote and differs - ask user if they want to sync source first
+					m.state = stateSyncConfirm
+					message := fmt.Sprintf("Source branch '%s' is out of sync with remote. Sync before creating new branch? (y/n)", sourceBranch)
+					m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
+					m.confirmationOverlay.SetWidth(70)
 
-				// Start the instance
-				if err := selected.Start(true); err != nil {
-					m.list.Kill()
-					m.state = stateDefault
-					return m, m.handleError(err)
-				}
+					m.confirmationOverlay.OnConfirm = func() {
+						// Sync source branch then proceed to check target branch
+						m.syncSourceThenCheckTarget(selected, sourceBranch)
+					}
+					m.confirmationOverlay.OnCancel = func() {
+						// Skip source sync, proceed to check target branch
+						m.checkTargetBranchAndProceed(selected, sourceBranch)
+					}
 
-				// Save after adding new instance
-				if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-					return m, m.handleError(err)
-				}
-
-				// Instance added successfully
-				m.newInstanceFinalizer()
-				if m.autoYes {
-					selected.AutoYes = true
+					// Close text input overlay
+					m.textInputOverlay = nil
+					return m, nil
+				} else {
+					// Source branch doesn't need sync, check target branch
+					return m.checkTargetBranchAndProceed(selected, sourceBranch)
 				}
 			} else {
 				// User canceled - remove the instance
@@ -557,6 +567,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle confirmation state
 	if m.state == stateConfirm {
+		shouldClose := m.confirmationOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			m.state = stateDefault
+			m.confirmationOverlay = nil
+			return m, nil
+		}
+		return m, nil
+	}
+
+	// Handle sync confirmation state
+	if m.state == stateSyncConfirm {
 		shouldClose := m.confirmationOverlay.HandleKeyPress(msg)
 		if shouldClose {
 			m.state = stateDefault
@@ -885,6 +906,103 @@ func (m *home) simplifyBranchInput(input string) (string, error) {
 	return branchName, nil
 }
 
+// finalizeBranchCreation completes the branch creation process without sync
+func (m *home) finalizeBranchCreation(selected *session.Instance, sourceBranch string) (tea.Model, tea.Cmd) {
+	// Only set the branch name as the instance title if no title was provided
+	// This preserves user-entered session names from the 'b' key workflow
+	if selected.Title == "" {
+		if err := selected.SetTitle(m.pendingBranchName); err != nil {
+			return m, m.handleError(err)
+		}
+	}
+
+	// Store the custom branch and source branch information
+	selected.CustomBranch = m.pendingBranchName
+	selected.SourceBranch = sourceBranch
+
+	// Start the instance
+	if err := selected.Start(true); err != nil {
+		m.list.Kill()
+		m.state = stateDefault
+		return m, m.handleError(err)
+	}
+
+	// Save after adding new instance
+	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+		return m, m.handleError(err)
+	}
+
+	// Instance added successfully
+	m.newInstanceFinalizer()
+	if m.autoYes {
+		selected.AutoYes = true
+	}
+
+	// Reset state
+	m.state = stateDefault
+	m.menu.SetState(ui.StateDefault)
+	m.pendingBranchName = ""
+	m.pendingSourceBranch = ""
+
+	m.showHelpScreen(helpStart(selected), nil)
+	return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+}
+
+// syncSourceThenCheckTarget syncs the source branch and then checks target branch
+func (m *home) syncSourceThenCheckTarget(selected *session.Instance, sourceBranch string) {
+	// Sync source branch with remote
+	if err := session.SyncWithRemoteBranchStatic(".", sourceBranch); err != nil {
+		m.handleError(fmt.Errorf("failed to sync source branch: %w", err))
+		return
+	}
+
+	// Now check target branch and proceed
+	_, _ = m.checkTargetBranchAndProceed(selected, sourceBranch)
+}
+
+// checkTargetBranchAndProceed checks if target branch needs sync and proceeds with creation
+func (m *home) checkTargetBranchAndProceed(selected *session.Instance, sourceBranch string) (tea.Model, tea.Cmd) {
+	// Check if the TARGET branch exists on remote and needs sync
+	exists, needsSync, err := session.CheckRemoteBranchStatic(".", m.pendingBranchName)
+	if err != nil {
+		return m, m.handleError(fmt.Errorf("failed to check remote target branch: %w", err))
+	}
+
+	if exists && needsSync {
+		// Target branch exists and differs - ask user if they want to sync
+		m.state = stateSyncConfirm
+		message := fmt.Sprintf("Target branch '%s' has different commits. Sync before creating? (y/n)", m.pendingBranchName)
+		m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
+		m.confirmationOverlay.SetWidth(60)
+
+		m.confirmationOverlay.OnConfirm = func() {
+			m.finalizeBranchCreationWithSync(selected, true)
+		}
+		m.confirmationOverlay.OnCancel = func() {
+			m.finalizeBranchCreationWithSync(selected, false)
+		}
+
+		return m, nil
+	} else {
+		// No remote target branch or no sync needed, proceed directly
+		return m.finalizeBranchCreation(selected, sourceBranch)
+	}
+}
+
+// finalizeBranchCreationWithSync completes branch creation with optional remote sync
+func (m *home) finalizeBranchCreationWithSync(selected *session.Instance, shouldSync bool) {
+	if shouldSync {
+		// Sync with remote branch first using static method
+		if err := session.SyncWithRemoteBranchStatic(".", m.pendingBranchName); err != nil {
+			m.handleError(fmt.Errorf("failed to sync with remote: %w", err))
+			return
+		}
+	}
+
+	// Proceed with normal branch creation (ignore return values since this is a callback)
+	_, _ = m.finalizeBranchCreation(selected, m.pendingSourceBranch)
+}
+
 type keyupMsg struct{}
 
 // keydownCallback clears the menu option highlighting after 500ms.
@@ -993,6 +1111,11 @@ func (m *home) View() string {
 	case stateConfirm:
 		if m.confirmationOverlay == nil {
 			log.ErrorLog.Printf("confirmation overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
+	case stateSyncConfirm:
+		if m.confirmationOverlay == nil {
+			log.ErrorLog.Printf("sync confirmation overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
 	}

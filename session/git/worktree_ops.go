@@ -64,9 +64,28 @@ func (g *GitWorktree) setupFromExistingBranch() error {
 	// Clean up any existing worktree first
 	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath) // Ignore error if worktree doesn't exist
 
-	// Create a new worktree from the existing branch
-	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", g.worktreePath, g.branchName); err != nil {
-		return fmt.Errorf("failed to create worktree from branch %s: %w", g.branchName, err)
+	// Check if we need to track a remote branch
+	repo, err := git.PlainOpen(g.repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	localBranchRef := plumbing.NewBranchReferenceName(g.branchName)
+	_, localErr := repo.Reference(localBranchRef, false)
+
+	remoteBranchRef := plumbing.NewRemoteReferenceName("origin", g.branchName)
+	_, remoteErr := repo.Reference(remoteBranchRef, false)
+
+	if localErr != nil && remoteErr == nil {
+		// Local branch doesn't exist but remote does, create tracking branch
+		if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, "origin/"+g.branchName); err != nil {
+			return fmt.Errorf("failed to create worktree from remote branch %s: %w", g.branchName, err)
+		}
+	} else {
+		// Create a new worktree from the existing local branch
+		if _, err := g.runGitCommand(g.repoPath, "worktree", "add", g.worktreePath, g.branchName); err != nil {
+			return fmt.Errorf("failed to create worktree from branch %s: %w", g.branchName, err)
+		}
 	}
 
 	return nil
@@ -243,6 +262,113 @@ func CleanupWorktrees() error {
 	_, err = cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to prune worktrees: %w", err)
+	}
+
+	return nil
+}
+
+// CheckRemoteBranchStatic checks if a branch exists on remote without requiring a worktree instance
+func CheckRemoteBranchStatic(repoPath, branchName string) (exists bool, needsSync bool, err error) {
+	cmd := exec.Command("git", "ls-remote", "origin", "refs/heads/"+branchName)
+	cmd.Dir = repoPath
+	output, err := cmd.Output()
+	if err != nil {
+		// If command fails, assume no remote
+		return false, false, nil
+	}
+
+	// If output is empty, remote branch doesn't exist
+	if strings.TrimSpace(string(output)) == "" {
+		return false, false, nil
+	}
+
+	exists = true
+
+	// Check if we need to sync (compare local vs remote)
+	// First, check if local branch exists
+	repo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return exists, false, fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	localBranchRef := plumbing.NewBranchReferenceName(branchName)
+	localRef, err := repo.Reference(localBranchRef, false)
+	if err != nil {
+		// Local branch doesn't exist, so we need to sync to get remote
+		return exists, true, nil
+	}
+
+	// Fetch the remote branch reference
+	remoteBranchRef := plumbing.NewRemoteReferenceName("origin", branchName)
+	remoteRef, err := repo.Reference(remoteBranchRef, false)
+	if err != nil {
+		// Remote ref not found locally, need to fetch
+		return exists, true, nil
+	}
+
+	// Compare hashes
+	needsSync = localRef.Hash() != remoteRef.Hash()
+	return exists, needsSync, nil
+}
+
+// CheckRemoteBranch checks if a branch exists on the remote and returns comparison info
+func (g *GitWorktree) CheckRemoteBranch(branchName string) (exists bool, needsSync bool, err error) {
+	// Check if remote branch exists
+	output, err := g.runGitCommand(g.repoPath, "ls-remote", "origin", "refs/heads/"+branchName)
+	if err != nil {
+		// If command fails, assume no remote
+		return false, false, nil
+	}
+
+	// If output is empty, remote branch doesn't exist
+	if strings.TrimSpace(string(output)) == "" {
+		return false, false, nil
+	}
+
+	exists = true
+
+	// Check if we need to sync (compare local vs remote)
+	// First, check if local branch exists
+	repo, err := git.PlainOpen(g.repoPath)
+	if err != nil {
+		return exists, false, fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	localBranchRef := plumbing.NewBranchReferenceName(branchName)
+	localRef, err := repo.Reference(localBranchRef, false)
+	if err != nil {
+		// Local branch doesn't exist, so we need to sync to get remote
+		return exists, true, nil
+	}
+
+	// Fetch the remote branch reference
+	remoteBranchRef := plumbing.NewRemoteReferenceName("origin", branchName)
+	remoteRef, err := repo.Reference(remoteBranchRef, false)
+	if err != nil {
+		// Remote ref not found locally, need to fetch
+		return exists, true, nil
+	}
+
+	// Compare hashes
+	needsSync = localRef.Hash() != remoteRef.Hash()
+	return exists, needsSync, nil
+}
+
+// SyncWithRemoteBranchStatic fetches a remote branch without requiring a worktree instance
+func SyncWithRemoteBranchStatic(repoPath, branchName string) error {
+	cmd := exec.Command("git", "fetch", "origin", branchName)
+	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to fetch remote branch %s: %w", branchName, err)
+	}
+	return nil
+}
+
+// SyncWithRemoteBranch fetches and syncs with the remote branch
+func (g *GitWorktree) SyncWithRemoteBranch(branchName string) error {
+	// Fetch the specific branch from remote
+	if _, err := g.runGitCommand(g.repoPath, "fetch", "origin", branchName); err != nil {
+		return fmt.Errorf("failed to fetch remote branch %s: %w", branchName, err)
 	}
 
 	return nil
