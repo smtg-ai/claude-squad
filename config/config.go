@@ -36,6 +36,16 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// ToastTimeouts configures the display duration for different toast types (in milliseconds)
+	ToastTimeouts ToastTimeouts `json:"toast_timeouts"`
+}
+
+// ToastTimeouts holds configuration for toast notification display durations
+type ToastTimeouts struct {
+	Info    int `json:"info"`    // Default: 3000ms (3s)
+	Success int `json:"success"` // Default: 3000ms (3s)
+	Warning int `json:"warning"` // Default: 3000ms (3s)
+	Error   int `json:"error"`   // Default: 3000ms (3s)
 }
 
 // DefaultConfig returns the default configuration
@@ -58,6 +68,12 @@ func DefaultConfig() *Config {
 			}
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
+		ToastTimeouts: ToastTimeouts{
+			Info:    3000, // 3 seconds
+			Success: 3000, // 3 seconds
+			Warning: 3000, // 3 seconds
+			Error:   3000, // 3 seconds
+		},
 	}
 }
 

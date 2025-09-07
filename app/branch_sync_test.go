@@ -19,9 +19,10 @@ import (
 // TestSyncConfirmationStateTransitions tests the new sync confirmation state
 func TestSyncConfirmationStateTransitions(t *testing.T) {
 	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		toastManager: overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	t.Run("enters sync confirmation state", func(t *testing.T) {
@@ -82,6 +83,7 @@ func TestSyncConfirmationKeyHandling(t *testing.T) {
 		menu:                ui.NewMenu(),
 		confirmationOverlay: overlay.NewConfirmationOverlay("Sync with remote branch?"),
 		errBox:              ui.NewErrBox(),
+		toastManager:        overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	testCases := []struct {
@@ -172,6 +174,7 @@ func TestFinalizeBranchCreation(t *testing.T) {
 		storage:           storage,
 		pendingBranchName: "test-feature",
 		errBox:            ui.NewErrBox(),
+		toastManager:      overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	// Create a test instance
@@ -243,6 +246,7 @@ func TestFinalizeBranchCreationWithSync(t *testing.T) {
 		pendingBranchName:   "test-feature",
 		pendingSourceBranch: "main",
 		errBox:              ui.NewErrBox(),
+		toastManager:        overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	// Create a test instance
@@ -313,13 +317,14 @@ func TestSessionTitlePreservation(t *testing.T) {
 	require.NoError(t, err)
 
 	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
-		list:      list,
-		menu:      ui.NewMenu(),
-		storage:   storage,
-		errBox:    ui.NewErrBox(),
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		list:         list,
+		menu:         ui.NewMenu(),
+		storage:      storage,
+		errBox:       ui.NewErrBox(),
+		toastManager: overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	t.Run("preserves existing session title", func(t *testing.T) {
@@ -385,6 +390,7 @@ func TestSameBranchEdgeCase(t *testing.T) {
 		storage:           storage,
 		pendingBranchName: "main",
 		errBox:            ui.NewErrBox(),
+		toastManager:      overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	// Create test instance
@@ -455,6 +461,7 @@ func TestSourceBranchSyncCheck(t *testing.T) {
 		storage:           storage,
 		pendingBranchName: "feature-branch",
 		errBox:            ui.NewErrBox(),
+		toastManager:      overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	// Create test instance
@@ -503,6 +510,7 @@ func TestSyncConfirmationFlow(t *testing.T) {
 		storage:           storage,
 		pendingBranchName: "test-feature",
 		errBox:            ui.NewErrBox(),
+		toastManager:      overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	// Create test instance

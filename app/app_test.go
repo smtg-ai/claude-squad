@@ -34,9 +34,10 @@ func TestMain(m *testing.M) {
 func TestConfirmationModalStateTransitions(t *testing.T) {
 	// Create a minimal home struct for testing state transitions
 	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		toastManager: overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	t.Run("shows confirmation on D press", func(t *testing.T) {
@@ -119,6 +120,7 @@ func TestConfirmationModalKeyHandling(t *testing.T) {
 		list:                list,
 		menu:                ui.NewMenu(),
 		confirmationOverlay: overlay.NewConfirmationOverlay("Kill session?"),
+		toastManager:        overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	testCases := []struct {
@@ -244,11 +246,12 @@ func TestConfirmationFlowSimulation(t *testing.T) {
 	list.SetSelectedInstance(0)
 
 	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
-		list:      list,
-		menu:      ui.NewMenu(),
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		list:         list,
+		menu:         ui.NewMenu(),
+		toastManager: overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	// Simulate what happens when D is pressed
@@ -272,9 +275,10 @@ func TestConfirmationFlowSimulation(t *testing.T) {
 // TestConfirmActionWithDifferentTypes tests that confirmAction works with different action types
 func TestConfirmActionWithDifferentTypes(t *testing.T) {
 	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		toastManager: overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	t.Run("works with simple action returning nil", func(t *testing.T) {
@@ -362,9 +366,10 @@ func TestConfirmActionWithDifferentTypes(t *testing.T) {
 // TestMultipleConfirmationsDontInterfere tests that multiple confirmations don't interfere with each other
 func TestMultipleConfirmationsDontInterfere(t *testing.T) {
 	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		toastManager: overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	// First confirmation
@@ -436,9 +441,10 @@ func TestMultipleConfirmationsDontInterfere(t *testing.T) {
 // TestConfirmationModalVisualAppearance tests that confirmation modal has distinct visual appearance
 func TestConfirmationModalVisualAppearance(t *testing.T) {
 	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		toastManager: overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	// Create a test confirmation overlay
@@ -468,9 +474,10 @@ func TestConfirmationModalVisualAppearance(t *testing.T) {
 // TestParseBranchInput tests the branch input parsing functionality
 func TestParseBranchInput(t *testing.T) {
 	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		toastManager: overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	testCases := []struct {
@@ -561,9 +568,10 @@ func TestParseBranchInput(t *testing.T) {
 // TestValidateBranchName tests the branch name validation function
 func TestValidateBranchName(t *testing.T) {
 	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		toastManager: overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	testCases := []struct {
@@ -662,9 +670,10 @@ func TestValidateBranchName(t *testing.T) {
 // TestSimplifyBranchInput tests the simplified branch input function
 func TestSimplifyBranchInput(t *testing.T) {
 	h := &home{
-		ctx:       context.Background(),
-		state:     stateDefault,
-		appConfig: config.DefaultConfig(),
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		toastManager: overlay.NewToastManager(config.DefaultConfig()),
 	}
 
 	testCases := []struct {

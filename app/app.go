@@ -104,6 +104,8 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// toastManager manages toast notifications
+	toastManager *overlay.ToastManager
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -132,6 +134,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		autoYes:      autoYes,
 		state:        stateDefault,
 		appState:     appState,
+		toastManager: overlay.NewToastManager(appConfig),
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 
@@ -193,6 +196,7 @@ func (m *home) Init() tea.Cmd {
 			return previewTickMsg{}
 		},
 		tickUpdateMetadataCmd,
+		toastUpdateCmd,
 	)
 }
 
@@ -232,6 +236,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, tickUpdateMetadataCmd
+	case toastUpdateMsg:
+		// Update toast notifications (remove expired ones)
+		m.toastManager.UpdateToasts()
+		return m, toastUpdateCmd
 	case tea.MouseMsg:
 		// Handle mouse wheel events for scrolling the diff/preview pane
 		if msg.Action == tea.MouseActionPress {
@@ -711,28 +719,37 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		// Create the kill action as a tea.Cmd
 		killAction := func() tea.Msg {
+			// Show starting toast
+			m.toastManager.AddInfoToast(fmt.Sprintf("Deleting session '%s'...", selected.Title))
+
 			// Get worktree and check if branch is checked out
 			worktree, err := selected.GetGitWorktree()
 			if err != nil {
+				m.toastManager.AddErrorToast(fmt.Sprintf("Failed to get worktree: %v", err))
 				return err
 			}
 
 			checkedOut, err := worktree.IsBranchCheckedOut()
 			if err != nil {
+				m.toastManager.AddErrorToast(fmt.Sprintf("Failed to check branch status: %v", err))
 				return err
 			}
 
 			if checkedOut {
-				return fmt.Errorf("instance %s is currently checked out", selected.Title)
+				errMsg := fmt.Errorf("instance %s is currently checked out", selected.Title)
+				m.toastManager.AddErrorToast(errMsg.Error())
+				return errMsg
 			}
 
 			// Delete from storage first
 			if err := m.storage.DeleteInstance(selected.Title); err != nil {
+				m.toastManager.AddErrorToast(fmt.Sprintf("Failed to delete from storage: %v", err))
 				return err
 			}
 
 			// Then kill the instance
 			m.list.Kill()
+			m.toastManager.AddSuccessToast(fmt.Sprintf("Session '%s' deleted successfully!", selected.Title))
 			return instanceChangedMsg{}
 		}
 
@@ -747,15 +764,21 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		// Create the push action as a tea.Cmd
 		pushAction := func() tea.Msg {
+			// Show starting toast
+			m.toastManager.AddInfoToast(fmt.Sprintf("Pushing changes from '%s'...", selected.Title))
+
 			// Default commit message with timestamp
 			commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
 			worktree, err := selected.GetGitWorktree()
 			if err != nil {
+				m.toastManager.AddErrorToast(fmt.Sprintf("Failed to get worktree: %v", err))
 				return err
 			}
 			if err = worktree.PushChanges(commitMsg, true); err != nil {
+				m.toastManager.AddErrorToast(fmt.Sprintf("Push failed: %v", err))
 				return err
 			}
+			m.toastManager.AddSuccessToast(fmt.Sprintf("Changes from '%s' pushed successfully!", selected.Title))
 			return nil
 		}
 
@@ -770,8 +793,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		// Show help screen before pausing
 		m.showHelpScreen(helpTypeInstanceCheckout{}, func() {
+			m.toastManager.AddInfoToast(fmt.Sprintf("Pausing session '%s' (removing worktree)...", selected.Title))
 			if err := selected.Pause(); err != nil {
+				m.toastManager.AddErrorToast(fmt.Sprintf("Failed to pause session '%s': %v", selected.Title, err))
 				m.handleError(err)
+			} else {
+				m.toastManager.AddSuccessToast(fmt.Sprintf("Session '%s' paused successfully!", selected.Title))
 			}
 			m.instanceChanged()
 		})
@@ -781,8 +808,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if selected == nil {
 			return m, nil
 		}
+		m.toastManager.AddInfoToast(fmt.Sprintf("Resuming session '%s' (setting up worktree)...", selected.Title))
 		if err := selected.Resume(); err != nil {
+			m.toastManager.AddErrorToast(fmt.Sprintf("Failed to resume session '%s': %v", selected.Title, err))
 			return m, m.handleError(err)
+		} else {
+			m.toastManager.AddSuccessToast(fmt.Sprintf("Session '%s' resumed successfully!", selected.Title))
 		}
 		return m, tea.WindowSize()
 	case keys.KeyEnter:
@@ -915,6 +946,9 @@ func (m *home) simplifyBranchInput(input string) (string, error) {
 
 // finalizeBranchCreation completes the branch creation process without sync
 func (m *home) finalizeBranchCreation(selected *session.Instance, sourceBranch string) (tea.Model, tea.Cmd) {
+	// Show branch creation toast
+	m.toastManager.AddInfoToast(fmt.Sprintf("Creating branch '%s' from '%s'...", m.pendingBranchName, sourceBranch))
+
 	// Only set the branch name as the instance title if no title was provided
 	// This preserves user-entered session names from the 'b' key workflow
 	if selected.Title == "" {
@@ -929,6 +963,7 @@ func (m *home) finalizeBranchCreation(selected *session.Instance, sourceBranch s
 
 	// Start the instance
 	if err := selected.Start(true); err != nil {
+		m.toastManager.AddErrorToast(fmt.Sprintf("Failed to create branch '%s': %v", m.pendingBranchName, err))
 		m.list.Kill()
 		m.state = stateDefault
 		return m, m.handleError(err)
@@ -945,6 +980,9 @@ func (m *home) finalizeBranchCreation(selected *session.Instance, sourceBranch s
 		selected.AutoYes = true
 	}
 
+	// Show success toast
+	m.toastManager.AddSuccessToast(fmt.Sprintf("Branch '%s' created and session started!", m.pendingBranchName))
+
 	// Reset state
 	m.state = stateDefault
 	m.menu.SetState(ui.StateDefault)
@@ -957,11 +995,17 @@ func (m *home) finalizeBranchCreation(selected *session.Instance, sourceBranch s
 
 // syncSourceThenCheckTarget syncs the source branch and then checks target branch
 func (m *home) syncSourceThenCheckTarget(selected *session.Instance, sourceBranch string) {
+	// Show sync starting toast
+	m.toastManager.AddInfoToast(fmt.Sprintf("Syncing source branch '%s'...", sourceBranch))
+
 	// Sync source branch with remote
 	if err := session.SyncWithRemoteBranchStatic(".", sourceBranch); err != nil {
+		m.toastManager.AddErrorToast(fmt.Sprintf("Failed to sync source branch '%s': %v", sourceBranch, err))
 		m.handleError(fmt.Errorf("failed to sync source branch: %w", err))
 		return
 	}
+
+	m.toastManager.AddSuccessToast(fmt.Sprintf("Source branch '%s' synced successfully", sourceBranch))
 
 	// Now check target branch and proceed
 	_, _ = m.checkTargetBranchAndProceed(selected, sourceBranch)
@@ -1003,11 +1047,17 @@ func (m *home) handleSameBranchCheckout(selected *session.Instance, branchName s
 // finalizeSameBranchCheckout handles sync and checkout for same-name branches
 func (m *home) finalizeSameBranchCheckout(selected *session.Instance, branchName string, shouldSync bool) {
 	if shouldSync {
+		// Show sync starting toast
+		m.toastManager.AddInfoToast(fmt.Sprintf("Syncing branch '%s'...", branchName))
+
 		// Sync with remote branch first
 		if err := session.SyncWithRemoteBranchStatic(".", branchName); err != nil {
+			m.toastManager.AddErrorToast(fmt.Sprintf("Failed to sync branch '%s': %v", branchName, err))
 			m.handleError(fmt.Errorf("failed to sync branch: %w", err))
 			return
 		}
+
+		m.toastManager.AddSuccessToast(fmt.Sprintf("Branch '%s' synced successfully", branchName))
 	}
 
 	// Now proceed with existing branch checkout
@@ -1045,6 +1095,9 @@ func (m *home) finalizeExistingBranchCheckout(selected *session.Instance, branch
 	if m.autoYes {
 		selected.AutoYes = true
 	}
+
+	// Show success toast
+	m.toastManager.AddSuccessToast(fmt.Sprintf("Branch '%s' created and session started!", m.pendingBranchName))
 
 	// Reset state
 	m.state = stateDefault
@@ -1132,11 +1185,19 @@ type tickUpdateMetadataMessage struct{}
 
 type instanceChangedMsg struct{}
 
+type toastUpdateMsg struct{}
+
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
 // overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.
 var tickUpdateMetadataCmd = func() tea.Msg {
 	time.Sleep(500 * time.Millisecond)
 	return tickUpdateMetadataMessage{}
+}
+
+// toastUpdateCmd updates toast notifications every 100ms for smooth animations
+var toastUpdateCmd = func() tea.Msg {
+	time.Sleep(100 * time.Millisecond)
+	return toastUpdateMsg{}
 }
 
 // handleError handles all errors which get bubbled up to the app. sets the error message. We return a callback tea.Cmd that returns a hideErrMsg message
@@ -1190,6 +1251,17 @@ func (m *home) View() string {
 		m.menu.String(),
 		m.errBox.String(),
 	)
+
+	// Add toasts overlay in top-right corner if any exist
+	if m.toastManager.HasToasts() {
+		toastsView := m.toastManager.Render()
+		// Use a simple fixed position for now to ensure toasts are visible
+		// Once we confirm they appear, we can improve the positioning
+		x := 80 // Fixed position that should be visible
+		y := 1  // 1 line from top
+
+		mainView = overlay.PlaceOverlay(x, y, toastsView, mainView, false, false)
+	}
 
 	switch m.state {
 	case statePrompt:
