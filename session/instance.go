@@ -243,10 +243,22 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	}()
 
 	if !firstTimeSetup {
-		// Reuse existing session
-		if err := tmuxSession.Restore(); err != nil {
-			setupErr = fmt.Errorf("failed to restore existing session: %w", err)
-			return setupErr
+		// Check if tmux session still exists, otherwise create new one
+		if tmuxSession.DoesSessionExist() {
+			// Session exists, just restore PTY connection to it
+			if err := tmuxSession.Restore(); err != nil {
+				// If restore fails, fall back to creating new session
+				if err := tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+					setupErr = fmt.Errorf("failed to start new session after restore failure: %w", err)
+					return setupErr
+				}
+			}
+		} else {
+			// Create new tmux session
+			if err := tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+				setupErr = fmt.Errorf("failed to start new session: %w", err)
+				return setupErr
+			}
 		}
 	} else {
 		// Setup git worktree first
