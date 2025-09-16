@@ -29,6 +29,8 @@ type GitWorktree struct {
 	branchName string
 	// Base commit hash for the worktree
 	baseCommitSHA string
+	// BaseRef indicates whether to use main branch or current HEAD
+	baseRef string
 }
 
 func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string) *GitWorktree {
@@ -99,4 +101,9 @@ func (g *GitWorktree) GetRepoName() string {
 // GetBaseCommitSHA returns the base commit SHA for the worktree
 func (g *GitWorktree) GetBaseCommitSHA() string {
 	return g.baseCommitSHA
+}
+
+// SetBaseRef sets the base reference for the worktree (e.g., "main" or "HEAD")
+func (g *GitWorktree) SetBaseRef(baseRef string) {
+	g.baseRef = baseRef
 }

@@ -1,6 +1,7 @@
 package git
 
 import (
+	"claude-squad/config"
 	"claude-squad/log"
 	"fmt"
 	"os/exec"
@@ -134,4 +135,48 @@ func (g *GitWorktree) OpenBranchURL() error {
 		return fmt.Errorf("failed to open branch URL: %w", err)
 	}
 	return nil
+}
+
+// GetDefaultBranch detects the default branch of the repository
+// It tries in order: config override, origin/HEAD, origin/main, origin/master
+func GetDefaultBranch(repoPath string) (string, error) {
+	// Check config for override
+	cfg := config.LoadConfig()
+	if cfg.DefaultBranch != "" {
+		return cfg.DefaultBranch, nil
+	}
+
+	// Create a temporary GitWorktree just for running commands
+	g := &GitWorktree{repoPath: repoPath}
+
+	// Try to get the default branch from origin/HEAD
+	output, err := g.runGitCommand(repoPath, "symbolic-ref", "refs/remotes/origin/HEAD")
+	if err == nil {
+		// Output will be something like "refs/remotes/origin/main"
+		branch := strings.TrimSpace(string(output))
+		branch = strings.TrimPrefix(branch, "refs/remotes/origin/")
+		if branch != "" {
+			return branch, nil
+		}
+	}
+
+	// Try common default branch names
+	branches := []string{"main", "master"}
+	for _, branch := range branches {
+		// Check if the remote branch exists
+		_, err := g.runGitCommand(repoPath, "rev-parse", "--verify", fmt.Sprintf("origin/%s", branch))
+		if err == nil {
+			return branch, nil
+		}
+	}
+
+	// If no remote branches found, try local branches
+	for _, branch := range branches {
+		_, err := g.runGitCommand(repoPath, "rev-parse", "--verify", branch)
+		if err == nil {
+			return branch, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not determine default branch")
 }

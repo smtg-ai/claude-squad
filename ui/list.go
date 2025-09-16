@@ -137,15 +137,27 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	default:
 	}
 
-	// Cut the title if it's too long
+	// Cut the title if it's too long and add base ref indicator
 	titleText := i.Title
-	widthAvail := r.width - 3 - len(prefix) - 1
+
+	// Add base ref indicator as prefix
+	var baseRefIndicator string
+	if i.BaseRef == "main" {
+		baseRefIndicator = "[main] "
+	} else if i.BaseRef == "HEAD" {
+		baseRefIndicator = "* "
+	}
+
+	widthAvail := r.width - 3 - len(prefix) - 1 - len(baseRefIndicator)
 	if widthAvail > 0 && widthAvail < len(titleText) && len(titleText) >= widthAvail-3 {
 		titleText = titleText[:widthAvail-3] + "..."
 	}
+
+	titleWithRef := baseRefIndicator + titleText
+
 	title := titleS.Render(lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		lipgloss.Place(r.width-3, 1, lipgloss.Left, lipgloss.Center, fmt.Sprintf("%s %s", prefix, titleText)),
+		lipgloss.Place(r.width-3, 1, lipgloss.Left, lipgloss.Center, fmt.Sprintf("%s %s", prefix, titleWithRef)),
 		" ",
 		join,
 	))

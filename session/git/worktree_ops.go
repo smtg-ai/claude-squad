@@ -72,7 +72,7 @@ func (g *GitWorktree) setupFromExistingBranch() error {
 	return nil
 }
 
-// setupNewWorktree creates a new worktree from HEAD
+// setupNewWorktree creates a new worktree from HEAD or main branch
 func (g *GitWorktree) setupNewWorktree() error {
 	// Ensure worktrees directory exists
 	worktreesDir := filepath.Join(g.repoPath, "worktrees")
@@ -94,24 +94,47 @@ func (g *GitWorktree) setupNewWorktree() error {
 		return fmt.Errorf("failed to cleanup existing branch: %w", err)
 	}
 
-	output, err := g.runGitCommand(g.repoPath, "rev-parse", "HEAD")
-	if err != nil {
-		if strings.Contains(err.Error(), "fatal: ambiguous argument 'HEAD'") ||
-			strings.Contains(err.Error(), "fatal: not a valid object name") ||
-			strings.Contains(err.Error(), "fatal: HEAD: not a valid object name") {
-			return fmt.Errorf("this appears to be a brand new repository: please create an initial commit before creating an instance")
-		}
-		return fmt.Errorf("failed to get HEAD commit hash: %w", err)
-	}
-	headCommit := strings.TrimSpace(string(output))
-	g.baseCommitSHA = headCommit
+	var targetCommit string
 
-	// Create a new worktree from the HEAD commit
+	// Determine which commit to use based on baseRef
+	if g.baseRef == "main" {
+		// Get the default branch
+		defaultBranch, err := GetDefaultBranch(g.repoPath)
+		if err != nil {
+			return fmt.Errorf("failed to determine default branch: %w", err)
+		}
+
+		// Get the commit hash for the default branch
+		output, err := g.runGitCommand(g.repoPath, "rev-parse", defaultBranch)
+		if err != nil {
+			// Try with origin prefix
+			output, err = g.runGitCommand(g.repoPath, "rev-parse", fmt.Sprintf("origin/%s", defaultBranch))
+			if err != nil {
+				return fmt.Errorf("failed to get commit hash for branch %s: %w", defaultBranch, err)
+			}
+		}
+		targetCommit = strings.TrimSpace(string(output))
+	} else {
+		// Use current HEAD (existing behavior)
+		output, err := g.runGitCommand(g.repoPath, "rev-parse", "HEAD")
+		if err != nil {
+			if strings.Contains(err.Error(), "fatal: ambiguous argument 'HEAD'") ||
+				strings.Contains(err.Error(), "fatal: not a valid object name") ||
+				strings.Contains(err.Error(), "fatal: HEAD: not a valid object name") {
+				return fmt.Errorf("this appears to be a brand new repository: please create an initial commit before creating an instance")
+			}
+			return fmt.Errorf("failed to get HEAD commit hash: %w", err)
+		}
+		targetCommit = strings.TrimSpace(string(output))
+	}
+
+	g.baseCommitSHA = targetCommit
+
+	// Create a new worktree from the target commit
 	// Otherwise, we'll inherit uncommitted changes from the previous worktree.
 	// This way, we can start the worktree with a clean slate.
-	// TODO: we might want to give an option to use main/master instead of the current branch.
-	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, headCommit); err != nil {
-		return fmt.Errorf("failed to create worktree from commit %s: %w", headCommit, err)
+	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, targetCommit); err != nil {
+		return fmt.Errorf("failed to create worktree from commit %s: %w", targetCommit, err)
 	}
 
 	return nil

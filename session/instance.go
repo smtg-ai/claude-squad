@@ -51,6 +51,8 @@ type Instance struct {
 	AutoYes bool
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
+	// BaseRef indicates the source reference for worktree creation (e.g., "main", "HEAD")
+	BaseRef string
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
@@ -77,6 +79,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 		UpdatedAt: time.Now(),
 		Program:   i.Program,
 		AutoYes:   i.AutoYes,
+		BaseRef:   i.BaseRef,
 	}
 
 	// Only include worktree data if gitWorktree is initialized
@@ -114,6 +117,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		CreatedAt: data.CreatedAt,
 		UpdatedAt: data.UpdatedAt,
 		Program:   data.Program,
+		BaseRef:   data.BaseRef,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,
@@ -150,6 +154,8 @@ type InstanceOptions struct {
 	Program string
 	// If AutoYes is true, then
 	AutoYes bool
+	// BaseRef indicates the source reference for worktree creation (e.g., "main", "HEAD")
+	BaseRef string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -171,6 +177,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		CreatedAt: t,
 		UpdatedAt: t,
 		AutoYes:   false,
+		BaseRef:   opts.BaseRef,
 	}, nil
 }
 
@@ -208,6 +215,8 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 		i.gitWorktree = gitWorktree
 		i.Branch = branchName
+		// Store the BaseRef in the worktree for setup
+		i.gitWorktree.SetBaseRef(i.BaseRef)
 	}
 
 	// Setup error handler to cleanup resources on any error
