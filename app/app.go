@@ -97,6 +97,9 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	// Load application config
 	appConfig := config.LoadConfig()
 
+	// Initialize key mappings from config
+	keys.UpdateKeyMappings(appConfig.KeyMappings)
+
 	// Load application state
 	appState := config.LoadState()
 

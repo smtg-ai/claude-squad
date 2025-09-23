@@ -36,6 +36,8 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// KeyMappings allows users to customize key bindings
+	KeyMappings map[string][]string `json:"key_mappings,omitempty"`
 }
 
 // DefaultConfig returns the default configuration
@@ -58,6 +60,7 @@ func DefaultConfig() *Config {
 			}
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
+		KeyMappings: nil, // Will be merged with defaults in LoadConfig
 	}
 }
 
@@ -113,7 +116,9 @@ func LoadConfig() *Config {
 	configDir, err := GetConfigDir()
 	if err != nil {
 		log.ErrorLog.Printf("failed to get config directory: %v", err)
-		return DefaultConfig()
+		defaultCfg := DefaultConfig()
+		defaultCfg.KeyMappings = getDefaultKeyMappings()
+		return defaultCfg
 	}
 
 	configPath := filepath.Join(configDir, ConfigFileName)
@@ -122,6 +127,7 @@ func LoadConfig() *Config {
 		if os.IsNotExist(err) {
 			// Create and save default config if file doesn't exist
 			defaultCfg := DefaultConfig()
+			defaultCfg.KeyMappings = getDefaultKeyMappings()
 			if saveErr := saveConfig(defaultCfg); saveErr != nil {
 				log.WarningLog.Printf("failed to save default config: %v", saveErr)
 			}
@@ -129,14 +135,21 @@ func LoadConfig() *Config {
 		}
 
 		log.WarningLog.Printf("failed to get config file: %v", err)
-		return DefaultConfig()
+		defaultCfg := DefaultConfig()
+		defaultCfg.KeyMappings = getDefaultKeyMappings()
+		return defaultCfg
 	}
 
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
 		log.ErrorLog.Printf("failed to parse config file: %v", err)
-		return DefaultConfig()
+		defaultCfg := DefaultConfig()
+		defaultCfg.KeyMappings = getDefaultKeyMappings()
+		return defaultCfg
 	}
+
+	// Merge user key mappings with defaults
+	config.KeyMappings = mergeKeyMappings(getDefaultKeyMappings(), config.KeyMappings)
 
 	return &config
 }
@@ -164,4 +177,49 @@ func saveConfig(config *Config) error {
 // SaveConfig exports the saveConfig function for use by other packages
 func SaveConfig(config *Config) error {
 	return saveConfig(config)
+}
+
+// getDefaultKeyMappings returns the default key mappings that match the original hardcoded values
+func getDefaultKeyMappings() map[string][]string {
+	return map[string][]string{
+		"up":         {"up", "k"},
+		"down":       {"down", "j"},
+		"shift+up":   {"shift+up"},
+		"shift+down": {"shift+down"},
+		"enter":      {"enter", "o"},
+		"new":        {"n"},
+		"kill":       {"D"},
+		"quit":       {"q"},
+		"tab":        {"tab"},
+		"checkout":   {"c"},
+		"resume":     {"r"},
+		"submit":     {"p"},
+		"prompt":     {"N"},
+		"help":       {"?"},
+	}
+}
+
+// mergeKeyMappings merges user key mappings with defaults, allowing users to only specify keys they want to customize
+func mergeKeyMappings(defaults, user map[string][]string) map[string][]string {
+	if user == nil {
+		return defaults
+	}
+
+	result := make(map[string][]string)
+
+	// Start with defaults
+	for action, keys := range defaults {
+		result[action] = make([]string, len(keys))
+		copy(result[action], keys)
+	}
+
+	// Override with user settings
+	for action, keys := range user {
+		if len(keys) > 0 {
+			result[action] = make([]string, len(keys))
+			copy(result[action], keys)
+		}
+	}
+
+	return result
 }
