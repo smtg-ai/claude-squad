@@ -30,7 +30,7 @@ const (
 	KeyShiftDown
 )
 
-// GlobalKeyStringsMap is a global, immutable map string to keybinding.
+// GlobalKeyStringsMap is a configurable map string to keybinding.
 var GlobalKeyStringsMap = map[string]KeyName{
 	"up":         KeyUp,
 	"k":          KeyUp,
@@ -51,7 +51,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"?":          KeyHelp,
 }
 
-// GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
+// GlobalkeyBindings is a configurable map of KeyName to keybinding.
 var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyUp: key.NewBinding(
 		key.WithKeys("up", "k"),
@@ -116,4 +116,179 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "submit name"),
 	),
+}
+
+// UpdateKeyMappings updates the global key mappings based on user configuration
+func UpdateKeyMappings(userMappings map[string][]string) {
+	if userMappings == nil {
+		return
+	}
+
+	// Clear existing mappings
+	GlobalKeyStringsMap = make(map[string]KeyName)
+
+	// Apply user-configured mappings
+	for action, keys := range userMappings {
+		var keyName KeyName
+		switch action {
+		case "up":
+			keyName = KeyUp
+		case "down":
+			keyName = KeyDown
+		case "shift+up":
+			keyName = KeyShiftUp
+		case "shift+down":
+			keyName = KeyShiftDown
+		case "enter":
+			keyName = KeyEnter
+		case "new":
+			keyName = KeyNew
+		case "kill":
+			keyName = KeyKill
+		case "quit":
+			keyName = KeyQuit
+		case "tab":
+			keyName = KeyTab
+		case "checkout":
+			keyName = KeyCheckout
+		case "resume":
+			keyName = KeyResume
+		case "submit":
+			keyName = KeySubmit
+		case "prompt":
+			keyName = KeyPrompt
+		case "help":
+			keyName = KeyHelp
+		default:
+			continue // Skip unknown actions
+		}
+
+		// Map all configured keys to this action
+		for _, k := range keys {
+			GlobalKeyStringsMap[k] = keyName
+		}
+	}
+
+	// Update key bindings with new mappings
+	updateKeyBindings(userMappings)
+}
+
+// updateKeyBindings recreates the key bindings with user-configured keys
+func updateKeyBindings(userMappings map[string][]string) {
+	if keys, ok := userMappings["up"]; ok {
+		GlobalkeyBindings[KeyUp] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "up"),
+		)
+	}
+
+	if keys, ok := userMappings["down"]; ok {
+		GlobalkeyBindings[KeyDown] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "down"),
+		)
+	}
+
+	if keys, ok := userMappings["shift+up"]; ok {
+		GlobalkeyBindings[KeyShiftUp] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "scroll"),
+		)
+	}
+
+	if keys, ok := userMappings["shift+down"]; ok {
+		GlobalkeyBindings[KeyShiftDown] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "scroll"),
+		)
+	}
+
+	if keys, ok := userMappings["enter"]; ok {
+		GlobalkeyBindings[KeyEnter] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "open"),
+		)
+	}
+
+	if keys, ok := userMappings["new"]; ok {
+		GlobalkeyBindings[KeyNew] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "new"),
+		)
+	}
+
+	if keys, ok := userMappings["kill"]; ok {
+		GlobalkeyBindings[KeyKill] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "kill"),
+		)
+	}
+
+	if keys, ok := userMappings["quit"]; ok {
+		GlobalkeyBindings[KeyQuit] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "quit"),
+		)
+	}
+
+	if keys, ok := userMappings["tab"]; ok {
+		GlobalkeyBindings[KeyTab] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "switch tab"),
+		)
+	}
+
+	if keys, ok := userMappings["checkout"]; ok {
+		GlobalkeyBindings[KeyCheckout] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "checkout"),
+		)
+	}
+
+	if keys, ok := userMappings["resume"]; ok {
+		GlobalkeyBindings[KeyResume] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "resume"),
+		)
+	}
+
+	if keys, ok := userMappings["submit"]; ok {
+		GlobalkeyBindings[KeySubmit] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "push branch"),
+		)
+	}
+
+	if keys, ok := userMappings["prompt"]; ok {
+		GlobalkeyBindings[KeyPrompt] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "new with prompt"),
+		)
+	}
+
+	if keys, ok := userMappings["help"]; ok {
+		GlobalkeyBindings[KeyHelp] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "help"),
+		)
+	}
+}
+
+// getHelpKey formats the help text for key combinations
+func getHelpKey(keys []string) string {
+	if len(keys) == 0 {
+		return ""
+	}
+	if len(keys) == 1 {
+		return keys[0]
+	}
+	// Join multiple keys with "/"
+	result := ""
+	for i, k := range keys {
+		if i > 0 {
+			result += "/"
+		}
+		result += k
+	}
+	return result
 }
