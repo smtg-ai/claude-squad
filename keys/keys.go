@@ -124,43 +124,81 @@ func UpdateKeyMappings(userMappings map[string][]string) {
 		return
 	}
 
-	// Clear existing mappings
-	GlobalKeyStringsMap = make(map[string]KeyName)
+	// Start with default mappings
+	GlobalKeyStringsMap = map[string]KeyName{
+		"up":         KeyUp,
+		"k":          KeyUp,
+		"down":       KeyDown,
+		"j":          KeyDown,
+		"shift+up":   KeyShiftUp,
+		"shift+down": KeyShiftDown,
+		"N":          KeyPrompt,
+		"enter":      KeyEnter,
+		"o":          KeyEnter,
+		"n":          KeyNew,
+		"D":          KeyKill,
+		"q":          KeyQuit,
+		"tab":        KeyTab,
+		"c":          KeyCheckout,
+		"r":          KeyResume,
+		"p":          KeySubmit,
+		"?":          KeyHelp,
+	}
 
-	// Apply user-configured mappings
+	// Override with user-configured mappings
 	for action, keys := range userMappings {
 		var keyName KeyName
+		var defaultKeys []string
 		switch action {
 		case "up":
 			keyName = KeyUp
+			defaultKeys = []string{"up", "k"}
 		case "down":
 			keyName = KeyDown
+			defaultKeys = []string{"down", "j"}
 		case "shift+up":
 			keyName = KeyShiftUp
+			defaultKeys = []string{"shift+up"}
 		case "shift+down":
 			keyName = KeyShiftDown
+			defaultKeys = []string{"shift+down"}
 		case "enter":
 			keyName = KeyEnter
+			defaultKeys = []string{"enter", "o"}
 		case "new":
 			keyName = KeyNew
+			defaultKeys = []string{"n"}
 		case "kill":
 			keyName = KeyKill
+			defaultKeys = []string{"D"}
 		case "quit":
 			keyName = KeyQuit
+			defaultKeys = []string{"q"}
 		case "tab":
 			keyName = KeyTab
+			defaultKeys = []string{"tab"}
 		case "checkout":
 			keyName = KeyCheckout
+			defaultKeys = []string{"c"}
 		case "resume":
 			keyName = KeyResume
+			defaultKeys = []string{"r"}
 		case "submit":
 			keyName = KeySubmit
+			defaultKeys = []string{"p"}
 		case "prompt":
 			keyName = KeyPrompt
+			defaultKeys = []string{"N"}
 		case "help":
 			keyName = KeyHelp
+			defaultKeys = []string{"?"}
 		default:
 			continue // Skip unknown actions
+		}
+
+		// Clear default keys for this action
+		for _, k := range defaultKeys {
+			delete(GlobalKeyStringsMap, k)
 		}
 
 		// Map all configured keys to this action
