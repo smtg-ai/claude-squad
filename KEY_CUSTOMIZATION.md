@@ -25,9 +25,9 @@ Key mappings are configured in your `~/.claude-squad/config.json` file. You can 
     "kill": ["D", "x"],
     "quit": ["q", "esc"],
     "tab": ["tab", "t"],
-    "checkout": ["c", "ctrl+c"],
-    "resume": ["r", "ctrl+r"],
-    "submit": ["p", "ctrl+p"],
+    "checkout": ["c", "C"],
+    "resume": ["r", "R"],
+    "submit": ["p", "P", "shift+p"],
     "prompt": ["N", "P"],
     "help": ["?", "h"]
   }
@@ -39,9 +39,9 @@ You only need to specify the keys you want to customize:
 ```json
 {
   "key_mappings": {
-    "checkout": ["c", "ctrl+c"],
-    "resume": ["r", "ctrl+r"],
-    "submit": ["p", "ctrl+p"]
+    "checkout": ["c", "C"],
+    "resume": ["r", "R"],
+    "submit": ["p", "P", "shift+p"]
   }
 }
 ```
@@ -95,14 +95,14 @@ If you don't specify `key_mappings` in your config, the following defaults are u
 
 ## Examples
 
-### Add Ctrl Key Combinations (Partial Config)
-Only customize specific actions with ctrl combinations:
+### Add Alternative Key Combinations (Partial Config)
+Only customize specific actions with alternative keys:
 ```json
 {
   "key_mappings": {
-    "checkout": ["c", "ctrl+c"],
-    "resume": ["r", "ctrl+r"],
-    "submit": ["p", "ctrl+p"]
+    "checkout": ["c", "C"],
+    "resume": ["r", "R"],
+    "submit": ["p", "P", "shift+p"]
   }
 }
 ```
@@ -152,23 +152,23 @@ Combine original keys with new alternatives:
   "key_mappings": {
     "up": ["up", "k", "w"],
     "down": ["down", "j", "s"],
-    "checkout": ["c", "ctrl+c", "o"],
-    "submit": ["p", "ctrl+p", "ctrl+s"]
+    "checkout": ["c", "C", "o"],
+    "submit": ["p", "P", "shift+p"]
   }
 }
 ```
 
-### Ctrl-focused Workflow
-Use ctrl combinations for main actions:
+### Uppercase and Shift-focused Workflow
+Use uppercase and shift combinations for main actions:
 ```json
 {
   "key_mappings": {
-    "new": ["n", "ctrl+n"],
-    "kill": ["D", "ctrl+d"],
-    "checkout": ["c", "ctrl+c"],
-    "resume": ["r", "ctrl+r"],
-    "submit": ["p", "ctrl+p"],
-    "quit": ["q", "ctrl+q"]
+    "new": ["n", "N"],
+    "kill": ["D", "shift+d"],
+    "checkout": ["c", "C"],
+    "resume": ["r", "R"],
+    "submit": ["p", "P", "shift+p"],
+    "quit": ["q", "Q"]
   }
 }
 ```
@@ -176,7 +176,9 @@ Use ctrl combinations for main actions:
 ## Notes
 
 - Key mappings are case-sensitive
-- Special keys like `shift+up`, `ctrl+c` are supported
+- Special keys like `shift+up`, `shift+p` are supported
+- **Avoid terminal conflicts**: Don't use `ctrl+c` (SIGINT) or `ctrl+d` (EOF) as they conflict with terminal signal handling
+- **Recommended alternatives**: Use uppercase letters (`C`, `R`, `P`) or shift combinations (`shift+p`) instead of problematic ctrl keys
 - If a key is mapped to multiple actions, only the first match will be used
 - Invalid or unknown actions in the config will be ignored
 - The application will fall back to default mappings if the config is invalid
