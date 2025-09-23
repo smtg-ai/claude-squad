@@ -15,7 +15,7 @@ GOFMT := gofmt
 GOMOD := $(GOCMD) mod
 
 # Build targets
-.PHONY: all build clean test fmt vet install uninstall dev-setup config-reset config-show config-test run debug help
+.PHONY: all build clean test fmt vet install install-dev uninstall uninstall-dev dev-setup config-reset config-show config-test run debug help
 
 ## Build Commands
 all: clean fmt vet test build	## Run all checks and build
@@ -33,9 +33,32 @@ install: build	## Install binary to system
 	@echo "Installing $(BINARY_NAME) to $(INSTALL_DIR)..."
 	sudo mv $(BINARY_NAME) $(INSTALL_DIR)/
 
-uninstall:	## Uninstall binary from system
+install-dev: build	## Install development version as cs-dev
+	@echo "Installing development version as cs-dev..."
+	@if command -v brew >/dev/null 2>&1; then \
+		cp $(BINARY_NAME) "$$(brew --prefix)/bin/cs-dev"; \
+		chmod +x "$$(brew --prefix)/bin/cs-dev"; \
+		echo "✅ Development version installed as cs-dev"; \
+		echo "Usage: cs-dev (development) vs cs (production)"; \
+	else \
+		sudo cp $(BINARY_NAME) $(INSTALL_DIR)/cs-dev; \
+		sudo chmod +x $(INSTALL_DIR)/cs-dev; \
+		echo "✅ Development version installed as cs-dev"; \
+		echo "Usage: cs-dev (development) vs cs (production)"; \
+	fi
+
+uninstall: 	## Uninstall binary from system
 	@echo "Uninstalling $(BINARY_NAME) from $(INSTALL_DIR)..."
 	sudo rm -f $(INSTALL_DIR)/$(BINARY_NAME)
+
+uninstall-dev:	## Remove development version cs-dev
+	@echo "Removing development version..."
+	@if command -v brew >/dev/null 2>&1; then \
+		rm -f "$$(brew --prefix)/bin/cs-dev"; \
+	else \
+		sudo rm -f $(INSTALL_DIR)/cs-dev; \
+	fi
+	@echo "✅ cs-dev removed"
 
 ## Development Commands
 dev-setup:	## Setup development environment
