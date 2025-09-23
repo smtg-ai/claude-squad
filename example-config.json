@@ -4,8 +4,8 @@
   "daemon_poll_interval": 1000,
   "branch_prefix": "user/",
   "key_mappings": {
-    "checkout": ["c", "ctrl+c"],
-    "resume": ["r", "ctrl+r"],
-    "submit": ["p", "ctrl+p"]
+    "checkout": ["c", "C"],
+    "resume": ["r", "R"],
+    "submit": ["p", "P", "shift+p"]
   }
 }
