@@ -39,13 +39,13 @@ You only need to specify the keys you want to customize:
 ```json
 {
   "key_mappings": {
-    "checkout": ["c", "C"],
-    "resume": ["r", "R"],
-    "submit": ["p", "P", "shift+p"]
+    "checkout": ["C"],
+    "resume": ["R"],
+    "submit": ["P", "shift+s"]
   }
 }
 ```
-All other keys will use their default values.
+This shows the dynamic nature: single keys (`checkout`, `resume`) or multiple alternatives (`submit`). All other keys will use their default values.
 
 ## Available Actions
 
@@ -68,11 +68,27 @@ The following actions can be customized:
 
 ## Multiple Key Bindings
 
-Each action can have multiple key bindings. For example:
+Each action can have single or multiple key bindings. You have complete flexibility:
+
+**Single Key**:
 ```json
-"up": ["up", "k", "w"]
+"checkout": ["C"]
 ```
-This allows any of `↑`, `k`, or `w` to move the cursor up.
+Only `C` will trigger checkout.
+
+**Multiple Keys**:
+```json
+"submit": ["P", "shift+s", "ctrl+enter"]
+```
+Any of `P`, `shift+s`, or `ctrl+enter` will trigger submit.
+
+**Mix Single and Multiple**:
+```json
+"key_mappings": {
+  "checkout": ["C"],                    // Single alternative
+  "submit": ["P", "shift+s"]            // Multiple alternatives
+}
+```
 
 ## Default Key Bindings
 
@@ -100,9 +116,9 @@ Only customize specific actions with alternative keys:
 ```json
 {
   "key_mappings": {
-    "checkout": ["c", "C"],
-    "resume": ["r", "R"],
-    "submit": ["p", "P", "shift+p"]
+    "checkout": ["C"],
+    "resume": ["R"],
+    "submit": ["P", "shift+s"]
   }
 }
 ```
