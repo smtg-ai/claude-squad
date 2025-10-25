@@ -355,6 +355,16 @@ func (i *Instance) SetTitle(title string) error {
 	return nil
 }
 
+// SetProgram sets the program for the instance. Returns an error if the instance has started.
+// We can't change the program once it's been used for a tmux session.
+func (i *Instance) SetProgram(program string) error {
+	if i.started {
+		return fmt.Errorf("cannot change program of a started instance")
+	}
+	i.Program = program
+	return nil
+}
+
 func (i *Instance) Paused() bool {
 	return i.Status == Paused
 }
