@@ -36,6 +36,8 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// DefaultBranch is the name of the default branch (e.g., "main", "master"). If empty, auto-detects.
+	DefaultBranch string `json:"default_branch,omitempty"`
 }
 
 // DefaultConfig returns the default configuration
@@ -58,6 +60,7 @@ func DefaultConfig() *Config {
 			}
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
+		DefaultBranch: "", // Empty means auto-detect
 	}
 }
 

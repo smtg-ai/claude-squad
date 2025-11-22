@@ -25,6 +25,10 @@ const (
 	KeyPrompt // New key for entering a prompt
 	KeyHelp   // Key for showing help screen
 
+	// Main branch creation keys
+	KeyNewFromMain    // New key for creating instance from main branch
+	KeyPromptFromMain // New key for creating instance with prompt from main branch
+
 	// Diff keybindings
 	KeyShiftUp
 	KeyShiftDown
@@ -39,9 +43,11 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"shift+up":   KeyShiftUp,
 	"shift+down": KeyShiftDown,
 	"N":          KeyPrompt,
+	"M":          KeyPromptFromMain,
 	"enter":      KeyEnter,
 	"o":          KeyEnter,
 	"n":          KeyNew,
+	"m":          KeyNewFromMain,
 	"D":          KeyKill,
 	"q":          KeyQuit,
 	"tab":        KeyTab,
@@ -96,6 +102,14 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyPrompt: key.NewBinding(
 		key.WithKeys("N"),
 		key.WithHelp("N", "new with prompt"),
+	),
+	KeyNewFromMain: key.NewBinding(
+		key.WithKeys("m"),
+		key.WithHelp("m", "new from main"),
+	),
+	KeyPromptFromMain: key.NewBinding(
+		key.WithKeys("M"),
+		key.WithHelp("M", "new from main with prompt"),
 	),
 	KeyCheckout: key.NewBinding(
 		key.WithKeys("c"),
