@@ -36,6 +36,8 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// DefaultParentBranch is the default parent branch to use when creating new worktrees.
+	DefaultParentBranch string `json:"default_parent_branch"`
 }
 
 // DefaultConfig returns the default configuration
@@ -58,6 +60,7 @@ func DefaultConfig() *Config {
 			}
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
+		DefaultParentBranch: "HEAD", // Default to current behavior
 	}
 }
 
