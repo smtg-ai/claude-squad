@@ -1,6 +1,7 @@
 package app
 
 import (
+	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/session"
 	"claude-squad/ui"
@@ -40,22 +41,22 @@ func (h helpTypeGeneral) toContent() string {
 		"A terminal UI that manages multiple Claude Code (and other local agents) in separate workspaces.",
 		"",
 		headerStyle.Render("Managing:"),
-		keyStyle.Render("n")+descStyle.Render("         - Create a new session"),
-		keyStyle.Render("N")+descStyle.Render("         - Create a new session with a prompt"),
-		keyStyle.Render("D")+descStyle.Render("         - Kill (delete) the selected session"),
-		keyStyle.Render("↑/j, ↓/k")+descStyle.Render("  - Navigate between sessions"),
-		keyStyle.Render("↵/o")+descStyle.Render("       - Attach to the selected session"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyNew].Help().Key)+descStyle.Render("         - Create a new session"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyPrompt].Help().Key)+descStyle.Render("         - Create a new session with a prompt"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyKill].Help().Key)+descStyle.Render("         - Kill (delete) the selected session"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyUp].Help().Key + ", " + keys.GlobalkeyBindings[keys.KeyDown].Help().Key)+descStyle.Render("  - Navigate between sessions"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyEnter].Help().Key)+descStyle.Render("       - Attach to the selected session"),
 		keyStyle.Render("ctrl-q")+descStyle.Render("    - Detach from session"),
 		"",
 		headerStyle.Render("Handoff:"),
-		keyStyle.Render("p")+descStyle.Render("         - Commit and push branch to github"),
-		keyStyle.Render("c")+descStyle.Render("         - Checkout: commit changes and pause session"),
-		keyStyle.Render("r")+descStyle.Render("         - Resume a paused session"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeySubmit].Help().Key)+descStyle.Render("         - Commit and push branch to github"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyCheckout].Help().Key)+descStyle.Render("         - Checkout: commit changes and pause session"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyResume].Help().Key)+descStyle.Render("         - Resume a paused session"),
 		"",
 		headerStyle.Render("Other:"),
-		keyStyle.Render("tab")+descStyle.Render("       - Switch between preview and diff tabs"),
-		keyStyle.Render("shift-↓/↑")+descStyle.Render(" - Scroll in diff view"),
-		keyStyle.Render("q")+descStyle.Render("         - Quit the application"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyTab].Help().Key)+descStyle.Render("       - Switch between preview and diff tabs"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyShiftUp].Help().Key + "/" + keys.GlobalkeyBindings[keys.KeyShiftDown].Help().Key)+descStyle.Render(" - Scroll in diff view"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyQuit].Help().Key)+descStyle.Render("         - Quit the application"),
 	)
 	return content
 }
@@ -71,13 +72,13 @@ func (h helpTypeInstanceStart) toContent() string {
 			lipgloss.NewStyle().Bold(true).Render(h.instance.Program))),
 		"",
 		headerStyle.Render("Managing:"),
-		keyStyle.Render("↵/o")+descStyle.Render("   - Attach to the session to interact with it directly"),
-		keyStyle.Render("tab")+descStyle.Render("   - Switch preview panes to view session diff"),
-		keyStyle.Render("D")+descStyle.Render("     - Kill (delete) the selected session"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyEnter].Help().Key)+descStyle.Render("   - Attach to the session to interact with it directly"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyTab].Help().Key)+descStyle.Render("   - Switch preview panes to view session diff"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyKill].Help().Key)+descStyle.Render("     - Kill (delete) the selected session"),
 		"",
 		headerStyle.Render("Handoff:"),
-		keyStyle.Render("c")+descStyle.Render("     - Checkout this instance's branch"),
-		keyStyle.Render("p")+descStyle.Render("     - Push branch to GitHub to create a PR"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyCheckout].Help().Key)+descStyle.Render("     - Checkout this instance's branch"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeySubmit].Help().Key)+descStyle.Render("     - Push branch to GitHub to create a PR"),
 	)
 	return content
 }
@@ -100,8 +101,8 @@ func (h helpTypeInstanceCheckout) toContent() string {
 		"Feel free to make changes to the branch and commit them. When resuming, the session will continue from where you left off.",
 		"",
 		headerStyle.Render("Commands:"),
-		keyStyle.Render("c")+descStyle.Render(" - Checkout: commit changes locally and pause session"),
-		keyStyle.Render("r")+descStyle.Render(" - Resume a paused session"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyCheckout].Help().Key)+descStyle.Render(" - Checkout: commit changes locally and pause session"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyResume].Help().Key)+descStyle.Render(" - Resume a paused session"),
 	)
 	return content
 }
