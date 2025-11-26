@@ -29,6 +29,8 @@ type helpTypeInstanceAttach struct{}
 
 type helpTypeInstanceCheckout struct{}
 
+type helpTypeInstanceShell struct{}
+
 func helpStart(instance *session.Instance) helpText {
 	return helpTypeInstanceStart{instance: instance}
 }
@@ -105,6 +107,19 @@ func (h helpTypeInstanceCheckout) toContent() string {
 	)
 	return content
 }
+
+func (h helpTypeInstanceShell) toContent() string {
+	content := lipgloss.JoinVertical(lipgloss.Left,
+		titleStyle.Render("Attaching to Shell"),
+		"",
+		"An interactive shell will open in the instance's git worktree directory.",
+		"",
+		"You can inspect files, run commands, or make changes directly in the branch.",
+		"",
+		descStyle.Render("To exit the shell, type ")+keyStyle.Render("exit")+descStyle.Render(" or press ")+keyStyle.Render("ctrl-d"),
+	)
+	return content
+}
 func (h helpTypeGeneral) mask() uint32 {
 	return 1
 }
@@ -117,6 +132,10 @@ func (h helpTypeInstanceAttach) mask() uint32 {
 }
 func (h helpTypeInstanceCheckout) mask() uint32 {
 	return 1 << 3
+}
+
+func (h helpTypeInstanceShell) mask() uint32 {
+	return 1 << 4
 }
 
 var (
