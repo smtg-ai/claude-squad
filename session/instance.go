@@ -103,7 +103,8 @@ func (i *Instance) ToInstanceData() InstanceData {
 }
 
 // FromInstanceData creates a new Instance from serialized data
-func FromInstanceData(data InstanceData) (*Instance, error) {
+// currentAutoYes is the autoYes value from the current cs execution
+func FromInstanceData(data InstanceData, currentAutoYes bool) (*Instance, error) {
 	instance := &Instance{
 		Title:     data.Title,
 		Path:      data.Path,
@@ -131,9 +132,11 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 
 	if instance.Paused() {
 		instance.started = true
+		// Update AutoYes to match current execution
+		instance.AutoYes = currentAutoYes
 		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.AutoYes)
 	} else {
-		if err := instance.Start(false); err != nil {
+		if err := instance.Start(false, currentAutoYes); err != nil {
 			return nil, err
 		}
 	}
@@ -187,9 +190,20 @@ func (i *Instance) SetStatus(status Status) {
 }
 
 // firstTimeSetup is true if this is a new instance. Otherwise, it's one loaded from storage.
-func (i *Instance) Start(firstTimeSetup bool) error {
+// currentAutoYes is the autoYes value from the current cs execution (e.g., from -y flag)
+func (i *Instance) Start(firstTimeSetup bool, currentAutoYes bool) error {
 	if i.Title == "" {
 		return fmt.Errorf("instance title cannot be empty")
+	}
+
+	// Check if we need to restart the session due to autoYes mismatch
+	needsRestart := !firstTimeSetup && i.AutoYes != currentAutoYes
+
+	// Update instance's AutoYes to match current execution
+	if needsRestart {
+		log.InfoLog.Printf("AutoYes mismatch for session %s: stored=%v, current=%v - restarting session",
+			i.Title, i.AutoYes, currentAutoYes)
+		i.AutoYes = currentAutoYes
 	}
 
 	var tmuxSession *tmux.TmuxSession
@@ -197,7 +211,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		// Use existing tmux session (useful for testing)
 		tmuxSession = i.tmuxSession
 	} else {
-		// Create new tmux session
+		// Create new tmux session with current autoYes value
 		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.AutoYes)
 	}
 	i.tmuxSession = tmuxSession
@@ -224,10 +238,22 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	}()
 
 	if !firstTimeSetup {
-		// Reuse existing session
-		if err := tmuxSession.Restore(); err != nil {
-			setupErr = fmt.Errorf("failed to restore existing session: %w", err)
-			return setupErr
+		if needsRestart {
+			// Close existing session and restart with new autoYes setting
+			if err := tmuxSession.Close(); err != nil {
+				log.WarningLog.Printf("failed to close old session %s: %v", i.Title, err)
+			}
+			// Start new session with updated autoYes
+			if err := tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+				setupErr = fmt.Errorf("failed to restart session with new autoYes: %w", err)
+				return setupErr
+			}
+		} else {
+			// Reuse existing session (autoYes hasn't changed)
+			if err := tmuxSession.Restore(); err != nil {
+				setupErr = fmt.Errorf("failed to restore existing session: %w", err)
+				return setupErr
+			}
 		}
 	} else {
 		// Setup git worktree first

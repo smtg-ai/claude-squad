@@ -122,8 +122,8 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 
-	// Load saved instances
-	instances, err := storage.LoadInstances()
+	// Load saved instances (with current autoYes setting)
+	instances, err := storage.LoadInstances(autoYes)
 	if err != nil {
 		fmt.Printf("Failed to load instances: %v\n", err)
 		os.Exit(1)
@@ -133,9 +133,6 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	for _, instance := range instances {
 		// Call the finalizer immediately.
 		h.list.AddInstance(instance)()
-		if autoYes {
-			instance.AutoYes = true
-		}
 	}
 
 	return h
@@ -330,7 +327,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
-			if err := instance.Start(true); err != nil {
+			if err := instance.Start(true, m.autoYes); err != nil {
 				m.list.Kill()
 				m.state = stateDefault
 				return m, m.handleError(err)

@@ -72,7 +72,8 @@ func (s *Storage) SaveInstances(instances []*Instance) error {
 }
 
 // LoadInstances loads the list of instances from disk
-func (s *Storage) LoadInstances() ([]*Instance, error) {
+// currentAutoYes is the autoYes value from the current cs execution
+func (s *Storage) LoadInstances(currentAutoYes bool) ([]*Instance, error) {
 	jsonData := s.state.GetInstances()
 
 	var instancesData []InstanceData
@@ -82,7 +83,7 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 
 	instances := make([]*Instance, len(instancesData))
 	for i, data := range instancesData {
-		instance, err := FromInstanceData(data)
+		instance, err := FromInstanceData(data, currentAutoYes)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create instance %s: %w", data.Title, err)
 		}
@@ -94,7 +95,7 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 
 // DeleteInstance removes an instance from storage
 func (s *Storage) DeleteInstance(title string) error {
-	instances, err := s.LoadInstances()
+	instances, err := s.LoadInstances(false) // false = don't change autoYes
 	if err != nil {
 		return fmt.Errorf("failed to load instances: %w", err)
 	}
@@ -119,7 +120,7 @@ func (s *Storage) DeleteInstance(title string) error {
 
 // UpdateInstance updates an existing instance in storage
 func (s *Storage) UpdateInstance(instance *Instance) error {
-	instances, err := s.LoadInstances()
+	instances, err := s.LoadInstances(false) // false = don't change autoYes
 	if err != nil {
 		return fmt.Errorf("failed to load instances: %w", err)
 	}
