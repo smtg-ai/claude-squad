@@ -114,6 +114,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		CreatedAt: data.CreatedAt,
 		UpdatedAt: data.UpdatedAt,
 		Program:   data.Program,
+		AutoYes:   data.AutoYes,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,
