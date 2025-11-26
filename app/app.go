@@ -475,6 +475,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			Title:   "",
 			Path:    ".",
 			Program: m.program,
+			AutoYes: m.autoYes,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -496,6 +497,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			Title:   "",
 			Path:    ".",
 			Program: m.program,
+			AutoYes: m.autoYes,
 		})
 		if err != nil {
 			return m, m.handleError(err)

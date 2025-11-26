@@ -69,6 +69,12 @@ func (g *GitWorktree) setupFromExistingBranch() error {
 		return fmt.Errorf("failed to create worktree from branch %s: %w", g.branchName, err)
 	}
 
+	// Setup .claude directory symlink to share settings with source repository
+	if err := g.setupClaudeDirectory(); err != nil {
+		log.WarningLog.Printf("failed to setup .claude directory for worktree: %v", err)
+		// Don't fail the whole setup if this fails, just log a warning
+	}
+
 	return nil
 }
 
@@ -112,6 +118,12 @@ func (g *GitWorktree) setupNewWorktree() error {
 	// TODO: we might want to give an option to use main/master instead of the current branch.
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, headCommit); err != nil {
 		return fmt.Errorf("failed to create worktree from commit %s: %w", headCommit, err)
+	}
+
+	// Setup .claude directory symlink to share settings with source repository
+	if err := g.setupClaudeDirectory(); err != nil {
+		log.WarningLog.Printf("failed to setup .claude directory for worktree: %v", err)
+		// Don't fail the whole setup if this fails, just log a warning
 	}
 
 	return nil
@@ -245,5 +257,33 @@ func CleanupWorktrees() error {
 		return fmt.Errorf("failed to prune worktrees: %w", err)
 	}
 
+	return nil
+}
+
+// setupClaudeDirectory creates a symlink to the source repository's .claude directory
+// so that worktrees can share Claude Code settings and hooks
+func (g *GitWorktree) setupClaudeDirectory() error {
+	sourceClaudeDir := filepath.Join(g.repoPath, ".claude")
+	worktreeClaudeDir := filepath.Join(g.worktreePath, ".claude")
+
+	// Check if source repository has .claude directory
+	if _, err := os.Stat(sourceClaudeDir); os.IsNotExist(err) {
+		// Source doesn't have .claude directory, nothing to link
+		return nil
+	}
+
+	// Remove worktree .claude directory if it exists (it might be a file or directory)
+	if _, err := os.Lstat(worktreeClaudeDir); err == nil {
+		if err := os.RemoveAll(worktreeClaudeDir); err != nil {
+			return fmt.Errorf("failed to remove existing .claude directory: %w", err)
+		}
+	}
+
+	// Create symlink from worktree to source .claude directory
+	if err := os.Symlink(sourceClaudeDir, worktreeClaudeDir); err != nil {
+		return fmt.Errorf("failed to create .claude symlink: %w", err)
+	}
+
+	log.InfoLog.Printf("created .claude symlink for worktree %s -> %s", worktreeClaudeDir, sourceClaudeDir)
 	return nil
 }

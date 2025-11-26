@@ -31,6 +31,8 @@ type TmuxSession struct {
 	// The name of the tmux session and the sanitized name used for tmux commands.
 	sanitizedName string
 	program       string
+	// autoYes is true if the session should automatically bypass permissions
+	autoYes bool
 	// ptyFactory is used to create a PTY for the tmux session.
 	ptyFactory PtyFactory
 	// cmdExec is used to execute commands in the tmux session.
@@ -67,20 +69,21 @@ func toClaudeSquadTmuxName(str string) string {
 	return fmt.Sprintf("%s%s", TmuxPrefix, str)
 }
 
-// NewTmuxSession creates a new TmuxSession with the given name and program.
-func NewTmuxSession(name string, program string) *TmuxSession {
-	return newTmuxSession(name, program, MakePtyFactory(), cmd.MakeExecutor())
+// NewTmuxSession creates a new TmuxSession with the given name, program, and autoYes flag.
+func NewTmuxSession(name string, program string, autoYes bool) *TmuxSession {
+	return newTmuxSession(name, program, autoYes, MakePtyFactory(), cmd.MakeExecutor())
 }
 
 // NewTmuxSessionWithDeps creates a new TmuxSession with provided dependencies for testing.
-func NewTmuxSessionWithDeps(name string, program string, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
-	return newTmuxSession(name, program, ptyFactory, cmdExec)
+func NewTmuxSessionWithDeps(name string, program string, autoYes bool, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
+	return newTmuxSession(name, program, autoYes, ptyFactory, cmdExec)
 }
 
-func newTmuxSession(name string, program string, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
+func newTmuxSession(name string, program string, autoYes bool, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
 	return &TmuxSession{
 		sanitizedName: toClaudeSquadTmuxName(name),
 		program:       program,
+		autoYes:       autoYes,
 		ptyFactory:    ptyFactory,
 		cmdExec:       cmdExec,
 	}
@@ -94,8 +97,16 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
 	}
 
-	// Create a new detached tmux session and start claude in it
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
+	// Build the command to run in the tmux session
+	programCmd := t.program
+	// If autoYes is enabled and program is claude, add the --permission-mode bypassPermissions flag
+	if t.autoYes && strings.HasSuffix(t.program, ProgramClaude) {
+		programCmd = t.program + " --permission-mode bypassPermissions"
+	}
+
+	// Create a new detached tmux session and start the program in it
+	// Use sh -c to properly handle program arguments
+	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, "sh", "-c", programCmd)
 
 	ptmx, err := t.ptyFactory.Start(cmd)
 	if err != nil {
