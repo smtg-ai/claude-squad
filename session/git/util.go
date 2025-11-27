@@ -84,3 +84,48 @@ func findGitRepoRoot(path string) (string, error) {
 		currentPath = parent
 	}
 }
+
+// getMainRepoPath returns the path to the main repository from a worktree
+// This uses 'git rev-parse --git-common-dir' which returns the main repo's .git directory
+func getMainRepoPath(worktreePath string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--git-common-dir")
+	cmd.Dir = worktreePath
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get git common dir: %w", err)
+	}
+	gitDir := strings.TrimSpace(string(output))
+
+	// The output is the .git directory, we need the parent (repo root)
+	// Handle both absolute and relative paths
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(worktreePath, gitDir)
+	}
+	// Clean the path to resolve any ".." components
+	gitDir = filepath.Clean(gitDir)
+
+	// Return the parent directory of .git
+	return filepath.Dir(gitDir), nil
+}
+
+// getCurrentBranchFromWorktree returns the current branch name of the worktree
+func getCurrentBranchFromWorktree(worktreePath string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = worktreePath
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current branch: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// getHeadCommitSHA returns the HEAD commit SHA of the worktree
+func getHeadCommitSHA(worktreePath string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	cmd.Dir = worktreePath
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get HEAD commit SHA: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}

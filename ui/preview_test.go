@@ -71,7 +71,7 @@ func setupTestEnvironment(t *testing.T, cmdExec cmd_test.MockCmdExec) *testSetup
 	// Create cleanup function
 	cleanupFn := func() {
 		if instance != nil {
-			_ = instance.Kill() // Ignore errors during cleanup
+			_ = instance.Kill(false) // Ignore errors during cleanup
 		}
 		log.Close()
 	}

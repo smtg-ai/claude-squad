@@ -62,6 +62,42 @@ func (g *GitWorktree) GetSubmodulesData() []SubmoduleWorktreeData {
 	return data
 }
 
+// NewGitWorktreeFromExisting creates a GitWorktree instance that references an existing worktree
+// This is used when multiple sessions share the same worktree
+func NewGitWorktreeFromExisting(existingWorktreePath string, sessionName string) (*GitWorktree, error) {
+	// Get the main repository path from the worktree
+	// For worktrees, 'git rev-parse --git-common-dir' returns the path to the main repo's .git
+	repoPath, err := getMainRepoPath(existingWorktreePath)
+	if err != nil {
+		// Fallback to findGitRepoRoot if we can't get the main repo path
+		repoPath, err = findGitRepoRoot(existingWorktreePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find git repo root: %w", err)
+		}
+	}
+
+	// Get the branch name from the worktree
+	branchName, err := getCurrentBranchFromWorktree(existingWorktreePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get branch name: %w", err)
+	}
+
+	// Get base commit SHA
+	baseCommitSHA, err := getHeadCommitSHA(existingWorktreePath)
+	if err != nil {
+		log.ErrorLog.Printf("failed to get base commit SHA: %v", err)
+		// Not fatal, continue without it
+	}
+
+	return &GitWorktree{
+		repoPath:      repoPath,
+		worktreePath:  existingWorktreePath,
+		sessionName:   sessionName,
+		branchName:    branchName,
+		baseCommitSHA: baseCommitSHA,
+	}, nil
+}
+
 // NewGitWorktree creates a new GitWorktree instance
 func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, branchname string, err error) {
 	cfg := config.LoadConfig()

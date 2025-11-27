@@ -269,15 +269,15 @@ func (l *List) Down() {
 	}
 }
 
-// Kill selects the next item in the list.
-func (l *List) Kill() {
+// Kill removes the selected instance. If keepWorktree is true, the worktree is preserved.
+func (l *List) Kill(keepWorktree bool) {
 	if len(l.items) == 0 {
 		return
 	}
 	targetInstance := l.items[l.selectedIdx]
 
 	// Kill the tmux session
-	if err := targetInstance.Kill(); err != nil {
+	if err := targetInstance.Kill(keepWorktree); err != nil {
 		log.ErrorLog.Printf("could not kill instance: %v", err)
 	}
 

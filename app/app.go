@@ -44,6 +44,8 @@ const (
 	stateConfirm
 	// stateSelectProgram is the state when the user is selecting a program for new instance.
 	stateSelectProgram
+	// stateSelectWorktree is the state when the user is selecting a worktree for new instance.
+	stateSelectWorktree
 )
 
 // SupportedPrograms is the list of supported AI assistant programs
@@ -106,6 +108,12 @@ type home struct {
 	selectionOverlay *overlay.SelectionOverlay
 	// selectedProgram stores the program selected for new instance
 	selectedProgram string
+	// worktreeSelectionOverlay displays worktree selection modal
+	worktreeSelectionOverlay *overlay.SelectionOverlay
+	// selectedWorktreePath stores the worktree path selected for new instance (empty for new worktree)
+	selectedWorktreePath string
+	// worktreeOptions stores the worktree paths corresponding to selection options
+	worktreeOptions []string
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -327,7 +335,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			m.state = stateDefault
 			m.promptAfterName = false
-			m.list.Kill()
+			m.list.Kill(false)
 			return m, tea.Sequence(
 				tea.WindowSize(),
 				func() tea.Msg {
@@ -346,7 +354,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 
 			if err := instance.Start(true); err != nil {
-				m.list.Kill()
+				m.list.Kill(false)
 				m.state = stateDefault
 				return m, m.handleError(err)
 			}
@@ -393,7 +401,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(err)
 			}
 		case tea.KeyEsc:
-			m.list.Kill()
+			m.list.Kill(false)
 			m.state = stateDefault
 			m.instanceChanged()
 
@@ -466,15 +474,76 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, nil
 			}
 
-			// Create new instance with selected program
+			// Store selected program and show worktree selection
 			m.selectedProgram = selectedProgram
+
+			// Build worktree options: "[Create new worktree]" + existing worktrees from running instances
+			options := []string{"[Create new worktree]"}
+			m.worktreeOptions = []string{""} // Empty string means create new worktree
+			seenWorktrees := make(map[string]bool)
+
+			// Collect existing worktrees from running instances (deduplicated)
+			for _, inst := range m.list.GetInstances() {
+				if inst.Started() && !inst.Paused() {
+					worktree, err := inst.GetGitWorktree()
+					if err != nil {
+						continue
+					}
+					worktreePath := worktree.GetWorktreePath()
+					// Skip if already added (deduplication)
+					if seenWorktrees[worktreePath] {
+						continue
+					}
+					seenWorktrees[worktreePath] = true
+
+					branchName := worktree.GetBranchName()
+					repoName := worktree.GetRepoName()
+					// Display format: "branch (repo)"
+					displayName := fmt.Sprintf("%s (%s)", branchName, repoName)
+					options = append(options, displayName)
+					m.worktreeOptions = append(m.worktreeOptions, worktreePath)
+				}
+			}
+
+			m.worktreeSelectionOverlay = overlay.NewSelectionOverlay("Select Worktree", options)
+			m.worktreeSelectionOverlay.SetWidth(60)
+			m.state = stateSelectWorktree
+			return m, nil
+		}
+		return m, nil
+	}
+
+	// Handle worktree selection state
+	if m.state == stateSelectWorktree {
+		shouldClose := m.worktreeSelectionOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			selectedIdx := m.worktreeSelectionOverlay.GetSelectedIndex()
+			m.worktreeSelectionOverlay = nil
+
+			// If user cancelled (pressed Esc), return to default state
+			if selectedIdx < 0 {
+				m.state = stateDefault
+				m.promptAfterName = false
+				m.selectedProgram = ""
+				m.worktreeOptions = nil
+				return m, nil
+			}
+
+			// Get selected worktree path (empty means create new)
+			m.selectedWorktreePath = m.worktreeOptions[selectedIdx]
+			m.worktreeOptions = nil
+
+			// Create new instance with selected program and worktree
 			instance, err := session.NewInstance(session.InstanceOptions{
-				Title:   "",
-				Path:    ".",
-				Program: selectedProgram,
+				Title:            "",
+				Path:             ".",
+				Program:          m.selectedProgram,
+				ExistingWorktree: m.selectedWorktreePath,
 			})
 			if err != nil {
 				m.state = stateDefault
+				m.selectedProgram = ""
+				m.selectedWorktreePath = ""
 				return m, m.handleError(err)
 			}
 
@@ -561,6 +630,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 
+		// Count how many instances share this worktree
+		worktreeRefCount := m.countWorktreeRefs(selected)
+
 		// Create the kill action as a tea.Cmd
 		killAction := func() tea.Msg {
 			// Get worktree and check if branch is checked out
@@ -583,8 +655,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return err
 			}
 
-			// Then kill the instance
-			m.list.Kill()
+			// Kill the instance, keep worktree if other instances are using it
+			m.list.Kill(worktreeRefCount > 1)
 			return instanceChangedMsg{}
 		}
 
@@ -620,9 +692,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 
+		// Count how many instances share this worktree
+		worktreeRefCount := m.countWorktreeRefs(selected)
+
 		// Show help screen before pausing
 		m.showHelpScreen(helpTypeInstanceCheckout{}, func() {
-			if err := selected.Pause(); err != nil {
+			// Keep worktree if other instances are using it
+			if err := selected.Pause(worktreeRefCount > 1); err != nil {
 				m.handleError(err)
 			}
 			m.instanceChanged()
@@ -711,6 +787,30 @@ var tickUpdateMetadataCmd = func() tea.Msg {
 	return tickUpdateMetadataMessage{}
 }
 
+// countWorktreeRefs counts how many instances are using the same worktree as the given instance
+func (m *home) countWorktreeRefs(instance *session.Instance) int {
+	worktree, err := instance.GetGitWorktree()
+	if err != nil {
+		return 1
+	}
+	worktreePath := worktree.GetWorktreePath()
+
+	count := 0
+	for _, inst := range m.list.GetInstances() {
+		if !inst.Started() {
+			continue
+		}
+		instWorktree, err := inst.GetGitWorktree()
+		if err != nil {
+			continue
+		}
+		if instWorktree.GetWorktreePath() == worktreePath {
+			count++
+		}
+	}
+	return count
+}
+
 // handleError handles all errors which get bubbled up to the app. sets the error message. We return a callback tea.Cmd that returns a hideErrMsg message
 // which clears the error message after 3 seconds.
 func (m *home) handleError(err error) tea.Cmd {
@@ -783,6 +883,11 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("selection overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.selectionOverlay.Render(), mainView, true, true)
+	} else if m.state == stateSelectWorktree {
+		if m.worktreeSelectionOverlay == nil {
+			log.ErrorLog.Printf("worktree selection overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.worktreeSelectionOverlay.Render(), mainView, true, true)
 	}
 
 	return mainView
