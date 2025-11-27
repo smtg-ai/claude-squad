@@ -23,6 +23,7 @@ const ProgramClaude = "claude"
 
 const ProgramAider = "aider"
 const ProgramGemini = "gemini"
+const ProgramDroid = "droid"
 
 // TmuxSession represents a managed tmux session
 type TmuxSession struct {
@@ -186,6 +187,59 @@ func (t *TmuxSession) Start(workDir string) error {
 				sleepDuration = time.Second
 			}
 		}
+	} else if strings.HasPrefix(t.program, ProgramDroid) {
+		// Factory CLI (droid) - wait for startup and switch to Auto (Medium) mode
+		maxWaitTime := 45 * time.Second
+		startTime := time.Now()
+		sleepDuration := 100 * time.Millisecond
+
+		// Wait for droid to start (look for mode indicator in status bar)
+		for time.Since(startTime) < maxWaitTime {
+			time.Sleep(sleepDuration)
+			content, err := t.CapturePaneContent()
+			if err != nil {
+				continue
+			}
+
+			// Check if droid is ready (has mode indicator)
+			if strings.Contains(content, "shift+tab to cycle modes") ||
+				strings.Contains(content, "Auto (High)") ||
+				strings.Contains(content, "Auto (Medium)") ||
+				strings.Contains(content, "Auto (Low)") ||
+				strings.Contains(content, "Spec") ||
+				strings.Contains(content, "Normal") {
+
+				// If already in Auto (Medium), we're done
+				if strings.Contains(content, "Auto (Medium)") {
+					break
+				}
+
+				// Send Shift+Tab to cycle through modes until Auto (Medium)
+				// Mode order: Normal -> Spec -> Auto (Low) -> Auto (Medium) -> Auto (High)
+				for i := 0; i < 4; i++ {
+					if err := t.TapShiftTab(); err != nil {
+						log.ErrorLog.Printf("could not send shift+tab to droid: %v", err)
+						break
+					}
+					time.Sleep(300 * time.Millisecond)
+
+					content, err = t.CapturePaneContent()
+					if err != nil {
+						continue
+					}
+					if strings.Contains(content, "Auto (Medium)") {
+						log.InfoLog.Printf("droid switched to Auto (Medium) mode")
+						break
+					}
+				}
+				break
+			}
+
+			sleepDuration = time.Duration(float64(sleepDuration) * 1.2)
+			if sleepDuration > time.Second {
+				sleepDuration = time.Second
+			}
+		}
 	}
 	return nil
 }
@@ -227,6 +281,15 @@ func (t *TmuxSession) TapEnter() error {
 	return nil
 }
 
+// TapShiftTab sends a Shift+Tab keystroke to the tmux pane (ESC [ Z).
+func (t *TmuxSession) TapShiftTab() error {
+	_, err := t.ptmx.Write([]byte{0x1b, '[', 'Z'})
+	if err != nil {
+		return fmt.Errorf("error sending shift+tab keystroke to PTY: %w", err)
+	}
+	return nil
+}
+
 // TapDAndEnter sends 'D' followed by an enter keystroke to the tmux pane.
 func (t *TmuxSession) TapDAndEnter() error {
 	_, err := t.ptmx.Write([]byte{0x44, 0x0D})
@@ -250,13 +313,17 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 		return false, false
 	}
 
-	// Only set hasPrompt for claude and aider. Use these strings to check for a prompt.
+	// Only set hasPrompt for claude, aider, gemini, and droid. Use these strings to check for a prompt.
 	if t.program == ProgramClaude {
 		hasPrompt = strings.Contains(content, "No, and tell Claude what to do differently")
 	} else if strings.HasPrefix(t.program, ProgramAider) {
 		hasPrompt = strings.Contains(content, "(Y)es/(N)o/(D)on't ask again")
 	} else if strings.HasPrefix(t.program, ProgramGemini) {
 		hasPrompt = strings.Contains(content, "Yes, allow once")
+	} else if strings.HasPrefix(t.program, ProgramDroid) {
+		// Factory CLI (droid) prompts for confirmation on tool calls
+		hasPrompt = strings.Contains(content, "Yes, allow") &&
+			strings.Contains(content, "No, cancel")
 	}
 
 	if !bytes.Equal(t.monitor.hash(content), t.monitor.prevOutputHash) {
