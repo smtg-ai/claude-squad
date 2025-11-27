@@ -46,6 +46,8 @@ const (
 	stateSelectProgram
 	// stateSelectWorktree is the state when the user is selecting a worktree for new instance.
 	stateSelectWorktree
+	// stateInput is the state when the user is typing input to send to the current session.
+	stateInput
 )
 
 // SupportedPrograms is the list of supported AI assistant programs
@@ -449,6 +451,77 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle input mode state - forward keys directly to tmux session
+	if m.state == stateInput {
+		// ctrl+q exits input mode
+		if msg.String() == "ctrl+q" {
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, nil
+		}
+
+		// Check if instance is still valid, exit input mode if not
+		selected := m.list.GetSelectedInstance()
+		if selected == nil || selected.Paused() || !selected.TmuxAlive() {
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, nil
+		}
+
+		// Forward keys to the tmux session
+		key := msg.String()
+		// Convert special keys to their terminal sequences
+		switch key {
+		case "enter":
+			key = "\r"
+		case "tab":
+			key = "\t"
+		case "backspace":
+			key = "\x7f"
+		case "delete":
+			key = "\x1b[3~"
+		case "escape", "esc":
+			key = "\x1b"
+		case "space":
+			key = " "
+		case "up":
+			key = "\x1b[A"
+		case "down":
+			key = "\x1b[B"
+		case "right":
+			key = "\x1b[C"
+		case "left":
+			key = "\x1b[D"
+		case "home":
+			key = "\x1b[H"
+		case "end":
+			key = "\x1b[F"
+		// Ctrl combinations
+		case "ctrl+c":
+			key = "\x03"
+		case "ctrl+d":
+			key = "\x04"
+		case "ctrl+z":
+			key = "\x1a"
+		case "ctrl+a":
+			key = "\x01"
+		case "ctrl+e":
+			key = "\x05"
+		case "ctrl+u":
+			key = "\x15"
+		case "ctrl+k":
+			key = "\x0b"
+		case "ctrl+l":
+			key = "\x0c"
+		case "ctrl+w":
+			key = "\x17"
+		}
+		if err := selected.SendKeys(key); err != nil {
+			return m, m.handleError(err)
+		}
+		return m, nil
+	}
+
 	// Handle confirmation state
 	if m.state == stateConfirm {
 		shouldClose := m.confirmationOverlay.HandleKeyPress(msg)
@@ -713,6 +786,25 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(err)
 		}
 		return m, tea.WindowSize()
+	case keys.KeyInput:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil || selected.Paused() || !selected.TmuxAlive() {
+			return m, nil
+		}
+		// Switch to preview tab if in diff tab
+		if m.tabbedWindow.IsInDiffTab() {
+			m.tabbedWindow.Toggle()
+			m.menu.SetInDiffTab(false)
+		}
+		// Exit scroll mode if active
+		if m.tabbedWindow.IsPreviewInScrollMode() {
+			if err := m.tabbedWindow.ResetPreviewToNormalMode(selected); err != nil {
+				return m, m.handleError(err)
+			}
+		}
+		m.state = stateInput
+		m.menu.SetState(ui.StateInput)
+		return m, nil
 	case keys.KeyEnter:
 		if m.list.NumInstances() == 0 {
 			return m, nil
