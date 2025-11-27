@@ -87,6 +87,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 			SessionName:   i.Title,
 			BranchName:    i.gitWorktree.GetBranchName(),
 			BaseCommitSHA: i.gitWorktree.GetBaseCommitSHA(),
+			Submodules:    i.gitWorktree.GetSubmodulesData(),
 		}
 	}
 
@@ -120,6 +121,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 			data.Worktree.SessionName,
 			data.Worktree.BranchName,
 			data.Worktree.BaseCommitSHA,
+			data.Worktree.Submodules,
 		),
 		diffStats: &git.DiffStats{
 			Added:   data.DiffStats.Added,

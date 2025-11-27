@@ -29,16 +29,37 @@ type GitWorktree struct {
 	branchName string
 	// Base commit hash for the worktree
 	baseCommitSHA string
+	// Submodule worktrees
+	submodules []*SubmoduleWorktree
 }
 
-func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string) *GitWorktree {
+func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string, submodulesData []SubmoduleWorktreeData) *GitWorktree {
+	var submodules []*SubmoduleWorktree
+	for _, data := range submodulesData {
+		submodules = append(submodules, NewSubmoduleWorktreeFromStorage(data))
+	}
 	return &GitWorktree{
 		repoPath:      repoPath,
 		worktreePath:  worktreePath,
 		sessionName:   sessionName,
 		branchName:    branchName,
 		baseCommitSHA: baseCommitSHA,
+		submodules:    submodules,
 	}
+}
+
+// GetSubmodules returns the list of submodule worktrees
+func (g *GitWorktree) GetSubmodules() []*SubmoduleWorktree {
+	return g.submodules
+}
+
+// GetSubmodulesData returns serializable data for all submodules
+func (g *GitWorktree) GetSubmodulesData() []SubmoduleWorktreeData {
+	var data []SubmoduleWorktreeData
+	for _, sub := range g.submodules {
+		data = append(data, sub.ToData())
+	}
+	return data
 }
 
 // NewGitWorktree creates a new GitWorktree instance

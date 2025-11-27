@@ -2,6 +2,7 @@ package session
 
 import (
 	"claude-squad/config"
+	"claude-squad/session/git"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -26,11 +27,12 @@ type InstanceData struct {
 
 // GitWorktreeData represents the serializable data of a GitWorktree
 type GitWorktreeData struct {
-	RepoPath      string `json:"repo_path"`
-	WorktreePath  string `json:"worktree_path"`
-	SessionName   string `json:"session_name"`
-	BranchName    string `json:"branch_name"`
-	BaseCommitSHA string `json:"base_commit_sha"`
+	RepoPath      string                       `json:"repo_path"`
+	WorktreePath  string                       `json:"worktree_path"`
+	SessionName   string                       `json:"session_name"`
+	BranchName    string                       `json:"branch_name"`
+	BaseCommitSHA string                       `json:"base_commit_sha"`
+	Submodules    []git.SubmoduleWorktreeData  `json:"submodules,omitempty"`
 }
 
 // DiffStatsData represents the serializable data of a DiffStats

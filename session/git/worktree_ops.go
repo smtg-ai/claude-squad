@@ -69,6 +69,21 @@ func (g *GitWorktree) setupFromExistingBranch() error {
 		return fmt.Errorf("failed to create worktree from branch %s: %w", g.branchName, err)
 	}
 
+	// Handle submodule worktrees (order: main repo first, then submodules)
+	if len(g.submodules) > 0 {
+		// Restore from stored data
+		if err := g.restoreSubmoduleWorktrees(); err != nil {
+			g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath)
+			return fmt.Errorf("failed to restore submodule worktrees: %w", err)
+		}
+	} else {
+		// Setup fresh submodule worktrees
+		if err := g.setupSubmoduleWorktrees(); err != nil {
+			g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath)
+			return fmt.Errorf("failed to setup submodule worktrees: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -114,12 +129,24 @@ func (g *GitWorktree) setupNewWorktree() error {
 		return fmt.Errorf("failed to create worktree from commit %s: %w", headCommit, err)
 	}
 
+	// Setup submodule worktrees (order: main repo first, then submodules)
+	if err := g.setupSubmoduleWorktrees(); err != nil {
+		// Cleanup main worktree if submodule setup fails
+		g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath)
+		return fmt.Errorf("failed to setup submodule worktrees: %w", err)
+	}
+
 	return nil
 }
 
 // Cleanup removes the worktree and associated branch
 func (g *GitWorktree) Cleanup() error {
 	var errs []error
+
+	// Clean up submodule worktrees first (order: submodules first, then main repo)
+	if err := g.cleanupSubmoduleWorktrees(); err != nil {
+		errs = append(errs, fmt.Errorf("failed to cleanup submodule worktrees: %w", err))
+	}
 
 	// Check if worktree path exists before attempting removal
 	if _, err := os.Stat(g.worktreePath); err == nil {
@@ -164,6 +191,11 @@ func (g *GitWorktree) Cleanup() error {
 
 // Remove removes the worktree but keeps the branch
 func (g *GitWorktree) Remove() error {
+	// Remove submodule worktrees first (order: submodules first, then main repo)
+	if err := g.removeSubmoduleWorktrees(); err != nil {
+		return fmt.Errorf("failed to remove submodule worktrees: %w", err)
+	}
+
 	// Remove the worktree using git command
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath); err != nil {
 		return fmt.Errorf("failed to remove worktree: %w", err)
@@ -245,5 +277,91 @@ func CleanupWorktrees() error {
 		return fmt.Errorf("failed to prune worktrees: %w", err)
 	}
 
+	return nil
+}
+
+// setupSubmoduleWorktrees creates worktrees for all submodules in a new session
+func (g *GitWorktree) setupSubmoduleWorktrees() error {
+	// Get list of submodules from the original repo (submodule info is in .gitmodules)
+	submodules, err := GetSubmodules(g.repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to get submodules: %w", err)
+	}
+
+	if len(submodules) == 0 {
+		return nil
+	}
+
+	// Create worktree for each submodule
+	for _, sub := range submodules {
+		subWorktree := NewSubmoduleWorktree(sub, g.repoPath, g.worktreePath, g.branchName)
+		if err := subWorktree.Setup(); err != nil {
+			// Cleanup already created submodule worktrees on failure
+			g.cleanupSubmoduleWorktrees()
+			return fmt.Errorf("failed to setup submodule worktree for %s: %w", sub.Path, err)
+		}
+		g.submodules = append(g.submodules, subWorktree)
+	}
+
+	return nil
+}
+
+// restoreSubmoduleWorktrees restores worktrees for submodules from stored data
+func (g *GitWorktree) restoreSubmoduleWorktrees() error {
+	if len(g.submodules) == 0 {
+		return nil
+	}
+
+	// Restore each submodule worktree
+	for _, sub := range g.submodules {
+		if err := sub.Restore(); err != nil {
+			// Cleanup already restored submodule worktrees on failure
+			g.removeSubmoduleWorktrees()
+			return fmt.Errorf("failed to restore submodule worktree for %s: %w", sub.info.Path, err)
+		}
+	}
+
+	return nil
+}
+
+// cleanupSubmoduleWorktrees removes all submodule worktrees and their branches
+func (g *GitWorktree) cleanupSubmoduleWorktrees() error {
+	if len(g.submodules) == 0 {
+		return nil
+	}
+
+	var errs []error
+	// Clean up in reverse order (last added first)
+	for i := len(g.submodules) - 1; i >= 0; i-- {
+		sub := g.submodules[i]
+		if err := sub.Cleanup(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to cleanup submodule %s: %w", sub.info.Path, err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return g.combineErrors(errs)
+	}
+	return nil
+}
+
+// removeSubmoduleWorktrees removes all submodule worktrees but keeps their branches
+func (g *GitWorktree) removeSubmoduleWorktrees() error {
+	if len(g.submodules) == 0 {
+		return nil
+	}
+
+	var errs []error
+	// Remove in reverse order (last added first)
+	for i := len(g.submodules) - 1; i >= 0; i-- {
+		sub := g.submodules[i]
+		if err := sub.Remove(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to remove submodule worktree %s: %w", sub.info.Path, err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return g.combineErrors(errs)
+	}
 	return nil
 }

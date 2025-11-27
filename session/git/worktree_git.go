@@ -26,14 +26,25 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 		return err
 	}
 
-	// Check if there are any changes to commit
+	// Commit and push submodule changes first (order: submodules first, then main repo)
+	for _, sub := range g.submodules {
+		if err := sub.CommitChanges(commitMessage); err != nil {
+			log.ErrorLog.Printf("failed to commit submodule %s: %v", sub.info.Path, err)
+		}
+		if err := sub.PushChanges(); err != nil {
+			log.ErrorLog.Printf("failed to push submodule %s: %v", sub.info.Path, err)
+			// Continue with other submodules
+		}
+	}
+
+	// Check if there are any changes to commit in main repo
 	isDirty, err := g.IsDirty()
 	if err != nil {
 		return fmt.Errorf("failed to check for changes: %w", err)
 	}
 
 	if isDirty {
-		// Stage all changes
+		// Stage all changes (including submodule pointer updates)
 		if _, err := g.runGitCommand(g.worktreePath, "add", "."); err != nil {
 			log.ErrorLog.Print(err)
 			return fmt.Errorf("failed to stage changes: %w", err)
@@ -80,14 +91,22 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 
 // CommitChanges commits changes locally without pushing to remote
 func (g *GitWorktree) CommitChanges(commitMessage string) error {
-	// Check if there are any changes to commit
+	// Commit submodule changes first (order: submodules first, then main repo)
+	for _, sub := range g.submodules {
+		if err := sub.CommitChanges(commitMessage); err != nil {
+			log.ErrorLog.Printf("failed to commit submodule %s: %v", sub.info.Path, err)
+			// Continue with other submodules
+		}
+	}
+
+	// Check if there are any changes to commit in main repo
 	isDirty, err := g.IsDirty()
 	if err != nil {
 		return fmt.Errorf("failed to check for changes: %w", err)
 	}
 
 	if isDirty {
-		// Stage all changes
+		// Stage all changes (including submodule pointer updates)
 		if _, err := g.runGitCommand(g.worktreePath, "add", "."); err != nil {
 			log.ErrorLog.Print(err)
 			return fmt.Errorf("failed to stage changes: %w", err)
