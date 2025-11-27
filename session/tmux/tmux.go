@@ -613,6 +613,29 @@ func (t *TmuxSession) CapturePaneContentWithOptions(start, end string) (string, 
 	return string(output), nil
 }
 
+// CursorPosition represents the cursor position in the tmux pane
+type CursorPosition struct {
+	X int
+	Y int
+}
+
+// GetCursorPosition returns the current cursor position in the tmux pane
+func (t *TmuxSession) GetCursorPosition() (*CursorPosition, error) {
+	cmd := exec.Command("tmux", "display-message", "-p", "-t", t.sanitizedName, "#{cursor_x} #{cursor_y}")
+	output, err := t.cmdExec.Output(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cursor position: %w", err)
+	}
+
+	var x, y int
+	_, err = fmt.Sscanf(strings.TrimSpace(string(output)), "%d %d", &x, &y)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse cursor position: %w", err)
+	}
+
+	return &CursorPosition{X: x, Y: y}, nil
+}
+
 // CleanupSessions kills all tmux sessions that start with "session-"
 func CleanupSessions(cmdExec cmd.Executor) error {
 	// First try to list sessions

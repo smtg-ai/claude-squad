@@ -4,9 +4,11 @@ import (
 	"claude-squad/session"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/ansi"
 )
 
 var previewPaneStyle = lipgloss.NewStyle().
@@ -26,6 +28,9 @@ type previewState struct {
 	fallback bool
 	// text is the text displayed in the preview pane
 	text string
+	// cursorX and cursorY store the cursor position (captured at the same time as text)
+	cursorX int
+	cursorY int
 }
 
 func NewPreviewPane() *PreviewPane {
@@ -96,15 +101,23 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 			return err
 		}
 
+		// Get cursor position at the same time as content for synchronization
+		cursorX, cursorY := -1, -1
+		if cursorPos, err := instance.GetCursorPosition(); err == nil && cursorPos != nil {
+			cursorX, cursorY = cursorPos.X, cursorPos.Y
+		}
+
 		// Always update the preview state with content, even if empty
 		// This ensures that newly created instances will display their content immediately
 		if len(content) == 0 && !instance.Started() {
 			p.setFallbackState("Please enter a name for the instance.")
 		} else {
-			// Update the preview state with the current content
+			// Update the preview state with the current content and cursor position
 			p.previewState = previewState{
 				fallback: false,
 				text:     content,
+				cursorX:  cursorX,
+				cursorY:  cursorY,
 			}
 		}
 	}
@@ -174,9 +187,95 @@ func (p *PreviewPane) String() string {
 		}
 	}
 
+	// Render a simulated cursor at the stored cursor position
+	if p.previewState.cursorX >= 0 && p.previewState.cursorY >= 0 {
+		lines = p.insertCursor(lines, p.previewState.cursorX, p.previewState.cursorY)
+	}
+
 	content := strings.Join(lines, "\n")
 	rendered := previewPaneStyle.Width(p.width).Render(content)
 	return rendered
+}
+
+// skipAnsiSequence skips ANSI escape sequence starting at pos and returns the position after it
+func skipAnsiSequence(line string, pos int) int {
+	if pos >= len(line) || line[pos] != ansi.Marker {
+		return pos
+	}
+	pos++
+	for pos < len(line) {
+		if ansi.IsTerminator(rune(line[pos])) {
+			return pos + 1
+		}
+		pos++
+	}
+	return pos
+}
+
+// insertCursor inserts a simulated cursor at the specified visual column position
+// Uses reverse video ANSI escape sequence to highlight the cursor
+func (p *PreviewPane) insertCursor(lines []string, x, y int) []string {
+	if y < 0 || y >= len(lines) {
+		return lines
+	}
+
+	line := lines[y]
+	visualCol := 0
+	bytePos := 0
+
+	// Find the byte position corresponding to visual column x
+	for bytePos < len(line) {
+		// Skip ANSI escape sequences
+		if line[bytePos] == ansi.Marker {
+			bytePos = skipAnsiSequence(line, bytePos)
+			continue
+		}
+
+		// Decode the rune and calculate its width
+		r, size := utf8.DecodeRuneInString(line[bytePos:])
+		if r == utf8.RuneError {
+			bytePos++
+			continue
+		}
+
+		charWidth := ansi.PrintableRuneWidth(string(r))
+		// Treat zero-width visible characters (like tab) as width 1
+		if charWidth == 0 {
+			charWidth = 1
+		}
+		// If cursor is within current character's columns, stop here
+		if visualCol+charWidth > x {
+			break
+		}
+		visualCol += charWidth
+		bytePos += size
+	}
+
+	// If we're beyond the line, show cursor at end
+	if bytePos >= len(line) {
+		lines[y] = line + "\x1b[7m \x1b[0m"
+		return lines
+	}
+
+	// Skip any ANSI sequences at cursor position
+	for bytePos < len(line) && line[bytePos] == ansi.Marker {
+		bytePos = skipAnsiSequence(line, bytePos)
+	}
+
+	// Get the character at cursor position
+	cursorChar := " "
+	nextPos := bytePos
+	if bytePos < len(line) {
+		r, size := utf8.DecodeRuneInString(line[bytePos:])
+		if r != utf8.RuneError {
+			cursorChar = string(r)
+			nextPos = bytePos + size
+		}
+	}
+
+	// Build the line: before cursor + reversed char + after cursor
+	lines[y] = line[:bytePos] + "\x1b[7m" + cursorChar + "\x1b[0m" + line[nextPos:]
+	return lines
 }
 
 // ScrollUp scrolls up in the viewport

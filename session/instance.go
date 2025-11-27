@@ -625,3 +625,11 @@ func (i *Instance) SendKeys(keys string) error {
 	}
 	return i.tmuxSession.SendKeys(keys)
 }
+
+// GetCursorPosition returns the current cursor position in the tmux pane
+func (i *Instance) GetCursorPosition() (*tmux.CursorPosition, error) {
+	if !i.started || i.Status == Paused {
+		return nil, fmt.Errorf("cannot get cursor position for instance that has not been started or is paused")
+	}
+	return i.tmuxSession.GetCursorPosition()
+}
