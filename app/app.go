@@ -42,7 +42,18 @@ const (
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
+	// stateSelectProgram is the state when the user is selecting a program for new instance.
+	stateSelectProgram
 )
+
+// SupportedPrograms is the list of supported AI assistant programs
+var SupportedPrograms = []string{
+	"claude",
+	"aider",
+	"gemini",
+	"codex",
+	"droid",
+}
 
 type home struct {
 	ctx context.Context
@@ -91,6 +102,10 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// selectionOverlay displays program selection modal
+	selectionOverlay *overlay.SelectionOverlay
+	// selectedProgram stores the program selected for new instance
+	selectedProgram string
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -437,6 +452,42 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle program selection state
+	if m.state == stateSelectProgram {
+		shouldClose := m.selectionOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			selectedProgram := m.selectionOverlay.GetSelectedValue()
+			m.selectionOverlay = nil
+
+			// If user cancelled (pressed Esc), return to default state
+			if selectedProgram == "" {
+				m.state = stateDefault
+				m.promptAfterName = false
+				return m, nil
+			}
+
+			// Create new instance with selected program
+			m.selectedProgram = selectedProgram
+			instance, err := session.NewInstance(session.InstanceOptions{
+				Title:   "",
+				Path:    ".",
+				Program: selectedProgram,
+			})
+			if err != nil {
+				m.state = stateDefault
+				return m, m.handleError(err)
+			}
+
+			m.newInstanceFinalizer = m.list.AddInstance(instance)
+			m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+			m.state = stateNew
+			m.menu.SetState(ui.StateNewInstance)
+
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// Exit scrolling mode when ESC is pressed and preview pane is in scrolling mode
 	// Check if Escape key was pressed and we're not in the diff tab (meaning we're in preview tab)
 	// Always check for escape key first to ensure it doesn't get intercepted elsewhere
@@ -471,41 +522,22 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
-		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
-		})
-		if err != nil {
-			return m, m.handleError(err)
-		}
-
-		m.newInstanceFinalizer = m.list.AddInstance(instance)
-		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
-		m.state = stateNew
-		m.menu.SetState(ui.StateNewInstance)
+		// Show program selection overlay
+		m.selectionOverlay = overlay.NewSelectionOverlay("Select AI Assistant", SupportedPrograms)
+		m.selectionOverlay.SetWidth(40)
+		m.state = stateSelectProgram
 		m.promptAfterName = true
-
 		return m, nil
 	case keys.KeyNew:
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
-		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
-		})
-		if err != nil {
-			return m, m.handleError(err)
-		}
-
-		m.newInstanceFinalizer = m.list.AddInstance(instance)
-		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
-		m.state = stateNew
-		m.menu.SetState(ui.StateNewInstance)
-
+		// Show program selection overlay
+		m.selectionOverlay = overlay.NewSelectionOverlay("Select AI Assistant", SupportedPrograms)
+		m.selectionOverlay.SetWidth(40)
+		m.state = stateSelectProgram
+		m.promptAfterName = false
 		return m, nil
 	case keys.KeyUp:
 		m.list.Up()
@@ -746,6 +778,11 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("confirmation overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
+	} else if m.state == stateSelectProgram {
+		if m.selectionOverlay == nil {
+			log.ErrorLog.Printf("selection overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.selectionOverlay.Render(), mainView, true, true)
 	}
 
 	return mainView
