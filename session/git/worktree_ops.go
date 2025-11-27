@@ -365,3 +365,29 @@ func (g *GitWorktree) removeSubmoduleWorktrees() error {
 	}
 	return nil
 }
+
+// detectExistingSubmoduleWorktrees detects existing submodule worktrees for cleanup purposes
+// This is used when creating a GitWorktree from an existing worktree path
+func (g *GitWorktree) detectExistingSubmoduleWorktrees() error {
+	// Get list of submodules from the original repo
+	submodules, err := GetSubmodules(g.repoPath)
+	if err != nil {
+		return fmt.Errorf("failed to get submodules: %w", err)
+	}
+
+	if len(submodules) == 0 {
+		return nil
+	}
+
+	// Check each submodule and create SubmoduleWorktree instances for existing ones
+	for _, sub := range submodules {
+		subWorktree := NewSubmoduleWorktree(sub, g.repoPath, g.worktreePath, g.branchName)
+
+		// Check if the submodule worktree exists
+		if _, err := os.Stat(subWorktree.WorktreePath); err == nil {
+			g.submodules = append(g.submodules, subWorktree)
+		}
+	}
+
+	return nil
+}

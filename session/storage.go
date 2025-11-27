@@ -21,6 +21,7 @@ type InstanceData struct {
 	AutoYes   bool      `json:"auto_yes"`
 
 	Program          string          `json:"program"`
+	TmuxSessionName  string          `json:"tmux_session_name,omitempty"`
 	Worktree         GitWorktreeData `json:"worktree"`
 	DiffStats        DiffStatsData   `json:"diff_stats"`
 	ExistingWorktree string          `json:"existing_worktree,omitempty"`
@@ -96,7 +97,8 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 }
 
 // DeleteInstance removes an instance from storage
-func (s *Storage) DeleteInstance(title string) error {
+// Uses both title and program to uniquely identify an instance
+func (s *Storage) DeleteInstance(title string, program string) error {
 	instances, err := s.LoadInstances()
 	if err != nil {
 		return fmt.Errorf("failed to load instances: %w", err)
@@ -106,7 +108,7 @@ func (s *Storage) DeleteInstance(title string) error {
 	newInstances := make([]*Instance, 0)
 	for _, instance := range instances {
 		data := instance.ToInstanceData()
-		if data.Title != title {
+		if data.Title != title || data.Program != program {
 			newInstances = append(newInstances, instance)
 		} else {
 			found = true
@@ -114,13 +116,14 @@ func (s *Storage) DeleteInstance(title string) error {
 	}
 
 	if !found {
-		return fmt.Errorf("instance not found: %s", title)
+		return fmt.Errorf("instance not found: %s (%s)", title, program)
 	}
 
 	return s.SaveInstances(newInstances)
 }
 
 // UpdateInstance updates an existing instance in storage
+// Uses both title and program to uniquely identify an instance
 func (s *Storage) UpdateInstance(instance *Instance) error {
 	instances, err := s.LoadInstances()
 	if err != nil {
@@ -131,7 +134,7 @@ func (s *Storage) UpdateInstance(instance *Instance) error {
 	found := false
 	for i, existing := range instances {
 		existingData := existing.ToInstanceData()
-		if existingData.Title == data.Title {
+		if existingData.Title == data.Title && existingData.Program == data.Program {
 			instances[i] = instance
 			found = true
 			break
@@ -139,7 +142,7 @@ func (s *Storage) UpdateInstance(instance *Instance) error {
 	}
 
 	if !found {
-		return fmt.Errorf("instance not found: %s", data.Title)
+		return fmt.Errorf("instance not found: %s (%s)", data.Title, data.Program)
 	}
 
 	return s.SaveInstances(instances)

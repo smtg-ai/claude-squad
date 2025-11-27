@@ -62,15 +62,61 @@ const TmuxPrefix = "claudesquad_"
 
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)
 
-func toClaudeSquadTmuxName(str string) string {
-	str = whiteSpaceRegex.ReplaceAllString(str, "")
-	str = strings.ReplaceAll(str, ".", "_") // tmux replaces all . with _
-	return fmt.Sprintf("%s%s", TmuxPrefix, str)
+func toClaudeSquadTmuxName(program string, name string) string {
+	program = whiteSpaceRegex.ReplaceAllString(program, "")
+	program = strings.ReplaceAll(program, ".", "_")
+	name = whiteSpaceRegex.ReplaceAllString(name, "")
+	name = strings.ReplaceAll(name, ".", "_") // tmux replaces all . with _
+	return fmt.Sprintf("%s%s_%s", TmuxPrefix, program, name)
+}
+
+// toLegacyTmuxName generates the old format tmux name (without program)
+// Used for backward compatibility with sessions created before program was added
+func toLegacyTmuxName(name string) string {
+	name = whiteSpaceRegex.ReplaceAllString(name, "")
+	name = strings.ReplaceAll(name, ".", "_")
+	return fmt.Sprintf("%s%s", TmuxPrefix, name)
+}
+
+// DoesSessionExistByName checks if a tmux session exists with the given name
+func DoesSessionExistByName(sanitizedName string) bool {
+	existsCmd := exec.Command("tmux", "has-session", fmt.Sprintf("-t=%s", sanitizedName))
+	return cmd.MakeExecutor().Run(existsCmd) == nil
 }
 
 // NewTmuxSession creates a new TmuxSession with the given name and program.
 func NewTmuxSession(name string, program string) *TmuxSession {
 	return newTmuxSession(name, program, MakePtyFactory(), cmd.MakeExecutor())
+}
+
+// NewTmuxSessionFromStorage creates a TmuxSession using a stored sanitized name.
+// This ensures backward compatibility when loading existing sessions.
+func NewTmuxSessionFromStorage(sanitizedName string, program string) *TmuxSession {
+	return &TmuxSession{
+		sanitizedName: sanitizedName,
+		program:       program,
+		ptyFactory:    MakePtyFactory(),
+		cmdExec:       cmd.MakeExecutor(),
+	}
+}
+
+// NewTmuxSessionWithFallback creates a TmuxSession, trying new format first then legacy format.
+// Used for running sessions without stored TmuxSessionName (upgrade scenario).
+func NewTmuxSessionWithFallback(name string, program string) *TmuxSession {
+	// Try new format first
+	newName := toClaudeSquadTmuxName(program, name)
+	if DoesSessionExistByName(newName) {
+		return NewTmuxSessionFromStorage(newName, program)
+	}
+
+	// Try legacy format (without program)
+	legacyName := toLegacyTmuxName(name)
+	if DoesSessionExistByName(legacyName) {
+		return NewTmuxSessionFromStorage(legacyName, program)
+	}
+
+	// Neither exists, use new format (will fail on restore, but that's expected)
+	return NewTmuxSessionFromStorage(newName, program)
 }
 
 // NewTmuxSessionWithDeps creates a new TmuxSession with provided dependencies for testing.
@@ -80,7 +126,7 @@ func NewTmuxSessionWithDeps(name string, program string, ptyFactory PtyFactory, 
 
 func newTmuxSession(name string, program string, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
 	return &TmuxSession{
-		sanitizedName: toClaudeSquadTmuxName(name),
+		sanitizedName: toClaudeSquadTmuxName(program, name),
 		program:       program,
 		ptyFactory:    ptyFactory,
 		cmdExec:       cmdExec,
@@ -537,6 +583,11 @@ func (t *TmuxSession) DoesSessionExist() bool {
 	// Using "-t name" does a prefix match, which is wrong. `-t=` does an exact match.
 	existsCmd := exec.Command("tmux", "has-session", fmt.Sprintf("-t=%s", t.sanitizedName))
 	return t.cmdExec.Run(existsCmd) == nil
+}
+
+// GetSanitizedName returns the sanitized tmux session name
+func (t *TmuxSession) GetSanitizedName() string {
+	return t.sanitizedName
 }
 
 // CapturePaneContent captures the content of the tmux pane

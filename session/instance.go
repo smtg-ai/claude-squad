@@ -1,6 +1,7 @@
 package session
 
 import (
+	"claude-squad/config"
 	"claude-squad/log"
 	"claude-squad/session/git"
 	"claude-squad/session/tmux"
@@ -82,6 +83,11 @@ func (i *Instance) ToInstanceData() InstanceData {
 		ExistingWorktree: i.existingWorktreePath,
 	}
 
+	// Store tmux session name for backward compatibility
+	if i.tmuxSession != nil {
+		data.TmuxSessionName = i.tmuxSession.GetSanitizedName()
+	}
+
 	// Only include worktree data if gitWorktree is initialized
 	if i.gitWorktree != nil {
 		data.Worktree = GitWorktreeData{
@@ -134,10 +140,31 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		},
 	}
 
+	// Determine program for backward compatibility
+	// If Program is empty (very old sessions), use default from config
+	program := instance.Program
+	if program == "" {
+		program = config.LoadConfig().DefaultProgram
+		instance.Program = program
+	}
+
 	if instance.Paused() {
 		instance.started = true
-		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program)
+		// Use stored tmux session name if available (for backward compatibility)
+		if data.TmuxSessionName != "" {
+			instance.tmuxSession = tmux.NewTmuxSessionFromStorage(data.TmuxSessionName, program)
+		} else {
+			// Old sessions without TmuxSessionName: generate with new format
+			instance.tmuxSession = tmux.NewTmuxSession(instance.Title, program)
+		}
 	} else {
+		// For running instances, use stored name or try fallback to find existing session
+		if data.TmuxSessionName != "" {
+			instance.tmuxSession = tmux.NewTmuxSessionFromStorage(data.TmuxSessionName, program)
+		} else {
+			// Old sessions without TmuxSessionName: try new format, then legacy format
+			instance.tmuxSession = tmux.NewTmuxSessionWithFallback(instance.Title, program)
+		}
 		if err := instance.Start(false); err != nil {
 			return nil, err
 		}

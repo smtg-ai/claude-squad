@@ -724,7 +724,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 
 			// Delete from storage first
-			if err := m.storage.DeleteInstance(selected.Title); err != nil {
+			if err := m.storage.DeleteInstance(selected.Title, selected.Program); err != nil {
 				return err
 			}
 

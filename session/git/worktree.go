@@ -89,13 +89,21 @@ func NewGitWorktreeFromExisting(existingWorktreePath string, sessionName string)
 		// Not fatal, continue without it
 	}
 
-	return &GitWorktree{
+	g := &GitWorktree{
 		repoPath:      repoPath,
 		worktreePath:  existingWorktreePath,
 		sessionName:   sessionName,
 		branchName:    branchName,
 		baseCommitSHA: baseCommitSHA,
-	}, nil
+	}
+
+	// Detect existing submodule worktrees so they can be cleaned up properly
+	if err := g.detectExistingSubmoduleWorktrees(); err != nil {
+		log.ErrorLog.Printf("failed to detect submodule worktrees: %v", err)
+		// Not fatal, continue without submodules
+	}
+
+	return g, nil
 }
 
 // NewGitWorktree creates a new GitWorktree instance
