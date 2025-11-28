@@ -168,3 +168,20 @@ func (g *GitWorktree) GetRepoName() string {
 func (g *GitWorktree) GetBaseCommitSHA() string {
 	return g.baseCommitSHA
 }
+
+// IsManaged returns true if this worktree is managed by claude-squad
+// (i.e., located in the worktrees directory). External directories
+// like the main repo or user-specified paths return false.
+func (g *GitWorktree) IsManaged() bool {
+	worktreesDir, err := getWorktreeDirectory()
+	if err != nil {
+		return false
+	}
+	// Check if worktree path is under the managed worktrees directory
+	rel, err := filepath.Rel(worktreesDir, g.worktreePath)
+	if err != nil {
+		return false
+	}
+	// If relative path starts with "..", it's outside the worktrees directory
+	return len(rel) > 0 && rel[0] != '.'
+}

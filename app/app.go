@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -18,6 +19,9 @@ import (
 )
 
 const GlobalInstanceLimit = 10
+
+// noWorktreeMarker is used to identify the "No worktree" option in worktree selection
+const noWorktreeMarker = "__NO_WORKTREE__"
 
 // Run is the main entrypoint into the application.
 func Run(ctx context.Context, program string, autoYes bool) error {
@@ -550,9 +554,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			// Store selected program and show worktree selection
 			m.selectedProgram = selectedProgram
 
-			// Build worktree options: "[Create new worktree]" + existing worktrees from running instances
-			options := []string{"[Create new worktree]"}
-			m.worktreeOptions = []string{""} // Empty string means create new worktree
+			// Build worktree options: "[No worktree]" + "[Create new worktree]" + existing worktrees from running instances
+			options := []string{"[No worktree (current directory)]", "[Create new worktree]"}
+			m.worktreeOptions = []string{noWorktreeMarker, ""} // Special marker for no worktree, empty string means create new worktree
 			seenWorktrees := make(map[string]bool)
 
 			// Collect existing worktrees from running instances (deduplicated)
@@ -602,9 +606,22 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, nil
 			}
 
-			// Get selected worktree path (empty means create new)
-			m.selectedWorktreePath = m.worktreeOptions[selectedIdx]
+			// Get selected worktree path (empty means create new, noWorktreeMarker means use current directory)
+			selectedOption := m.worktreeOptions[selectedIdx]
 			m.worktreeOptions = nil
+
+			// Check if user selected "No worktree" option - use current directory as existing worktree
+			if selectedOption == noWorktreeMarker {
+				absPath, err := filepath.Abs(".")
+				if err != nil {
+					m.state = stateDefault
+					m.selectedProgram = ""
+					return m, m.handleError(err)
+				}
+				m.selectedWorktreePath = absPath
+			} else {
+				m.selectedWorktreePath = selectedOption
+			}
 
 			// Create new instance with selected program and worktree
 			instance, err := session.NewInstance(session.InstanceOptions{
@@ -768,10 +785,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Count how many instances share this worktree
 		worktreeRefCount := m.countWorktreeRefs(selected)
 
+		// Check if this worktree is managed by claude-squad (in worktrees directory)
+		// External directories (main repo, user paths) should never be deleted
+		isExternalDir := false
+		if worktree, err := selected.GetGitWorktree(); err == nil {
+			isExternalDir = !worktree.IsManaged()
+		}
+
 		// Show help screen before pausing
 		m.showHelpScreen(helpTypeInstanceCheckout{}, func() {
-			// Keep worktree if other instances are using it
-			if err := selected.Pause(worktreeRefCount > 1); err != nil {
+			// Keep worktree if other instances are using it or if it's an external directory
+			if err := selected.Pause(worktreeRefCount > 1 || isExternalDir); err != nil {
 				m.handleError(err)
 			}
 			m.instanceChanged()
