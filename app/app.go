@@ -472,6 +472,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 
+		// Exit scroll mode when typing so user can see input feedback
+		if m.tabbedWindow.IsPreviewInScrollMode() {
+			if err := m.tabbedWindow.ResetPreviewToNormalMode(selected); err != nil {
+				return m, m.handleError(err)
+			}
+		}
+
 		// Forward keys to the tmux session
 		key := msg.String()
 		// Convert special keys to their terminal sequences
