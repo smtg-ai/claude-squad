@@ -134,8 +134,8 @@ func newTmuxSession(name string, program string, ptyFactory PtyFactory, cmdExec 
 }
 
 // Start creates and starts a new tmux session, then attaches to it. Program is the command to run in
-// the session (ex. claude). workdir is the git worktree directory.
-func (t *TmuxSession) Start(workDir string) error {
+// the session (ex. claude). workdir is the git worktree directory. autoYes enables automatic mode switching for supported programs.
+func (t *TmuxSession) Start(workDir string, autoYes bool) error {
 	// Check if the session already exists
 	if t.DoesSessionExist() {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
@@ -233,8 +233,8 @@ func (t *TmuxSession) Start(workDir string) error {
 				sleepDuration = time.Second
 			}
 		}
-	} else if strings.HasPrefix(t.program, ProgramDroid) {
-		// Factory CLI (droid) - wait for startup and switch to Auto (Medium) mode
+	} else if strings.HasPrefix(t.program, ProgramDroid) && autoYes {
+		// Factory CLI (droid) - only switch to Auto (Medium) mode when autoYes is enabled
 		maxWaitTime := 45 * time.Second
 		startTime := time.Now()
 		sleepDuration := 100 * time.Millisecond

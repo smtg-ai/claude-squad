@@ -286,7 +286,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 
 		// Create new session
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath(), i.AutoYes); err != nil {
 			// Cleanup git worktree if tmux session creation fails (only for new worktrees)
 			if i.existingWorktreePath == "" {
 				if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
@@ -522,7 +522,7 @@ func (i *Instance) Resume() error {
 		if err := i.tmuxSession.Restore(); err != nil {
 			log.ErrorLog.Print(err)
 			// If restore fails, fall back to creating new session
-			if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+			if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath(), i.AutoYes); err != nil {
 				log.ErrorLog.Print(err)
 				// Cleanup git worktree if tmux session creation fails (only if we created it)
 				if !worktreeExists {
@@ -536,7 +536,7 @@ func (i *Instance) Resume() error {
 		}
 	} else {
 		// Create new tmux session
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath(), i.AutoYes); err != nil {
 			log.ErrorLog.Print(err)
 			// Cleanup git worktree if tmux session creation fails (only if we created it)
 			if !worktreeExists {
