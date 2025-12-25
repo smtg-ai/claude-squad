@@ -57,7 +57,7 @@ func TestWorkerPool_BasicExecution(t *testing.T) {
 	}
 
 	for _, job := range jobs {
-		if err := pool.Submit(job); err != nil {
+		if err := pool.Submit(context.Background(), job); err != nil {
 			t.Errorf("Failed to submit job: %v", err)
 		}
 	}
@@ -104,7 +104,7 @@ func TestWorkerPool_PriorityHandling(t *testing.T) {
 	}
 
 	for _, job := range jobs {
-		if err := pool.Submit(job); err != nil {
+		if err := pool.Submit(context.Background(), job); err != nil {
 			t.Errorf("Failed to submit job: %v", err)
 		}
 	}
@@ -143,7 +143,7 @@ func TestWorkerPool_ErrorHandling(t *testing.T) {
 	}
 
 	for _, job := range jobs {
-		if err := pool.Submit(job); err != nil {
+		if err := pool.Submit(context.Background(), job); err != nil {
 			t.Errorf("Failed to submit job: %v", err)
 		}
 	}
@@ -195,7 +195,7 @@ func TestWorkerPool_ContextCancellation(t *testing.T) {
 			duration: 10 * time.Second, // Very long
 		}
 
-		if err := pool.Submit(job); err != nil {
+		if err := pool.Submit(context.Background(), job); err != nil {
 			t.Errorf("Failed to submit job: %v", err)
 		}
 	}
@@ -237,7 +237,7 @@ func TestWorkerPool_GracefulShutdown(t *testing.T) {
 			priority: 1,
 			duration: 100 * time.Millisecond,
 		}
-		if err := pool.Submit(job); err != nil {
+		if err := pool.Submit(context.Background(), job); err != nil {
 			t.Errorf("Failed to submit job: %v", err)
 		}
 	}
@@ -278,7 +278,7 @@ func TestWorkerPool_Metrics(t *testing.T) {
 			duration:   time.Duration(10+i*5) * time.Millisecond,
 			shouldFail: i%3 == 0, // Every third job fails
 		}
-		if err := pool.Submit(job); err != nil {
+		if err := pool.Submit(context.Background(), job); err != nil {
 			t.Errorf("Failed to submit job: %v", err)
 		}
 	}
@@ -332,7 +332,7 @@ func TestWorkerPool_WorkerHealth(t *testing.T) {
 			duration: 50 * time.Millisecond,
 		}
 
-		if err := pool.Submit(job); err != nil {
+		if err := pool.Submit(context.Background(), job); err != nil {
 			t.Errorf("Failed to submit job: %v", err)
 		}
 	}
@@ -377,7 +377,7 @@ func TestWorkerPool_ConcurrentSubmit(t *testing.T) {
 					priority: j,
 					duration: 10 * time.Millisecond,
 				}
-				if err := pool.Submit(job); err != nil {
+				if err := pool.Submit(context.Background(), job); err != nil {
 					t.Errorf("Failed to submit job: %v", err)
 				} else {
 					submittedCount.Add(1)
@@ -486,7 +486,7 @@ func BenchmarkWorkerPool(b *testing.B) {
 			priority: i % 10,
 			duration: 1 * time.Millisecond,
 		}
-		pool.Submit(job)
+		pool.Submit(context.Background(), job)
 	}
 
 	go func() {

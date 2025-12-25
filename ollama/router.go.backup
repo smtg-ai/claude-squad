@@ -3,7 +3,6 @@ package ollama
 import (
 	"claude-squad/log"
 	"claude-squad/session"
-	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -162,13 +161,6 @@ func NewTaskRouter(strategy RoutingStrategy) *TaskRouter {
 
 // RegisterModel adds a model instance to the router
 func (tr *TaskRouter) RegisterModel(modelID string, instance *session.Instance) error {
-	if modelID == "" {
-		return fmt.Errorf("model ID cannot be empty")
-	}
-	if instance == nil {
-		return fmt.Errorf("instance cannot be nil")
-	}
-
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 
@@ -437,9 +429,6 @@ func (tr *TaskRouter) routeLeastLoaded(availableModels []string) (string, error)
 
 	for _, modelID := range availableModels {
 		metrics := tr.metrics[modelID]
-		if metrics == nil {
-			continue // Skip models without metrics
-		}
 		// Calculate current load based on total requests vs successful tasks
 		load := metrics.TotalRequests - metrics.SuccessfulTasks
 
@@ -479,9 +468,6 @@ func (tr *TaskRouter) routePerformance(availableModels []string, category TaskCa
 
 	for _, modelID := range availableModels {
 		metrics := tr.metrics[modelID]
-		if metrics == nil {
-			continue // Skip models without metrics
-		}
 
 		// Calculate success rate
 		successRate := float64(0)
@@ -612,9 +598,6 @@ func (tr *TaskRouter) calculatePerformanceWeights() {
 
 		for modelID := range tr.metrics {
 			metrics := tr.metrics[modelID]
-			if metrics == nil {
-				continue // Skip models without metrics
-			}
 
 			successRate := float64(0)
 			if metrics.TotalRequests > 0 {
@@ -640,10 +623,6 @@ func NewTaskAffinityMap() *TaskAffinityMap {
 
 // IncrementAffinity increases affinity score for a model-category pair
 func (tam *TaskAffinityMap) IncrementAffinity(category TaskCategory, modelID string, amount int) {
-	if modelID == "" || amount < 0 {
-		return
-	}
-
 	tam.mu.Lock()
 	defer tam.mu.Unlock()
 
@@ -656,10 +635,6 @@ func (tam *TaskAffinityMap) IncrementAffinity(category TaskCategory, modelID str
 
 // DecrementAffinity decreases affinity score for a model-category pair
 func (tam *TaskAffinityMap) DecrementAffinity(category TaskCategory, modelID string, amount int) {
-	if modelID == "" || amount < 0 {
-		return
-	}
-
 	tam.mu.Lock()
 	defer tam.mu.Unlock()
 

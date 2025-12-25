@@ -132,8 +132,8 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 
 	if instance.Paused() {
 		instance.mu.Lock()
+		defer instance.mu.Unlock()
 		instance.started = true
-		instance.mu.Unlock()
 		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program)
 	} else {
 		if err := instance.Start(false); err != nil {
@@ -219,12 +219,12 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	defer func() {
 		if setupErr != nil {
 			if cleanupErr := i.Kill(); cleanupErr != nil {
-				setupErr = fmt.Errorf("%v (cleanup error: %v)", setupErr, cleanupErr)
+				setupErr = fmt.Errorf("%w (cleanup error: %v)", setupErr, cleanupErr)
 			}
 		} else {
 			i.mu.Lock()
+			defer i.mu.Unlock()
 			i.started = true
-			i.mu.Unlock()
 		}
 	}()
 
@@ -245,7 +245,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 			// Cleanup git worktree if tmux session creation fails
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
-				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+				err = fmt.Errorf("%w (cleanup error: %v)", err, cleanupErr)
 			}
 			setupErr = fmt.Errorf("failed to start new session: %w", err)
 			return setupErr
@@ -465,7 +465,7 @@ func (i *Instance) Resume() error {
 				log.ErrorLog.Print(err)
 				// Cleanup git worktree if tmux session creation fails
 				if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
-					err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+					err = fmt.Errorf("%w (cleanup error: %v)", err, cleanupErr)
 					log.ErrorLog.Print(err)
 				}
 				return fmt.Errorf("failed to start new session: %w", err)
@@ -477,7 +477,7 @@ func (i *Instance) Resume() error {
 			log.ErrorLog.Print(err)
 			// Cleanup git worktree if tmux session creation fails
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
-				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+				err = fmt.Errorf("%w (cleanup error: %v)", err, cleanupErr)
 				log.ErrorLog.Print(err)
 			}
 			return fmt.Errorf("failed to start new session: %w", err)

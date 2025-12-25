@@ -649,8 +649,8 @@ func (mp *OrchestratorModelPool) Put(model *ModelInstance) {
 	model.mu.Lock()
 	model.name = ""
 	model.baseURL = ""
-	model.failureCount = 0
-	model.successCount = 0
+	atomic.StoreInt32(&model.failureCount, 0)
+	atomic.StoreInt32(&model.successCount, 0)
 	model.mu.Unlock()
 
 	mp.pool.Put(model)

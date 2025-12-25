@@ -292,8 +292,14 @@ func NewWorkerPool(config WorkerPoolConfig) *WorkerPool {
 	if config.MaxWorkers <= 0 {
 		config.MaxWorkers = 10
 	}
+	if config.MaxWorkers > 1000 {
+		config.MaxWorkers = 1000 // Cap at reasonable limit
+	}
 	if config.QueueSize <= 0 {
 		config.QueueSize = 1000
+	}
+	if config.QueueSize > 100000 {
+		config.QueueSize = 100000 // Cap at reasonable limit
 	}
 	if config.WorkerTimeout <= 0 {
 		config.WorkerTimeout = 5 * time.Minute
@@ -347,7 +353,7 @@ func (wp *WorkerPool) Start() error {
 
 // Submit adds a job to the worker pool for execution.
 // Returns an error if the pool is shut down or the queue is full.
-func (wp *WorkerPool) Submit(job Job) error {
+func (wp *WorkerPool) Submit(ctx context.Context, job Job) error {
 	if !wp.started.Load() {
 		return fmt.Errorf("worker pool not started")
 	}
@@ -355,6 +361,8 @@ func (wp *WorkerPool) Submit(job Job) error {
 	select {
 	case <-wp.ctx.Done():
 		return fmt.Errorf("worker pool is shutting down")
+	case <-ctx.Done():
+		return ctx.Err()
 	default:
 	}
 
@@ -365,6 +373,8 @@ func (wp *WorkerPool) Submit(job Job) error {
 		return nil
 	case <-wp.ctx.Done():
 		return fmt.Errorf("worker pool is shutting down")
+	case <-ctx.Done():
+		return ctx.Err()
 	default:
 		return fmt.Errorf("job queue is full")
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -289,15 +290,16 @@ func (eb *EventBus) Subscribe(subscriber Subscriber, opts SubscribeOptions) erro
 // Unsubscribe removes a subscriber from the event bus
 func (eb *EventBus) Unsubscribe(subscriberID string) error {
 	eb.mu.Lock()
+	defer eb.mu.Unlock()
+
 	sub, exists := eb.subscriptions[subscriberID]
 	if !exists {
-		eb.mu.Unlock()
 		return fmt.Errorf("subscriber %s not found", subscriberID)
 	}
 	delete(eb.subscriptions, subscriberID)
-	eb.mu.Unlock()
 
 	// Cancel the subscription context and close channel
+	// Note: These operations are safe to do while holding the lock
 	sub.cancel()
 	close(sub.eventChan)
 
@@ -488,8 +490,20 @@ func (eb *EventBus) Close() {
 	}
 	eb.mu.Unlock()
 
-	// Wait for all goroutines to finish
-	eb.wg.Wait()
+	// Wait for all goroutines to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		eb.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Graceful shutdown completed
+	case <-time.After(10 * time.Second):
+		// Timeout - goroutines may still be running
+		// Log warning but continue (best effort)
+	}
 }
 
 // shouldDeliver checks if an event should be delivered to a subscription
@@ -650,23 +664,24 @@ func containsWildcard(topic string) bool {
 // topicToRegex converts a topic pattern with wildcards to a regex
 // Supports * (match any characters) and ? (match single character)
 func topicToRegex(topic string) *regexp.Regexp {
-	pattern := ""
+	var builder strings.Builder
 	for _, ch := range topic {
 		switch ch {
 		case '*':
-			pattern += ".*"
+			builder.WriteString(".*")
 		case '?':
-			pattern += "."
+			builder.WriteString(".")
 		case '.', '+', '(', ')', '[', ']', '{', '}', '^', '$', '|', '\\':
 			// Escape special regex characters
-			pattern += "\\" + string(ch)
+			builder.WriteString("\\")
+			builder.WriteRune(ch)
 		default:
-			pattern += string(ch)
+			builder.WriteRune(ch)
 		}
 	}
 
 	// Anchor the pattern to match the entire string
-	pattern = "^" + pattern + "$"
+	pattern := "^" + builder.String() + "$"
 
 	return regexp.MustCompile(pattern)
 }

@@ -142,7 +142,7 @@ func NewModelDiscovery(apiURL string, pollInterval time.Duration, cacheTTL time.
 
 	// Validate API URL for security
 	if err := validateAPIURL(apiURL); err != nil {
-		log.ErrorLog.Printf("invalid API URL %q: %v, using default", apiURL, err)
+		log.WarningLog.Printf("invalid API URL %q: %v, using default", apiURL, err)
 		apiURL = "http://localhost:11434"
 	}
 
@@ -246,24 +246,24 @@ func (md *ModelDiscovery) discoverModels() error {
 	req, err := http.NewRequestWithContext(ctx, "GET", md.apiURL+"/api/tags", nil)
 	if err != nil {
 		md.mu.Lock()
+		defer md.mu.Unlock()
 		md.isHealthy = false
-		md.mu.Unlock()
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	resp, err := md.httpClient.Do(req)
 	if err != nil {
 		md.mu.Lock()
+		defer md.mu.Unlock()
 		md.isHealthy = false
-		md.mu.Unlock()
 		return fmt.Errorf("failed to query Ollama API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		md.mu.Lock()
+		defer md.mu.Unlock()
 		md.isHealthy = false
-		md.mu.Unlock()
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("Ollama API returned status %d: %s", resp.StatusCode, string(body))
 	}
@@ -271,8 +271,8 @@ func (md *ModelDiscovery) discoverModels() error {
 	var olmResp OllamaResponse
 	if err := json.NewDecoder(resp.Body).Decode(&olmResp); err != nil {
 		md.mu.Lock()
+		defer md.mu.Unlock()
 		md.isHealthy = false
-		md.mu.Unlock()
 		return fmt.Errorf("failed to decode Ollama response: %w", err)
 	}
 
@@ -620,7 +620,14 @@ func (md *ModelDiscovery) SetContextWindow(contextWindow int) {
 }
 
 // RefreshModels forces an immediate model discovery
-func (md *ModelDiscovery) RefreshModels() error {
+func (md *ModelDiscovery) RefreshModels(ctx context.Context) error {
+	// Check if context is already cancelled
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	return md.discoverModels()
 }
 

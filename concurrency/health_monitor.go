@@ -147,6 +147,10 @@ type GitHealthCheck struct {
 
 // NewGitHealthCheck creates a new git health checker
 func NewGitHealthCheck(repoPath string) *GitHealthCheck {
+	if repoPath == "" {
+		repoPath = "."
+	}
+
 	return &GitHealthCheck{
 		repoPath: repoPath,
 	}
@@ -677,10 +681,19 @@ func (hm *HealthMonitor) Stop() error {
 		hm.cancel()
 	}
 
-	// Wait for all goroutines to finish
-	hm.wg.Wait()
+	// Wait for all goroutines to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		hm.wg.Wait()
+		close(done)
+	}()
 
-	return nil
+	select {
+	case <-done:
+		return nil
+	case <-time.After(30 * time.Second):
+		return fmt.Errorf("health monitor shutdown timeout exceeded after 30s")
+	}
 }
 
 // GetHealth returns the current overall health status and details

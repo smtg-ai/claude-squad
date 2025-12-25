@@ -298,14 +298,17 @@ type MockPtyFactory struct {
 func (pt *MockPtyFactory) Start(cmd *exec.Cmd) (*os.File, error) {
 	filePath := filepath.Join(pt.t.TempDir(), fmt.Sprintf("pty-%s-%d", pt.t.Name(), len(pt.cmds)))
 	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDWR, 0644)
-	if err == nil {
-		pt.cmds = append(pt.cmds, cmd)
-		pt.files = append(pt.files, f)
-
-		// Execute the command through our mock to trigger session creation logic
-		_ = pt.cmdExec.Run(cmd)
+	if err != nil {
+		return nil, err
 	}
-	return f, err
+
+	pt.cmds = append(pt.cmds, cmd)
+	pt.files = append(pt.files, f)
+
+	// Execute the command through our mock to trigger session creation logic
+	_ = pt.cmdExec.Run(cmd)
+
+	return f, nil
 }
 
 func (pt *MockPtyFactory) Close() {}

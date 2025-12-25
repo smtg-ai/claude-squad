@@ -469,6 +469,9 @@ func (c *OllamaConfig) GetModelConfig(modelName string) *ModelConfig {
 
 // SetModelConfig sets the configuration for a specific model
 func (c *OllamaConfig) SetModelConfig(modelName string, cfg ModelConfig) {
+	if modelName == "" {
+		return
+	}
 	if c.Models == nil {
 		c.Models = make(map[string]ModelConfig)
 	}

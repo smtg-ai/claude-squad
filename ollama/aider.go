@@ -188,6 +188,9 @@ func (ai *AiderIntegration) selectFastestModelName(models []*ModelMetadata) stri
 		return ""
 	}
 
+	if models[0] == nil {
+		return "" // Safety check for nil model
+	}
 	fastest := models[0]
 	fastestLatency := int64(^uint64(0) >> 1) // max int64
 
@@ -207,6 +210,9 @@ func (ai *AiderIntegration) selectMostCapableModelName(models []*ModelMetadata) 
 		return ""
 	}
 
+	if models[0] == nil {
+		return "" // Safety check for nil model
+	}
 	mostCapable := models[0]
 	maxCapability := 0
 
@@ -226,7 +232,15 @@ func (ai *AiderIntegration) selectRoundRobinModelName(models []*ModelMetadata) s
 		return ""
 	}
 
+	// Ensure index is within bounds
+	if ai.roundRobinIndex >= len(models) {
+		ai.roundRobinIndex = 0
+	}
+
 	selected := models[ai.roundRobinIndex]
+	if selected == nil {
+		return "" // Safety check for nil model
+	}
 	ai.roundRobinIndex = (ai.roundRobinIndex + 1) % len(models)
 	return selected.Name
 }

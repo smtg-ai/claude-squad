@@ -220,12 +220,18 @@ func (gp *GitPipeline) rollbackStages(ctx context.Context, stages []PipelineStag
 	for i := len(stages) - 1; i >= 0; i-- {
 		stage := stages[i]
 		for _, repo := range repos {
-			gp.progressChan <- ProgressUpdate{
+			select {
+			case gp.progressChan <- ProgressUpdate{
 				RepoPath:  repo.RepoPath,
 				StageName: stage.Name(),
 				Status:    PipelineStatusRolledBack,
 				Timestamp: time.Now(),
 				Message:   "Rolling back",
+			}:
+			case <-ctx.Done():
+				// Context cancelled, continue rollback without reporting
+			default:
+				// Progress channel full, continue rollback without blocking
 			}
 
 			if err := stage.Rollback(ctx, repo); err != nil {
@@ -289,32 +295,46 @@ func (pe *ParallelExecutor) ExecuteStage(ctx context.Context, stage PipelineStag
 			}
 
 			// Send started update
-			pe.progressChan <- ProgressUpdate{
+			select {
+			case pe.progressChan <- ProgressUpdate{
 				RepoPath:  r.RepoPath,
 				StageName: stage.Name(),
 				Status:    PipelineStatusStarted,
 				Timestamp: time.Now(),
+			}:
+			case <-ctx.Done():
+				// Don't block if context cancelled
+			default:
+				// Progress channel full, continue without blocking
 			}
 
 			// Execute stage
 			if err := stage.Execute(ctx, r); err != nil {
-				pe.progressChan <- ProgressUpdate{
+				select {
+				case pe.progressChan <- ProgressUpdate{
 					RepoPath:  r.RepoPath,
 					StageName: stage.Name(),
 					Status:    PipelineStatusFailed,
 					Error:     err,
 					Timestamp: time.Now(),
+				}:
+				case <-ctx.Done():
+				default:
 				}
 				errChan <- fmt.Errorf("stage %s failed for %s: %w", stage.Name(), r.RepoPath, err)
 				return
 			}
 
 			// Send completed update
-			pe.progressChan <- ProgressUpdate{
+			select {
+			case pe.progressChan <- ProgressUpdate{
 				RepoPath:  r.RepoPath,
 				StageName: stage.Name(),
 				Status:    PipelineStatusCompleted,
 				Timestamp: time.Now(),
+			}:
+			case <-ctx.Done():
+			default:
 			}
 		}(repo)
 	}

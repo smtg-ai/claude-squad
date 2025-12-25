@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -251,7 +252,7 @@ func (te *TemplateEngine) RenderIndex(docsByType map[DocType][]*Document) (strin
 	template := indexHTMLTemplate
 
 	// Build document lists for each type
-	sections := ""
+	var sectionsBuilder strings.Builder
 
 	types := []DocType{Tutorial, HowTo, Reference, Explanation}
 	typeNames := map[DocType]string{
@@ -267,19 +268,19 @@ func (te *TemplateEngine) RenderIndex(docsByType map[DocType][]*Document) (strin
 			continue
 		}
 
-		sections += fmt.Sprintf("<section class=\"doc-section %s\">\n", docType)
-		sections += fmt.Sprintf("<h2>%s</h2>\n", typeNames[docType])
-		sections += "<ul class=\"doc-list\">\n"
+		fmt.Fprintf(&sectionsBuilder, "<section class=\"doc-section %s\">\n", docType)
+		fmt.Fprintf(&sectionsBuilder, "<h2>%s</h2>\n", typeNames[docType])
+		sectionsBuilder.WriteString("<ul class=\"doc-list\">\n")
 
 		for _, doc := range docs {
-			sections += fmt.Sprintf("<li><a href=\"%s/%s.html\">%s</a> - %s</li>\n",
+			fmt.Fprintf(&sectionsBuilder, "<li><a href=\"%s/%s.html\">%s</a> - %s</li>\n",
 				docType, doc.ID, doc.Title, doc.Description)
 		}
 
-		sections += "</ul>\n</section>\n"
+		sectionsBuilder.WriteString("</ul>\n</section>\n")
 	}
 
-	html := replaceAll(template, "{{sections}}", sections)
+	html := replaceAll(template, "{{sections}}", sectionsBuilder.String())
 
 	return html, nil
 }

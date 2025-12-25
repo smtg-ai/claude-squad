@@ -4,6 +4,7 @@ import (
 	"claude-squad/log"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -190,6 +191,11 @@ func (d *TaskDispatcher) SubmitTask(task *Task) error {
 
 	if task.ID == "" {
 		return fmt.Errorf("task ID cannot be empty")
+	}
+
+	// Validate priority is within valid range
+	if task.Priority < PriorityHigh || task.Priority > PriorityLow {
+		return fmt.Errorf("task priority must be between %d and %d, got %d", PriorityHigh, PriorityLow, task.Priority)
 	}
 
 	// Initialize task metadata
@@ -526,9 +532,10 @@ func CombineErrors(errs []error) error {
 		return errs[0]
 	}
 
-	message := fmt.Sprintf("encountered %d errors:\n", len(errs))
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "encountered %d errors:\n", len(errs))
 	for i, err := range errs {
-		message += fmt.Sprintf("  %d. %v\n", i+1, err)
+		fmt.Fprintf(&builder, "  %d. %v\n", i+1, err)
 	}
-	return fmt.Errorf("%s", message)
+	return fmt.Errorf("%s", builder.String())
 }

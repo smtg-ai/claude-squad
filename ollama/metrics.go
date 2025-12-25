@@ -127,6 +127,9 @@ func (mc *MetricsCollector) RecordLatency(model string, latency time.Duration) {
 	}
 
 	metrics := mc.PerformanceMetrics[model]
+	if metrics == nil {
+		return // Safety check: metrics should exist after creation above
+	}
 	metrics.TotalRequests++
 	metrics.SuccessfulReqs++
 	metrics.TotalLatency += latency
@@ -185,6 +188,9 @@ func (mc *MetricsCollector) RecordError(model string, err error) {
 	}
 
 	metrics := mc.PerformanceMetrics[model]
+	if metrics == nil {
+		return // Safety check: metrics should exist after creation above
+	}
 	metrics.TotalRequests++
 	metrics.FailedReqs++
 	metrics.LastUpdated = time.Now()

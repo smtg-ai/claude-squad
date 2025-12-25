@@ -79,7 +79,20 @@ func RunDaemon(cfg *config.Config) error {
 
 	// Stop the goroutine so we don't race.
 	close(stopCh)
-	wg.Wait()
+
+	// Wait for goroutine to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.InfoLog.Printf("daemon goroutine stopped gracefully")
+	case <-time.After(5 * time.Second):
+		log.WarningLog.Printf("daemon goroutine shutdown timeout exceeded")
+	}
 
 	if err := storage.SaveInstances(instances); err != nil {
 		log.ErrorLog.Printf("failed to save instances when terminating daemon: %v", err)

@@ -221,7 +221,7 @@ func Example7_PoolWarmingAndDraining() {
 	defer pool.Close()
 
 	// Warm the pool to ensure minimum agents are available
-	if err := pool.WarmPool(); err != nil {
+	if err := pool.WarmPool(context.Background()); err != nil {
 		log.Printf("Failed to warm pool: %v\n", err)
 	}
 	fmt.Println("Pool warmed with minimum agents")

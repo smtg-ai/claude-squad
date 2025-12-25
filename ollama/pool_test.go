@@ -347,7 +347,7 @@ func TestWarmPool(t *testing.T) {
 	defer pool.Close()
 
 	// Warm the pool explicitly
-	err = pool.WarmPool()
+	err = pool.WarmPool(context.Background())
 	assert.NoError(t, err)
 
 	// Should have at least min pool size agents
