@@ -3,6 +3,7 @@ package ollama
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -74,6 +75,7 @@ type FrameworkModelConfig struct {
 
 // ModelRegistry manages available models and their configurations
 type ModelRegistry struct {
+	mu           sync.RWMutex
 	models       map[string]*ModelMetadata
 	configs      map[string]*FrameworkModelConfig
 	providers    []ModelProvider
@@ -98,6 +100,9 @@ func (mr *ModelRegistry) RegisterModel(model *ModelMetadata, config *FrameworkMo
 		return NewFrameworkError(ErrCodeInvalidRequest, "model name cannot be empty", nil)
 	}
 
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
 	mr.models[model.Name] = model
 
 	// Use provided config or create a default one
@@ -121,6 +126,9 @@ func (mr *ModelRegistry) RegisterModel(model *ModelMetadata, config *FrameworkMo
 
 // GetModel retrieves a model by name from the registry
 func (mr *ModelRegistry) GetModel(name string) (*ModelMetadata, error) {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+
 	model, exists := mr.models[name]
 	if !exists {
 		return nil, NewFrameworkError(ErrCodeNotFound, fmt.Sprintf("model %q not found", name), nil)
@@ -130,6 +138,9 @@ func (mr *ModelRegistry) GetModel(name string) (*ModelMetadata, error) {
 
 // GetModelConfig retrieves the configuration for a model
 func (mr *ModelRegistry) GetModelConfig(name string) (*FrameworkModelConfig, error) {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+
 	config, exists := mr.configs[name]
 	if !exists {
 		return nil, NewFrameworkError(ErrCodeNotFound, fmt.Sprintf("model config for %q not found", name), nil)
@@ -139,6 +150,9 @@ func (mr *ModelRegistry) GetModelConfig(name string) (*FrameworkModelConfig, err
 
 // ListModels returns all registered models
 func (mr *ModelRegistry) ListModels() []*ModelMetadata {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+
 	models := make([]*ModelMetadata, 0, len(mr.models))
 	for _, model := range mr.models {
 		models = append(models, model)
@@ -148,6 +162,9 @@ func (mr *ModelRegistry) ListModels() []*ModelMetadata {
 
 // ListEnabledModels returns all enabled models
 func (mr *ModelRegistry) ListEnabledModels() []*ModelMetadata {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+
 	models := make([]*ModelMetadata, 0)
 	for name, model := range mr.models {
 		if config, exists := mr.configs[name]; exists && config.Enabled {
@@ -159,6 +176,9 @@ func (mr *ModelRegistry) ListEnabledModels() []*ModelMetadata {
 
 // RemoveModel removes a model from the registry
 func (mr *ModelRegistry) RemoveModel(name string) error {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
 	if _, exists := mr.models[name]; !exists {
 		return NewFrameworkError(ErrCodeNotFound, fmt.Sprintf("model %q not found", name), nil)
 	}
@@ -169,6 +189,9 @@ func (mr *ModelRegistry) RemoveModel(name string) error {
 
 // SetDefaultModel sets the default model for requests
 func (mr *ModelRegistry) SetDefaultModel(name string) error {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
 	if _, exists := mr.models[name]; !exists {
 		return NewFrameworkError(ErrCodeInvalidModel, fmt.Sprintf("model %q not found", name), nil)
 	}
@@ -178,6 +201,9 @@ func (mr *ModelRegistry) SetDefaultModel(name string) error {
 
 // GetDefaultModel returns the name of the default model
 func (mr *ModelRegistry) GetDefaultModel() string {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+
 	return mr.defaultModel
 }
 
@@ -186,13 +212,22 @@ func (mr *ModelRegistry) RegisterProvider(provider ModelProvider) error {
 	if provider == nil {
 		return NewFrameworkError(ErrCodeInvalidRequest, "provider cannot be nil", nil)
 	}
+
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
 	mr.providers = append(mr.providers, provider)
 	return nil
 }
 
 // SyncModels fetches and registers models from all providers
 func (mr *ModelRegistry) SyncModels(ctx context.Context) error {
-	for _, provider := range mr.providers {
+	// Copy providers list under read lock
+	mr.mu.RLock()
+	providers := append([]ModelProvider{}, mr.providers...)
+	mr.mu.RUnlock()
+
+	for _, provider := range providers {
 		models, err := provider.FetchModels(ctx)
 		if err != nil {
 			return NewFrameworkError(ErrCodeInternal, fmt.Sprintf("failed to sync models from provider %q", provider.Name()), err)
@@ -200,7 +235,11 @@ func (mr *ModelRegistry) SyncModels(ctx context.Context) error {
 
 		for _, model := range models {
 			// Only register if not already registered, to preserve custom configs
-			if _, exists := mr.models[model.Name]; !exists {
+			mr.mu.RLock()
+			_, exists := mr.models[model.Name]
+			mr.mu.RUnlock()
+
+			if !exists {
 				if err := mr.RegisterModel(model, nil); err != nil {
 					return err
 				}
@@ -212,6 +251,9 @@ func (mr *ModelRegistry) SyncModels(ctx context.Context) error {
 
 // IsModelAvailable checks if a model is available and enabled
 func (mr *ModelRegistry) IsModelAvailable(name string) bool {
+	mr.mu.RLock()
+	defer mr.mu.RUnlock()
+
 	model, exists := mr.models[name]
 	if !exists {
 		return false
@@ -227,9 +269,12 @@ func (mr *ModelRegistry) IsModelAvailable(name string) bool {
 
 // UpdateModelStatus updates the status of a model
 func (mr *ModelRegistry) UpdateModelStatus(name string, status FrameworkModelStatus) error {
-	model, err := mr.GetModel(name)
-	if err != nil {
-		return err
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
+	model, exists := mr.models[name]
+	if !exists {
+		return NewFrameworkError(ErrCodeNotFound, fmt.Sprintf("model %q not found", name), nil)
 	}
 
 	model.Status = status

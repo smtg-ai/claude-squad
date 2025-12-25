@@ -258,7 +258,11 @@ func ExampleOrchestratorModelPool() {
 	pool := NewOrchestratorModelPool(5)
 
 	// Get a model from the pool
-	model := pool.Get()
+	model, err := pool.Get()
+	if err != nil {
+		fmt.Printf("Error getting model from pool: %v\n", err)
+		return
+	}
 	model.name = "test-model"
 	model.baseURL = "http://localhost:11434"
 
@@ -270,7 +274,11 @@ func ExampleOrchestratorModelPool() {
 	pool.Put(model)
 
 	// Get another model (might be the same one)
-	model2 := pool.Get()
+	model2, err := pool.Get()
+	if err != nil {
+		fmt.Printf("Error getting model from pool: %v\n", err)
+		return
+	}
 	fmt.Printf("Model name after reuse: %s (should be empty)\n", model2.name)
 }
 

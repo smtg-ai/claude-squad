@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -77,6 +78,9 @@ type ModelOrchestrator struct {
 	workerPool *WorkerPool
 	requestCh  chan *Request
 
+	// HTTP client for health checks
+	httpClient *http.Client
+
 	// Graceful shutdown
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -102,9 +106,12 @@ func NewModelOrchestrator(healthCheckInterval time.Duration, numWorkers int) *Mo
 		healthCheckInterval: healthCheckInterval,
 		healthCheckDone:     make(chan struct{}),
 		requestCh:           make(chan *Request, numWorkers*2),
-		ctx:                 ctx,
-		cancel:              cancel,
-		lastLoadBalance:     time.Now(),
+		httpClient: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+		ctx:             ctx,
+		cancel:          cancel,
+		lastLoadBalance: time.Now(),
 	}
 
 	// Initialize request pool for reuse
@@ -195,7 +202,16 @@ func (mo *ModelOrchestrator) Submit(modelName, prompt string, timeout time.Durat
 	}
 
 	// Get request from pool
-	req := mo.requestPool.Get().(*Request)
+
+	poolObj := mo.requestPool.Get()
+
+	req, ok := poolObj.(*Request)
+
+	if !ok {
+
+		return nil, fmt.Errorf("failed to get request from pool: invalid type %T", poolObj)
+
+	}
 	req.ModelName = modelName
 	req.Prompt = prompt
 	req.Timeout = timeout
@@ -363,17 +379,23 @@ func (mo *ModelOrchestrator) checkModelHealth(model *ModelInstance) {
 	model.lastHealthTime = time.Now()
 }
 
-// pingModel performs a simple health check on a model
+// pingModel performs a real HTTP health check on a model
 func (mo *ModelOrchestrator) pingModel(ctx context.Context, model *ModelInstance) bool {
-	// This is a placeholder implementation
-	// In production, this would make an actual HTTP call to the Ollama API
-	select {
-	case <-ctx.Done():
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", model.baseURL+"/api/version", nil)
+	if err != nil {
 		return false
-	default:
-		// Simulate health check - in production, make real API call
-		return true
 	}
+
+	resp, err := mo.httpClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	return resp.StatusCode == http.StatusOK
 }
 
 // Shutdown gracefully shuts down the orchestrator and all workers
@@ -500,7 +522,11 @@ func (wp *WorkerPool) processRequest(req *Request) {
 
 	select {
 	case req.ResultCh <- result:
+		// Close the result channel after sending result to signal completion
+		close(req.ResultCh)
 	case <-wp.ctx.Done():
+		// Close channel if context is done to prevent goroutine leaks
+		close(req.ResultCh)
 	}
 }
 
@@ -598,8 +624,13 @@ func NewOrchestratorModelPool(initialCapacity int) *OrchestratorModelPool {
 }
 
 // Get retrieves a model instance from the pool
-func (mp *OrchestratorModelPool) Get() *ModelInstance {
-	return mp.pool.Get().(*ModelInstance)
+func (mp *OrchestratorModelPool) Get() (*ModelInstance, error) {
+	poolObj := mp.pool.Get()
+	model, ok := poolObj.(*ModelInstance)
+	if !ok {
+		return nil, fmt.Errorf("failed to get model instance from pool: invalid type %T", poolObj)
+	}
+	return model, nil
 }
 
 // Put returns a model instance to the pool
@@ -637,12 +668,20 @@ func NewCircuitBreaker(maxFailures int32, resetTimeout time.Duration) *CircuitBr
 
 // IsClosed returns true if the circuit is closed (accepting requests)
 func (cb *CircuitBreaker) IsClosed() bool {
-	return cb.state.Load().(string) == "closed"
+	state, ok := cb.state.Load().(string)
+	if !ok {
+		return false
+	}
+	return state == "closed"
 }
 
 // IsOpen returns true if the circuit is open (rejecting requests)
 func (cb *CircuitBreaker) IsOpen() bool {
-	return cb.state.Load().(string) == "open"
+	state, ok := cb.state.Load().(string)
+	if !ok {
+		return false
+	}
+	return state == "open"
 }
 
 // RecordSuccess records a successful request
@@ -650,7 +689,11 @@ func (cb *CircuitBreaker) RecordSuccess() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
-	if cb.state.Load().(string) != "closed" {
+	state, ok := cb.state.Load().(string)
+	if !ok {
+		return
+	}
+	if state != "closed" {
 		cb.state.Store("closed")
 		cb.failureThreshold = cb.maxFailures
 	}
@@ -675,7 +718,10 @@ func (cb *CircuitBreaker) AllowRequest() bool {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
-	state := cb.state.Load().(string)
+	state, ok := cb.state.Load().(string)
+	if !ok {
+		return false
+	}
 
 	if state == "closed" {
 		return true

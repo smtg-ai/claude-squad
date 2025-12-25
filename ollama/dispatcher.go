@@ -18,6 +18,9 @@ const (
 	PriorityNormal = 1
 	// PriorityLow represents low priority tasks
 	PriorityLow = 2
+
+	// maxErrors defines the maximum number of errors to store in the circular buffer
+	maxErrors = 1000
 )
 
 // TaskStatus represents the current status of a task
@@ -93,8 +96,9 @@ type TaskDispatcher struct {
 	taskMapMu sync.RWMutex
 
 	// Error handling
-	errors   []TaskExecutionError
-	errorsMu sync.Mutex
+	errors     []TaskExecutionError
+	errorsMu   sync.Mutex
+	errorIndex int // Current position in the circular buffer
 
 	// State
 	isRunning    bool
@@ -136,7 +140,8 @@ func NewTaskDispatcher(ctx context.Context, agentFunc AgentFunc, workerCount int
 		cancel:       cancel,
 		taskQueue:    make(chan *Task, workerCount*100),
 		taskMap:      make(map[string]*Task),
-		errors:       make([]TaskExecutionError, 0),
+		errors:       make([]TaskExecutionError, 0, maxErrors),
+		errorIndex:   0,
 	}
 
 	log.InfoLog.Printf("TaskDispatcher created with %d workers", workerCount)
@@ -254,7 +259,9 @@ func (d *TaskDispatcher) worker(id int) {
 func (d *TaskDispatcher) executeTask(task *Task, workerID int) {
 	// Update task status
 	d.updateTaskStatus(task.ID, StatusRunning)
+	d.taskMapMu.Lock()
 	task.StartedAt = time.Now()
+	d.taskMapMu.Unlock()
 	d.reportProgress(task.ID, StatusRunning, 10, "task execution started")
 
 	log.InfoLog.Printf("Worker %d executing task %s", workerID, task.ID)
@@ -266,12 +273,16 @@ func (d *TaskDispatcher) executeTask(task *Task, workerID int) {
 	// Execute the agent function
 	err := d.agentFunc(taskCtx, task)
 
+	d.taskMapMu.Lock()
 	task.CompletedAt = time.Now()
+	d.taskMapMu.Unlock()
 	duration := task.CompletedAt.Sub(task.StartedAt)
 
 	if err != nil {
 		// Handle error
+		d.taskMapMu.Lock()
 		task.Error = err
+		d.taskMapMu.Unlock()
 		d.updateTaskStatus(task.ID, StatusFailed)
 		d.recordError(TaskExecutionError{
 			TaskID:    task.ID,
@@ -283,6 +294,8 @@ func (d *TaskDispatcher) executeTask(task *Task, workerID int) {
 
 		log.ErrorLog.Printf("Task %s failed on worker %d after %v: %v", task.ID, workerID, duration, err)
 		d.reportProgress(task.ID, StatusFailed, 100, fmt.Sprintf("task failed: %v", err))
+		// Clean up task from map after failure
+		d.cleanupTask(task.ID)
 		return
 	}
 
@@ -292,6 +305,8 @@ func (d *TaskDispatcher) executeTask(task *Task, workerID int) {
 
 	log.InfoLog.Printf("Task %s completed on worker %d in %v", task.ID, workerID, duration)
 	d.reportProgress(task.ID, StatusCompleted, 100, "task completed successfully")
+	// Clean up task from map after completion
+	d.cleanupTask(task.ID)
 }
 
 // Wait blocks until all tasks are completed or the context is cancelled
@@ -446,11 +461,19 @@ func (d *TaskDispatcher) updateTaskStatus(taskID string, status TaskStatus) {
 	}
 }
 
-// recordError records an error that occurred during task execution
+// recordError records an error that occurred during task execution with bounded rotation
 func (d *TaskDispatcher) recordError(err TaskExecutionError) {
 	d.errorsMu.Lock()
 	defer d.errorsMu.Unlock()
-	d.errors = append(d.errors, err)
+
+	// If buffer is not full, append normally
+	if len(d.errors) < maxErrors {
+		d.errors = append(d.errors, err)
+	} else {
+		// Buffer is full, use rotation to keep only recent errors
+		d.errorIndex = (d.errorIndex + 1) % maxErrors
+		d.errors[d.errorIndex] = err
+	}
 }
 
 // reportProgress calls the progress callback if set
@@ -483,6 +506,14 @@ func (d *TaskDispatcher) incrementCancelledCount() {
 	d.metricsMu.Lock()
 	defer d.metricsMu.Unlock()
 	d.cancelledCount++
+}
+
+// cleanupTask removes a completed task from the task map to prevent memory leaks
+func (d *TaskDispatcher) cleanupTask(taskID string) {
+	d.taskMapMu.Lock()
+	defer d.taskMapMu.Unlock()
+	delete(d.taskMap, taskID)
+	log.InfoLog.Printf("Task %s cleaned up from task map", taskID)
 }
 
 // CombineErrors combines multiple errors into a single formatted error

@@ -129,6 +129,19 @@ func GetOllamaConfigDir() (string, error) {
 	return filepath.Join(configDir, "ollama"), nil
 }
 
+// validatePath checks for path traversal attempts
+func validatePath(path string) error {
+	// Clean the path to normalize it
+	cleanPath := filepath.Clean(path)
+
+	// Check for path traversal patterns
+	if strings.Contains(cleanPath, "..") {
+		return fmt.Errorf("path contains invalid traversal pattern: %s", path)
+	}
+
+	return nil
+}
+
 // LoadOllamaConfig loads Ollama configuration from file with environment variable overrides
 func LoadOllamaConfig() *OllamaConfig {
 	configDir, err := GetOllamaConfigDir()
@@ -138,6 +151,16 @@ func LoadOllamaConfig() *OllamaConfig {
 	}
 
 	configPath := filepath.Join(configDir, OllamaConfigFileName)
+
+	// Validate path for security
+	if err := validatePath(configPath); err != nil {
+		log.ErrorLog.Printf("invalid config path: %v, using defaults", err)
+		return applyEnvironmentOverrides(DefaultOllamaConfig())
+	}
+
+	// Normalize path
+	configPath = filepath.Clean(configPath)
+
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -172,6 +195,14 @@ func LoadOllamaConfig() *OllamaConfig {
 
 // LoadOllamaConfigFromFile loads Ollama configuration from a specific file path
 func LoadOllamaConfigFromFile(filePath string) (*OllamaConfig, error) {
+	// Validate path for security
+	if err := validatePath(filePath); err != nil {
+		return nil, fmt.Errorf("invalid file path: %w", err)
+	}
+
+	// Normalize path
+	filePath = filepath.Clean(filePath)
+
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)

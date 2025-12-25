@@ -3,9 +3,12 @@ package ollama
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
+	"math/rand"
 	"net/http"
 	"time"
 )
@@ -34,6 +37,11 @@ func NewClient(config *ClientConfig) (*Client, error) {
 
 	httpClient := &http.Client{
 		Timeout: timeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			},
+		},
 	}
 
 	return &Client{
@@ -82,7 +90,10 @@ func (c *Client) do(ctx context.Context, method, path string, body interface{}, 
 		if err != nil {
 			lastErr = err
 			if attempt < c.config.RetryAttempts {
-				time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+				baseDelay := time.Duration(100) * time.Millisecond
+				backoff := time.Duration(math.Pow(2, float64(attempt))) * baseDelay
+				jitter := time.Duration(rand.Int63n(int64(baseDelay)))
+				time.Sleep(backoff + jitter)
 				continue
 			}
 			return NewFrameworkError(ErrCodeConnectionFailed, "failed to execute request", err)

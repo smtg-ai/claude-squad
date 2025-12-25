@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 )
@@ -99,11 +101,49 @@ type ModelDiscovery struct {
 	knownModels map[string]*ModelInfo
 }
 
+// validateAPIURL validates that the API URL is safe to use
+func validateAPIURL(apiURL string) error {
+	if apiURL == "" {
+		return nil // Will be set to default
+	}
+
+	// Parse the URL
+	parsedURL, err := url.Parse(apiURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	// Check scheme - only allow http and https
+	scheme := strings.ToLower(parsedURL.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("invalid URL scheme: only http:// and https:// are allowed")
+	}
+
+	// Reject URLs with user credentials (user@host)
+	if parsedURL.User != nil {
+		return fmt.Errorf("URLs with user credentials are not allowed")
+	}
+
+	// Validate hostname
+	if parsedURL.Host == "" {
+		return fmt.Errorf("URL must have a valid hostname")
+	}
+
+	return nil
+}
+
 // NewModelDiscovery creates a new ModelDiscovery instance
 func NewModelDiscovery(apiURL string, pollInterval time.Duration, cacheTTL time.Duration) *ModelDiscovery {
 	if apiURL == "" {
 		apiURL = "http://localhost:11434"
 	}
+
+	// Validate API URL for security
+	if err := validateAPIURL(apiURL); err != nil {
+		log.ErrorLog.Printf("invalid API URL %q: %v, using default", apiURL, err)
+		apiURL = "http://localhost:11434"
+	}
+
 	if pollInterval == 0 {
 		pollInterval = 30 * time.Second
 	}

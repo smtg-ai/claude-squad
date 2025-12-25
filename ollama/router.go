@@ -269,21 +269,21 @@ func (tr *TaskRouter) RecordTaskResult(modelID string, success bool, latency tim
 	if success {
 		metrics.SuccessfulTasks++
 		atomic.AddInt32(&metrics.SuccessCount, 1)
-		metrics.FailureCount = 0
+		atomic.StoreInt32(&metrics.FailureCount, 0)
 		metrics.FailureWindow = time.Now()
 
 		// Update affinity for successful tasks
 		tr.affinityMap.IncrementAffinity(category, modelID, 1)
 	} else {
 		metrics.FailedTasks++
-		metrics.FailureCount++
 		atomic.AddInt32(&metrics.FailureCount, 1)
 
 		// Check circuit breaker
-		if int(metrics.FailureCount) >= tr.circuitBreakerConfig.FailureThreshold {
+		failureCount := atomic.LoadInt32(&metrics.FailureCount)
+		if int(failureCount) >= tr.circuitBreakerConfig.FailureThreshold {
 			metrics.CircuitBreakerOpen = true
 			log.InfoLog.Printf("circuit breaker opened for model %s after %d failures",
-				modelID, metrics.FailureCount)
+				modelID, failureCount)
 		}
 
 		// Decrease affinity for failed tasks

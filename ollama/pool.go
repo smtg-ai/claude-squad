@@ -262,7 +262,7 @@ func (p *AgentPool) initializeWarmPool() error {
 		p.idleCount.Add(1)
 	}
 
-	log.ErrorLog.Printf("initialized warm pool with %d agents", p.minPoolSize)
+	log.InfoLog.Printf("initialized warm pool with %d agents", p.minPoolSize)
 	return nil
 }
 
@@ -286,7 +286,7 @@ func (p *AgentPool) spawnAgent() (*Agent, error) {
 	agent.SetState(AgentStateIdle)
 
 	p.spawnedCount.Add(1)
-	log.ErrorLog.Printf("spawned new agent: %s", instance.Title)
+	log.InfoLog.Printf("spawned new agent: %s", instance.Title)
 
 	return agent, nil
 }
@@ -598,7 +598,7 @@ func (p *AgentPool) autoscale(activeCount, idleCount int64) {
 			p.lastMetrics.ScaleDirection = "UP"
 			p.metricsLock.Unlock()
 
-			log.ErrorLog.Printf("scaled pool up: utilization=%.2f%%, total agents=%d", utilization*100, totalCount+1)
+			log.InfoLog.Printf("scaled pool up: utilization=%.2f%%, total agents=%d", utilization*100, totalCount+1)
 		}
 
 		// Handle utilization < 20%, scale down if possible
@@ -617,7 +617,7 @@ func (p *AgentPool) autoscale(activeCount, idleCount int64) {
 					p.lastMetrics.ScaleDirection = "DOWN"
 					p.metricsLock.Unlock()
 
-					log.ErrorLog.Printf("scaled pool down: utilization=%.2f%%, total agents=%d", utilization*100, totalCount-1)
+					log.InfoLog.Printf("scaled pool down: utilization=%.2f%%, total agents=%d", utilization*100, totalCount-1)
 					return
 				}
 			}
