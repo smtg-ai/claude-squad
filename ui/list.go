@@ -54,11 +54,13 @@ var autoYesStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("#1a1a1a"))
 
 type List struct {
-	items         []*session.Instance
-	selectedIdx   int
-	height, width int
-	renderer      *InstanceRenderer
-	autoyes       bool
+	items          []*session.Instance
+	selectedIdx    int
+	height, width  int
+	renderer       *InstanceRenderer
+	autoyes        bool
+	verticalLayout bool
+	scrollOffset   int // Track scroll position for vertical scrolling
 
 	// map of repo name to number of instances using it. Used to display the repo name only if there are
 	// multiple repos in play.
@@ -67,10 +69,12 @@ type List struct {
 
 func NewList(spinner *spinner.Model, autoYes bool) *List {
 	return &List{
-		items:    []*session.Instance{},
-		renderer: &InstanceRenderer{spinner: spinner},
-		repos:    make(map[string]int),
-		autoyes:  autoYes,
+		items:          []*session.Instance{},
+		renderer:       &InstanceRenderer{spinner: spinner},
+		repos:          make(map[string]int),
+		autoyes:        autoYes,
+		verticalLayout: false,
+		scrollOffset:   0,
 	}
 }
 
@@ -78,7 +82,14 @@ func NewList(spinner *spinner.Model, autoYes bool) *List {
 func (l *List) SetSize(width, height int) {
 	l.width = width
 	l.height = height
-	l.renderer.setWidth(width)
+	l.renderer.setWidth(width, l.verticalLayout)
+}
+
+// SetVerticalLayout enables or disables vertical layout mode
+func (l *List) SetVerticalLayout(vertical bool) {
+	l.verticalLayout = vertical
+	// Update renderer width when layout changes
+	l.renderer.setWidth(l.width, l.verticalLayout)
 }
 
 // SetSessionPreviewSize sets the height and width for the tmux sessions. This makes the stdout line have the correct
@@ -107,8 +118,12 @@ type InstanceRenderer struct {
 	width   int
 }
 
-func (r *InstanceRenderer) setWidth(width int) {
-	r.width = AdjustPreviewWidth(width)
+func (r *InstanceRenderer) setWidth(width int, verticalLayout bool) {
+	if verticalLayout {
+		r.width = width
+	} else {
+		r.width = AdjustPreviewWidth(width)
+	}
 }
 
 // ɹ and ɻ are other options.
@@ -235,15 +250,35 @@ func (l *List) String() string {
 
 	// Write title line
 	// add padding of 2 because the border on list items adds some extra characters
-	titleWidth := AdjustPreviewWidth(l.width) + 2
+	var titleWidth int
+	if l.verticalLayout {
+		titleWidth = l.width + 2
+	} else {
+		titleWidth = AdjustPreviewWidth(l.width) + 2
+	}
+
 	if !l.autoyes {
 		b.WriteString(lipgloss.Place(
 			titleWidth, 1, lipgloss.Left, lipgloss.Bottom, mainTitle.Render(titleText)))
 	} else {
 		title := lipgloss.Place(
 			titleWidth/2, 1, lipgloss.Left, lipgloss.Bottom, mainTitle.Render(titleText))
+
+		// In vertical layout (small screen), reduce the auto-yes box width to prevent overflow
+		var autoYesWidth int
+		var autoYesAlign lipgloss.Position
+		if l.verticalLayout {
+			// For small screens, use a smaller width and center alignment to avoid overflow
+			autoYesWidth = titleWidth/2 - 4 // Leave some padding to prevent overflow
+			autoYesAlign = lipgloss.Center
+		} else {
+			// For full layout, use the original logic
+			autoYesWidth = titleWidth - (titleWidth / 2)
+			autoYesAlign = lipgloss.Right
+		}
+
 		autoYes := lipgloss.Place(
-			titleWidth-(titleWidth/2), 1, lipgloss.Right, lipgloss.Bottom, autoYesStyle.Render(autoYesText))
+			autoYesWidth, 1, autoYesAlign, lipgloss.Bottom, autoYesStyle.Render(autoYesText))
 		b.WriteString(lipgloss.JoinHorizontal(
 			lipgloss.Top, title, autoYes))
 	}
@@ -252,13 +287,203 @@ func (l *List) String() string {
 	b.WriteString("\n")
 
 	// Render the list.
-	for i, item := range l.items {
-		b.WriteString(l.renderer.Render(item, i+1, i == l.selectedIdx, len(l.repos) > 1))
-		if i != len(l.items)-1 {
-			b.WriteString("\n\n")
+	if l.verticalLayout {
+		// Two-column layout for vertical mode
+		l.renderTwoColumns(&b)
+
+		// Add scroll indicators if needed
+		l.addScrollIndicators(&b)
+	} else {
+		// Single column layout for horizontal mode
+		for i, item := range l.items {
+			b.WriteString(l.renderer.Render(item, i+1, i == l.selectedIdx, len(l.repos) > 1))
+			if i != len(l.items)-1 {
+				b.WriteString("\n\n")
+			}
 		}
 	}
 	return lipgloss.Place(l.width, l.height, lipgloss.Left, lipgloss.Top, b.String())
+}
+
+// renderTwoColumns renders the list items in a two-column layout for vertical mode
+func (l *List) renderTwoColumns(b *strings.Builder) {
+	if len(l.items) == 0 {
+		return
+	}
+
+	// Calculate column width (half the total width minus some padding)
+	columnWidth := (l.width - 4) / 2 // Leave 4 characters for spacing between columns
+
+	// Temporarily adjust renderer width for two-column layout
+	originalWidth := l.renderer.width
+	l.renderer.width = columnWidth
+
+	// Calculate how many rows can fit in the available height
+	availableHeight := l.height - 6 // Reserve space for title and padding
+	linesPerRow := 3                // Approximate lines per row
+	visibleRows := availableHeight / linesPerRow
+	if visibleRows < 1 {
+		visibleRows = 1
+	}
+
+	// Calculate start and end indices based on scroll offset
+	startRow := l.scrollOffset
+	endRow := startRow + visibleRows
+	totalRows := (len(l.items) + 1) / 2
+
+	if endRow > totalRows {
+		endRow = totalRows
+	}
+
+	// Group items into rows of 2, but only render visible rows
+	for row := startRow; row < endRow; row++ {
+		i := row * 2 // Convert row to item index
+		leftItem := l.items[i]
+		leftRendered := l.renderer.Render(leftItem, i+1, i == l.selectedIdx, len(l.repos) > 1)
+
+		var rightRendered string
+		if i+1 < len(l.items) {
+			rightItem := l.items[i+1]
+			rightRendered = l.renderer.Render(rightItem, i+2, i+1 == l.selectedIdx, len(l.repos) > 1)
+		} else {
+			// If odd number of items, fill right column with empty space
+			rightRendered = strings.Repeat(" ", columnWidth)
+		}
+
+		// Split rendered items into lines for proper alignment
+		leftLines := strings.Split(leftRendered, "\n")
+		rightLines := strings.Split(rightRendered, "\n")
+
+		// Ensure both columns have the same number of lines
+		maxLines := len(leftLines)
+		if len(rightLines) > maxLines {
+			maxLines = len(rightLines)
+		}
+
+		// Pad shorter column with empty lines
+		for len(leftLines) < maxLines {
+			leftLines = append(leftLines, strings.Repeat(" ", columnWidth))
+		}
+		for len(rightLines) < maxLines {
+			rightLines = append(rightLines, strings.Repeat(" ", columnWidth))
+		}
+
+		// Join columns horizontally line by line
+		for j := 0; j < maxLines; j++ {
+			// For left column, ensure proper width handling
+			leftLine := leftLines[j]
+			// Use lipgloss.Place to ensure proper width and handle ANSI sequences
+			leftColumn := lipgloss.Place(columnWidth, 1, lipgloss.Left, lipgloss.Top, leftLine)
+
+			b.WriteString(leftColumn)
+			b.WriteString("  ") // 2 spaces between columns
+			b.WriteString(rightLines[j])
+			b.WriteString("\n")
+		}
+
+		// Add spacing between rows (except for the last visible row)
+		if row < endRow-1 {
+			b.WriteString("\n")
+		}
+	}
+
+	// Restore original renderer width
+	l.renderer.width = originalWidth
+}
+
+// addScrollIndicators adds visual indicators when there are more items to scroll
+func (l *List) addScrollIndicators(b *strings.Builder) {
+	if len(l.items) == 0 {
+		return
+	}
+
+	totalRows := (len(l.items) + 1) / 2
+	availableHeight := l.height - 6
+	linesPerRow := 3
+	visibleRows := availableHeight / linesPerRow
+	if visibleRows < 1 {
+		visibleRows = 1
+	}
+
+	// Check if we need scroll indicators
+	hasMoreAbove := l.scrollOffset > 0
+	hasMoreBelow := l.scrollOffset+visibleRows < totalRows
+
+	if hasMoreAbove || hasMoreBelow {
+		b.WriteString("\n")
+
+		// Create scroll indicator line
+		indicator := ""
+		if hasMoreAbove {
+			indicator += "↑ "
+		} else {
+			indicator += "  "
+		}
+
+		indicator += fmt.Sprintf("(%d/%d rows)", l.scrollOffset+1, totalRows)
+
+		if hasMoreBelow {
+			indicator += " ↓"
+		}
+
+		// Center the indicator
+		indicatorStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#888888", Dark: "#888888"}).
+			Italic(true)
+
+		centeredIndicator := lipgloss.Place(l.width, 1, lipgloss.Center, lipgloss.Center, indicatorStyle.Render(indicator))
+		b.WriteString(centeredIndicator)
+	}
+}
+
+// ensureSelectedVisible adjusts scroll offset to ensure selected item is visible
+func (l *List) ensureSelectedVisible() {
+	if len(l.items) == 0 {
+		return
+	}
+
+	if l.verticalLayout {
+		// In two-column layout, calculate which row the selected item is in
+		selectedRow := l.selectedIdx / 2
+
+		// Calculate how many rows can fit in the available height
+		// Each item takes approximately 2-3 lines (title + branch info) + spacing
+		// Reserve space for title (4 lines) and some padding
+		availableHeight := l.height - 6 // Reserve space for title and padding
+		linesPerRow := 3                // Approximate lines per row (title + branch + spacing)
+		visibleRows := availableHeight / linesPerRow
+		if visibleRows < 1 {
+			visibleRows = 1
+		}
+
+		// Adjust scroll offset to keep selected row visible
+		if selectedRow < l.scrollOffset {
+			// Selected item is above visible area, scroll up
+			l.scrollOffset = selectedRow
+		} else if selectedRow >= l.scrollOffset+visibleRows {
+			// Selected item is below visible area, scroll down
+			l.scrollOffset = selectedRow - visibleRows + 1
+		}
+
+		// Ensure scroll offset doesn't go negative
+		if l.scrollOffset < 0 {
+			l.scrollOffset = 0
+		}
+
+		// Ensure we don't scroll past the last items
+		totalRows := (len(l.items) + 1) / 2 // Round up for odd number of items
+		maxScrollOffset := totalRows - visibleRows
+		if maxScrollOffset < 0 {
+			maxScrollOffset = 0
+		}
+		if l.scrollOffset > maxScrollOffset {
+			l.scrollOffset = maxScrollOffset
+		}
+	} else {
+		// Single column layout - implement similar logic if needed
+		// For now, keep existing behavior
+		l.scrollOffset = 0
+	}
 }
 
 // Down selects the next item in the list.
@@ -266,9 +491,23 @@ func (l *List) Down() {
 	if len(l.items) == 0 {
 		return
 	}
-	if l.selectedIdx < len(l.items)-1 {
-		l.selectedIdx++
+
+	if l.verticalLayout {
+		// In two-column layout, down moves to the item 2 positions ahead (next row)
+		if l.selectedIdx+2 < len(l.items) {
+			l.selectedIdx += 2
+		} else {
+			// If we can't move down 2, try to move to the last item
+			l.selectedIdx = len(l.items) - 1
+		}
+	} else {
+		// Single column layout - normal behavior
+		if l.selectedIdx < len(l.items)-1 {
+			l.selectedIdx++
+		}
 	}
+
+	l.ensureSelectedVisible()
 }
 
 // Kill selects the next item in the list.
@@ -298,6 +537,9 @@ func (l *List) Kill() {
 
 	// Since there's items after this, the selectedIdx can stay the same.
 	l.items = append(l.items[:l.selectedIdx], l.items[l.selectedIdx+1:]...)
+
+	// Ensure scroll position is still valid after deletion
+	l.ensureSelectedVisible()
 }
 
 func (l *List) Attach() (chan struct{}, error) {
@@ -310,9 +552,51 @@ func (l *List) Up() {
 	if len(l.items) == 0 {
 		return
 	}
-	if l.selectedIdx > 0 {
+
+	if l.verticalLayout {
+		// In two-column layout, up moves to the item 2 positions back (previous row)
+		if l.selectedIdx-2 >= 0 {
+			l.selectedIdx -= 2
+		} else {
+			// If we can't move up 2, move to the first item
+			l.selectedIdx = 0
+		}
+	} else {
+		// Single column layout - normal behavior
+		if l.selectedIdx > 0 {
+			l.selectedIdx--
+		}
+	}
+
+	l.ensureSelectedVisible()
+}
+
+// Left moves to the left column in two-column layout (only in vertical mode)
+func (l *List) Left() {
+	if len(l.items) == 0 || !l.verticalLayout {
+		return
+	}
+
+	// If we're in the right column (odd index), move to left column
+	if l.selectedIdx%2 == 1 {
 		l.selectedIdx--
 	}
+
+	l.ensureSelectedVisible()
+}
+
+// Right moves to the right column in two-column layout (only in vertical mode)
+func (l *List) Right() {
+	if len(l.items) == 0 || !l.verticalLayout {
+		return
+	}
+
+	// If we're in the left column (even index) and there's a right item, move to right column
+	if l.selectedIdx%2 == 0 && l.selectedIdx+1 < len(l.items) {
+		l.selectedIdx++
+	}
+
+	l.ensureSelectedVisible()
 }
 
 func (l *List) addRepo(repo string) {
@@ -364,6 +648,7 @@ func (l *List) SetSelectedInstance(idx int) {
 		return
 	}
 	l.selectedIdx = idx
+	l.ensureSelectedVisible()
 }
 
 // GetInstances returns all instances in the list

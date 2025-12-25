@@ -92,6 +92,15 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+
+	// -- Layout --
+
+	// currentLayoutMode stores the effective layout mode
+	currentLayoutMode config.LayoutMode
+	// terminalWidth stores the current terminal width
+	terminalWidth int
+	// terminalHeight stores the current terminal height
+	terminalHeight int
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -145,30 +154,105 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 // updateHandleWindowSizeEvent sets the sizes of the components.
 // The components will try to render inside their bounds.
 func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
-	// List takes 30% of width, preview takes 70%
-	listWidth := int(float32(msg.Width) * 0.3)
-	tabsWidth := msg.Width - listWidth
+	m.terminalWidth = msg.Width
+	m.terminalHeight = msg.Height
 
-	// Menu takes 10% of height, list and window take 90%
-	contentHeight := int(float32(msg.Height) * 0.9)
-	menuHeight := msg.Height - contentHeight - 1     // minus 1 for error box
-	m.errBox.SetSize(int(float32(msg.Width)*0.9), 1) // error box takes 1 row
+	// Determine effective layout mode (always auto-detect)
+	m.currentLayoutMode = m.appConfig.GetEffectiveLayoutMode(msg.Width)
 
-	m.tabbedWindow.SetSize(tabsWidth, contentHeight)
-	m.list.SetSize(listWidth, contentHeight)
+	// Update menu mode based on layout
+	m.menu.SetCompactMode(m.appConfig.ShouldUseCompactMenu(m.currentLayoutMode))
+	m.menu.SetVerticalMode(m.currentLayoutMode == config.LayoutModeMobile)
 
-	if m.textInputOverlay != nil {
-		m.textInputOverlay.SetSize(int(float32(msg.Width)*0.6), int(float32(msg.Height)*0.4))
-	}
-	if m.textOverlay != nil {
-		m.textOverlay.SetWidth(int(float32(msg.Width) * 0.6))
-	}
+	// Update logo visibility
+	m.tabbedWindow.GetPreviewPane().SetHideLogo(m.appConfig.ShouldHideLogo(m.currentLayoutMode))
 
+	menuHeight := m.applyLayoutMode(msg.Width, msg.Height)
+
+	// Update preview size for tmux sessions
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
 	if err := m.list.SetSessionPreviewSize(previewWidth, previewHeight); err != nil {
 		log.ErrorLog.Print(err)
 	}
 	m.menu.SetSize(msg.Width, menuHeight)
+}
+
+// applyLayoutMode applies the current layout mode to all UI components
+// Returns the menu height for further use
+func (m *home) applyLayoutMode(width, height int) int {
+	var listWidth, tabsWidth, contentHeight, menuHeight int
+
+	switch m.currentLayoutMode {
+	case config.LayoutModeMobile:
+		// Mobile: Vertical stacking layout
+		// List takes full width but only 25% height (reduced from 30% to save space)
+		// Preview/diff takes full width and remaining height
+		// Menu gets a fixed compact height
+		menuHeight = 2 // Fixed compact height for menu in mobile mode (reduced from 3)
+		listHeight := int(float32(height) * 0.25)
+		previewHeight := height - listHeight - menuHeight - 1
+
+		// Ensure minimum heights for usability
+		if listHeight < 3 {
+			listHeight = 3
+			previewHeight = height - listHeight - menuHeight - 1
+		}
+		if previewHeight < 5 {
+			previewHeight = 5
+			listHeight = height - previewHeight - menuHeight - 1
+		}
+		if menuHeight < 1 {
+			menuHeight = 1
+		}
+
+		m.list.SetVerticalLayout(true)
+		m.list.SetSize(width, listHeight)
+		m.tabbedWindow.SetVerticalLayout(true)
+		m.tabbedWindow.SetSize(width, previewHeight)
+
+	default: // LayoutModeFull
+		// Full: Standard 30/70 split
+		listWidth = int(float32(width) * 0.3)
+		tabsWidth = width - listWidth
+		contentHeight = int(float32(height) * 0.9)
+		menuHeight = height - contentHeight - 1
+
+		// Ensure minimum widths for usability
+		if listWidth < 20 {
+			listWidth = 20
+			tabsWidth = width - listWidth
+		}
+		if tabsWidth < 30 {
+			tabsWidth = 30
+			listWidth = width - tabsWidth
+		}
+
+		m.list.SetVerticalLayout(false)
+		m.list.SetSize(listWidth, contentHeight)
+		m.tabbedWindow.SetVerticalLayout(false)
+		m.tabbedWindow.SetSize(tabsWidth, contentHeight)
+	}
+
+	// Always set error box to 90% width
+	m.errBox.SetSize(int(float32(width)*0.9), 1)
+
+	// Adjust overlay sizes based on layout mode
+	if m.textInputOverlay != nil {
+		overlayWidth := int(float32(width) * 0.8)
+		if m.currentLayoutMode == config.LayoutModeFull {
+			overlayWidth = int(float32(width) * 0.6)
+		}
+		m.textInputOverlay.SetSize(overlayWidth, int(float32(height)*0.4))
+	}
+	if m.textOverlay != nil {
+		overlayWidth := int(float32(width) * 0.8)
+		if m.currentLayoutMode == config.LayoutModeFull {
+			overlayWidth = int(float32(width) * 0.6)
+		}
+		m.textOverlay.SetWidth(overlayWidth)
+	}
+
+	return menuHeight
 }
 
 func (m *home) Init() tea.Cmd {
@@ -181,6 +265,8 @@ func (m *home) Init() tea.Cmd {
 			return previewTickMsg{}
 		},
 		tickUpdateMetadataCmd,
+		// Force an initial window size event to ensure proper layout initialization
+		tea.WindowSize(),
 	)
 }
 
@@ -515,6 +601,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyDown:
 		m.list.Down()
 		return m, m.instanceChanged()
+	case keys.KeyLeft:
+		m.list.Left()
+		return m, m.instanceChanged()
+	case keys.KeyRight:
+		m.list.Right()
+		return m, m.instanceChanged()
 	case keys.KeyShiftUp:
 		m.tabbedWindow.ScrollUp()
 		return m, m.instanceChanged()
@@ -626,6 +718,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.state = stateDefault
 		})
 		return m, nil
+
 	default:
 		return m, nil
 	}
@@ -722,9 +815,21 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 }
 
 func (m *home) View() string {
-	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.list.String())
-	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.tabbedWindow.String())
-	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, listWithPadding, previewWithPadding)
+	var listAndPreview string
+
+	if m.currentLayoutMode == config.LayoutModeMobile {
+		// Mobile: Vertical stacking without padding
+		listAndPreview = lipgloss.JoinVertical(
+			lipgloss.Left,
+			m.list.String(),
+			m.tabbedWindow.String(),
+		)
+	} else {
+		// Full: Horizontal layout with padding
+		listWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.list.String())
+		previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.tabbedWindow.String())
+		listAndPreview = lipgloss.JoinHorizontal(lipgloss.Top, listWithPadding, previewWithPadding)
+	}
 
 	mainView := lipgloss.JoinVertical(
 		lipgloss.Center,
