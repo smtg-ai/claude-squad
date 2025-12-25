@@ -25,7 +25,7 @@ type ModelInstance struct {
 	successCount   int32
 
 	// Concurrency control
-	mu sync.Mutex
+	mu sync.RWMutex
 }
 
 // Request represents a concurrent request to be processed
@@ -299,7 +299,7 @@ func (mo *ModelOrchestrator) GetModelStatus() map[string]ModelHealthStatus {
 
 	status := make(map[string]ModelHealthStatus)
 	for name, model := range mo.models {
-		model.mu.Lock()
+		model.mu.RLock()
 		status[name] = ModelHealthStatus{
 			Name:         model.name,
 			IsHealthy:    model.isHealthy.Load(),
@@ -308,7 +308,7 @@ func (mo *ModelOrchestrator) GetModelStatus() map[string]ModelHealthStatus {
 			LastHealthAt: model.lastHealthTime,
 			URL:          model.baseURL,
 		}
-		model.mu.Unlock()
+		model.mu.RUnlock()
 	}
 
 	return status
@@ -375,6 +375,10 @@ func (mo *ModelOrchestrator) performHealthCheck() {
 
 // checkModelHealth checks if a single model is healthy
 func (mo *ModelOrchestrator) checkModelHealth(model *ModelInstance) {
+	if model == nil {
+		return
+	}
+
 	model.mu.Lock()
 	defer model.mu.Unlock()
 
@@ -402,6 +406,10 @@ func (mo *ModelOrchestrator) checkModelHealth(model *ModelInstance) {
 
 // pingModel performs a real HTTP health check on a model
 func (mo *ModelOrchestrator) pingModel(ctx context.Context, model *ModelInstance) bool {
+	if model == nil {
+		return false
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
@@ -417,6 +425,38 @@ func (mo *ModelOrchestrator) pingModel(ctx context.Context, model *ModelInstance
 	defer resp.Body.Close()
 
 	return resp.StatusCode == http.StatusOK
+}
+
+// RecordRequestSuccess atomically increments the successful request counter
+// This should be called when a request completes successfully
+func (mo *ModelOrchestrator) RecordRequestSuccess() {
+	atomic.AddInt64(&mo.successfulReqs, 1)
+}
+
+// RecordRequestFailure atomically increments the failed request counter
+// This should be called when a request fails
+func (mo *ModelOrchestrator) RecordRequestFailure() {
+	atomic.AddInt64(&mo.failedReqs, 1)
+}
+
+// RecordLatency atomically updates the average latency using a running average
+// This should be called with the duration of each completed request
+func (mo *ModelOrchestrator) RecordLatency(latency time.Duration) {
+	// Store latency in nanoseconds
+	latencyNanos := latency.Nanoseconds()
+
+	// Update using compare-and-swap loop for lock-free running average
+	for {
+		current := atomic.LoadInt64(&mo.averageLatency)
+
+		// Simple exponential moving average: new_avg = 0.9 * old_avg + 0.1 * new_value
+		// This gives recent latencies more weight while smoothing out spikes
+		newAvg := int64(0.9*float64(current) + 0.1*float64(latencyNanos))
+
+		if atomic.CompareAndSwapInt64(&mo.averageLatency, current, newAvg) {
+			break
+		}
+	}
 }
 
 // Shutdown gracefully shuts down the orchestrator and all workers
@@ -576,6 +616,16 @@ func (wp *WorkerPool) Stop() {
 	// Close request channel to signal workers to stop
 	close(wp.requestCh)
 
+	// Drain any pending requests and close their result channels to prevent leaks
+	go func() {
+		for req := range wp.requestCh {
+			if req != nil && req.ResultCh != nil {
+				// Close the result channel for any unprocessed requests
+				close(req.ResultCh)
+			}
+		}
+	}()
+
 	// Wait for all workers to finish
 	wp.wg.Wait()
 }
@@ -658,6 +708,10 @@ func (mp *OrchestratorModelPool) Get() (*ModelInstance, error) {
 
 // Put returns a model instance to the pool
 func (mp *OrchestratorModelPool) Put(model *ModelInstance) {
+	if model == nil {
+		return
+	}
+
 	model.mu.Lock()
 	model.name = ""
 	model.baseURL = ""
@@ -668,22 +722,40 @@ func (mp *OrchestratorModelPool) Put(model *ModelInstance) {
 	mp.pool.Put(model)
 }
 
+// CircuitBreakerState represents the state of a circuit breaker
+type CircuitBreakerState string
+
+const (
+	// CircuitClosed indicates the circuit is healthy and accepting requests
+	CircuitClosed CircuitBreakerState = "closed"
+	// CircuitOpen indicates the circuit is broken and rejecting requests
+	CircuitOpen CircuitBreakerState = "open"
+	// CircuitHalfOpen indicates the circuit is testing if it can recover
+	CircuitHalfOpen CircuitBreakerState = "half-open"
+)
+
 // CircuitBreaker implements circuit breaker pattern for model requests
 type CircuitBreaker struct {
-	maxFailures      int32
-	failureThreshold int32
-	resetTimeout     time.Duration
-	state            atomic.Value // "closed", "open", "half-open"
-	lastFailureTime  time.Time
-	mu               sync.Mutex
+	maxFailures         int32
+	failureThreshold    int32
+	resetTimeout        time.Duration
+	state               atomic.Value // CircuitBreakerState
+	lastFailureTime     time.Time
+	mu                  sync.Mutex
+	halfOpenRequests    int32 // Current count of half-open requests
+	maxHalfOpenRequests int32 // Maximum allowed half-open requests
+	successThreshold    int32 // Successes needed to close from half-open
+	halfOpenSuccesses   int32 // Current success count in half-open state
 }
 
 // NewCircuitBreaker creates a new circuit breaker
 func NewCircuitBreaker(maxFailures int32, resetTimeout time.Duration) *CircuitBreaker {
 	cb := &CircuitBreaker{
-		maxFailures:      maxFailures,
-		failureThreshold: maxFailures,
-		resetTimeout:     resetTimeout,
+		maxFailures:         maxFailures,
+		failureThreshold:    maxFailures,
+		resetTimeout:        resetTimeout,
+		maxHalfOpenRequests: 2, // Allow 2 test requests in half-open state
+		successThreshold:    3, // Require 3 successes to close from half-open
 	}
 	cb.state.Store("closed")
 	return cb
@@ -716,9 +788,28 @@ func (cb *CircuitBreaker) RecordSuccess() {
 	if !ok {
 		return
 	}
-	if state != "closed" {
+
+	// Decrement half-open request count if in half-open state
+	if state == "half-open" {
+		if cb.halfOpenRequests > 0 {
+			atomic.AddInt32(&cb.halfOpenRequests, -1)
+		}
+
+		// Track successes in half-open state
+		cb.halfOpenSuccesses++
+		if cb.halfOpenSuccesses >= cb.successThreshold {
+			// Enough successes, close the circuit
+			cb.state.Store("closed")
+			cb.failureThreshold = cb.maxFailures
+			atomic.StoreInt32(&cb.halfOpenRequests, 0)
+			cb.halfOpenSuccesses = 0
+		}
+	} else if state == "open" {
+		// Unexpected success from open state, close immediately
 		cb.state.Store("closed")
 		cb.failureThreshold = cb.maxFailures
+		atomic.StoreInt32(&cb.halfOpenRequests, 0)
+		cb.halfOpenSuccesses = 0
 	}
 }
 
@@ -727,12 +818,30 @@ func (cb *CircuitBreaker) RecordFailure() {
 	cb.mu.Lock()
 	defer cb.mu.Unlock()
 
-	cb.failureThreshold--
+	state, ok := cb.state.Load().(string)
+	if !ok {
+		return
+	}
+
 	cb.lastFailureTime = time.Now()
 
-	if cb.failureThreshold <= 0 {
+	// Decrement half-open request count if in half-open state
+	if state == "half-open" {
+		if cb.halfOpenRequests > 0 {
+			atomic.AddInt32(&cb.halfOpenRequests, -1)
+		}
+		// Any failure in half-open state reopens the circuit
 		cb.state.Store("open")
 		cb.failureThreshold = cb.maxFailures
+		atomic.StoreInt32(&cb.halfOpenRequests, 0)
+		cb.halfOpenSuccesses = 0
+	} else {
+		// Closed state: decrement threshold
+		cb.failureThreshold--
+		if cb.failureThreshold <= 0 {
+			cb.state.Store("open")
+			cb.failureThreshold = cb.maxFailures
+		}
 	}
 }
 
@@ -754,13 +863,22 @@ func (cb *CircuitBreaker) AllowRequest() bool {
 		// Check if reset timeout has passed
 		if time.Since(cb.lastFailureTime) > cb.resetTimeout {
 			cb.state.Store("half-open")
+			atomic.StoreInt32(&cb.halfOpenRequests, 0)
+			cb.halfOpenSuccesses = 0
+			// Allow first test request
+			atomic.AddInt32(&cb.halfOpenRequests, 1)
 			return true
 		}
 		return false
 	}
 
-	// half-open state
-	return true
+	// half-open state - limit concurrent test requests
+	currentRequests := atomic.LoadInt32(&cb.halfOpenRequests)
+	if currentRequests < cb.maxHalfOpenRequests {
+		atomic.AddInt32(&cb.halfOpenRequests, 1)
+		return true
+	}
+	return false
 }
 
 // RateLimiter implements token bucket rate limiting

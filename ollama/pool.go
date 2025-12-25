@@ -273,9 +273,9 @@ func (p *AgentPool) initializeWarmPool() error {
 		}
 
 		p.mu.Lock()
+		defer p.mu.Unlock()
 		agentID := fmt.Sprintf("agent-%d", time.Now().UnixNano())
 		p.agents[agentID] = agent
-		p.mu.Unlock()
 
 		select {
 		case p.availableQueue <- agent:
@@ -464,9 +464,9 @@ func (p *AgentPool) recycleAgent(agent *Agent) error {
 	}
 
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	agentID := fmt.Sprintf("agent-%d", time.Now().UnixNano())
 	p.agents[agentID] = newAgent
-	p.mu.Unlock()
 
 	p.totalRecycles.Add(1)
 	newAgent.IncrementRecycleCount()
@@ -587,6 +587,7 @@ func (p *AgentPool) performMaintenance() {
 
 	// Update metrics
 	p.metricsLock.Lock()
+	defer p.metricsLock.Unlock()
 	p.lastMetrics = PoolMetrics{
 		ActiveAgents:     activeCount,
 		IdleAgents:       idleCount,
@@ -597,7 +598,6 @@ func (p *AgentPool) performMaintenance() {
 		TerminatedAgents: p.terminatedCount.Load(),
 		LastScaleEvent:   now,
 	}
-	p.metricsLock.Unlock()
 
 	// Auto-scale logic
 	p.autoscale(activeCount, idleCount)
@@ -740,13 +740,13 @@ func (p *AgentPool) Close() error {
 
 	// Kill all agents
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	var errs []error
 	for _, agent := range p.agents {
 		if err := p.killAgent(agent); err != nil {
 			errs = append(errs, err)
 		}
 	}
-	p.mu.Unlock()
 
 	// Close available queue
 	close(p.availableQueue)
@@ -770,11 +770,11 @@ func (p *AgentPool) SaveState(ctx context.Context) error {
 	}
 
 	p.mu.RLock()
+	defer p.mu.RUnlock()
 	instances := make([]*session.Instance, 0, len(p.agents))
 	for _, agent := range p.agents {
 		instances = append(instances, agent.instance)
 	}
-	p.mu.RUnlock()
 
 	return p.storage.SaveInstances(ctx, instances)
 }
@@ -809,8 +809,8 @@ func (p *AgentPool) LoadState(ctx context.Context) error {
 // WarmPool ensures at least minPoolSize agents are available
 func (p *AgentPool) WarmPool(ctx context.Context) error {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	currentSize := len(p.agents)
-	p.mu.Unlock()
 
 	for currentSize < p.minPoolSize {
 		// Check context cancellation before spawning
@@ -826,9 +826,9 @@ func (p *AgentPool) WarmPool(ctx context.Context) error {
 		}
 
 		p.mu.Lock()
+		defer p.mu.Unlock()
 		agentID := fmt.Sprintf("agent-%d", time.Now().UnixNano())
 		p.agents[agentID] = agent
-		p.mu.Unlock()
 
 		select {
 		case p.availableQueue <- agent:

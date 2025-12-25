@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -101,4 +103,46 @@ func (e *Every) ShouldLog() bool {
 // IsDebugEnabled returns true if debug logging is enabled.
 func IsDebugEnabled() bool {
 	return debugEnabled
+}
+
+// SanitizeURL removes credentials from a URL string for safe logging.
+// It replaces username/password with "***" to prevent leaking sensitive data in logs.
+func SanitizeURL(rawURL string) string {
+	if rawURL == "" {
+		return ""
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		// If parsing fails, redact the entire string to be safe
+		return "[INVALID_URL]"
+	}
+
+	// If there are credentials, redact them
+	if u.User != nil {
+		// Get the original password if it exists
+		_, hasPassword := u.User.Password()
+		if hasPassword {
+			u.User = url.UserPassword("***", "***")
+		} else {
+			u.User = url.User("***")
+		}
+	}
+
+	return u.String()
+}
+
+// SanitizeURLs sanitizes multiple URLs in a string by replacing credentials.
+// This is useful for sanitizing log messages that may contain multiple URLs.
+func SanitizeURLs(message string) string {
+	// Simple heuristic: look for common URL patterns and sanitize them
+	// This handles cases like "connecting to http://user:pass@host:port/path"
+	words := strings.Fields(message)
+	for i, word := range words {
+		// Check if this looks like a URL
+		if strings.Contains(word, "://") {
+			words[i] = SanitizeURL(word)
+		}
+	}
+	return strings.Join(words, " ")
 }

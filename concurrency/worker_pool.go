@@ -397,15 +397,35 @@ func (wp *WorkerPool) Shutdown(ctx context.Context) error {
 	wp.cancel()
 
 	// Wait for workers to finish with timeout
-	done := make(chan struct{})
+	type shutdownResult struct {
+		timedOut bool
+		err      error
+	}
+	resultCh := make(chan shutdownResult, 1)
+
 	go func() {
-		wp.wg.Wait()
-		close(done)
+		// Get timeout from context if available
+		deadline, hasDeadline := ctx.Deadline()
+		var timeout time.Duration
+		if hasDeadline {
+			timeout = time.Until(deadline)
+		} else {
+			timeout = 30 * time.Second // Default timeout
+		}
+
+		if waitWithTimeout(&wp.wg, timeout) {
+			resultCh <- shutdownResult{timedOut: false, err: nil}
+		} else {
+			resultCh <- shutdownResult{timedOut: true, err: fmt.Errorf("shutdown timeout exceeded")}
+		}
 	}()
 
 	select {
-	case <-done:
+	case result := <-resultCh:
 		close(wp.results)
+		if result.timedOut {
+			return result.err
+		}
 		return nil
 	case <-ctx.Done():
 		close(wp.results)
@@ -639,6 +659,24 @@ func CollectResults(results <-chan JobResult) ([]JobResult, error) {
 	}
 
 	return allResults, combineWorkerPoolErrors(errors)
+}
+
+// waitWithTimeout waits for a WaitGroup with a timeout.
+// Returns true if all goroutines finished before timeout, false if timeout occurred.
+// This helper prevents goroutine leaks and implements production-ready shutdown patterns.
+func waitWithTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 // combineErrors combines multiple errors into a single error.

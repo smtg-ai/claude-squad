@@ -72,7 +72,21 @@ type Task struct {
 	// Metadata stores additional task-specific data
 	Metadata map[string]interface{}
 	// ResultChan is the channel to send the task result
+	// IMPORTANT: This channel should be buffered (capacity >= 1) to prevent goroutine leaks
+	// Use NewTask() helper to create tasks with properly buffered channels
 	ResultChan chan *TaskResult
+}
+
+// NewTask creates a new task with a properly buffered result channel
+func NewTask(id, prompt string, priority TaskPriority, timeout time.Duration) *Task {
+	return &Task{
+		ID:         id,
+		Prompt:     prompt,
+		Priority:   priority,
+		Timeout:    timeout,
+		Metadata:   make(map[string]interface{}),
+		ResultChan: make(chan *TaskResult, 1), // Buffered to prevent goroutine leaks
+	}
 }
 
 // TaskResult represents the outcome of task execution

@@ -207,12 +207,12 @@ func (md *ModelDiscovery) pollWorker() {
 	defer md.wg.Done()
 
 	ticker := time.NewTimer(md.pollInterval)
+	defer ticker.Stop()
 	everyN := log.NewEvery(60 * time.Second)
 
 	for {
 		select {
 		case <-md.stopCh:
-			ticker.Stop()
 			return
 		default:
 		}
@@ -231,7 +231,6 @@ func (md *ModelDiscovery) pollWorker() {
 
 		select {
 		case <-md.stopCh:
-			ticker.Stop()
 			return
 		case <-ticker.C:
 			ticker.Reset(md.pollInterval)
