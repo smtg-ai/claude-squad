@@ -139,7 +139,7 @@ func main() {
     task := &concurrency.Task{
         ID:       "task-1",
         Prompt:   "Analyze this codebase for bugs",
-        Priority: concurrency.PriorityHigh,
+        Priority: concurrency.TaskPriorityHigh,
         Timeout:  5 * time.Minute,
         ResultChan: make(chan *concurrency.TaskResult, 1),
     }
@@ -188,6 +188,35 @@ go func() {
 }()
 ```
 
+### Task Creation
+
+**IMPORTANT**: Task result channels must be buffered (capacity >= 1) to prevent goroutine leaks.
+
+Use the `NewTask()` helper for safe task creation:
+
+```go
+// Recommended: Use NewTask helper
+task := concurrency.NewTask(
+    "task-1",
+    "Analyze this codebase",
+    concurrency.TaskPriorityHigh,
+    5*time.Minute,
+)
+```
+
+Or manually create with buffered channel:
+
+```go
+// Manual creation: ensure ResultChan is buffered
+task := &concurrency.Task{
+    ID:         "task-1",
+    Prompt:     "Analyze this codebase",
+    Priority:   concurrency.TaskPriorityHigh,
+    Timeout:    5 * time.Minute,
+    ResultChan: make(chan *concurrency.TaskResult, 1), // MUST be buffered
+}
+```
+
 ### Task Affinity
 
 ```go
@@ -195,7 +224,7 @@ go func() {
 task := &concurrency.Task{
     ID:       "specialized-task",
     Prompt:   "Optimize database queries",
-    Priority: concurrency.PriorityHigh,
+    Priority: concurrency.TaskPriorityHigh,
     Affinity: []string{"backend-specialist-1", "backend-specialist-2"},
     Timeout:  10 * time.Minute,
     ResultChan: make(chan *concurrency.TaskResult, 1),
@@ -348,10 +377,10 @@ if err == nil {
 - `AgentStateStopped`: Agent has been stopped
 
 ### TaskPriority
-- `PriorityLow`: Background tasks
-- `PriorityNormal`: Standard tasks
-- `PriorityHigh`: Urgent tasks
-- `PriorityCritical`: Critical tasks that must be executed immediately
+- `TaskPriorityLow`: Background tasks
+- `TaskPriorityNormal`: Standard tasks
+- `TaskPriorityHigh`: Urgent tasks
+- `TaskPriorityCritical`: Critical tasks that must be executed immediately
 
 ### CircuitBreakerState
 - `CircuitClosed`: Normal operation
@@ -379,6 +408,194 @@ if err == nil {
 - `EnableAutoRecovery bool`: Enable automatic recovery of failed agents (default: true)
 - `LoadBalancingAlgorithm string`: Load balancing strategy (default: "least-loaded")
   - Options: "round-robin", "least-loaded", "random"
+
+## WorkerPool
+
+The concurrency package also provides a production-ready WorkerPool implementation for general-purpose parallel job execution with priority queuing and health monitoring.
+
+### Overview
+
+WorkerPool manages a fixed pool of workers that execute jobs concurrently with:
+- **Priority-based job queuing**: Jobs are executed in priority order
+- **Worker health monitoring**: Automatic detection of stuck workers
+- **Comprehensive metrics**: Track throughput, latency, and worker status
+- **Graceful shutdown**: Wait for in-flight jobs to complete
+- **Context support**: Full context cancellation support
+
+### Job Interface
+
+Jobs must implement the Job interface:
+
+```go
+type Job interface {
+    Execute(ctx context.Context) (interface{}, error)
+    Priority() int  // Higher values = higher priority
+    ID() string     // Unique identifier
+}
+```
+
+### Configuration
+
+```go
+type WorkerPoolConfig struct {
+    // MaxWorkers is the maximum number of concurrent workers (default: 10)
+    MaxWorkers int
+
+    // QueueSize is the maximum size of the job queue (default: 1000)
+    QueueSize int
+
+    // WorkerTimeout is the maximum time a job can run (default: 5 minutes)
+    WorkerTimeout time.Duration
+
+    // HealthCheckInterval is how often to check worker health (default: 30 seconds)
+    HealthCheckInterval time.Duration
+}
+```
+
+### Basic Usage
+
+```go
+// Create worker pool with default configuration
+config := DefaultWorkerPoolConfig()
+pool := NewWorkerPool(config)
+
+// Start the pool
+if err := pool.Start(); err != nil {
+    log.Fatal(err)
+}
+defer pool.Shutdown(context.Background())
+
+// Submit jobs
+ctx := context.Background()
+job := &MyJob{id: "job-1", priority: 10}
+if err := pool.Submit(ctx, job); err != nil {
+    log.Fatal(err)
+}
+
+// Receive results
+go func() {
+    for result := range pool.Results() {
+        if result.Error != nil {
+            log.Printf("Job %s failed: %v", result.JobID, result.Error)
+        } else {
+            log.Printf("Job %s completed: %v", result.JobID, result.Result)
+        }
+    }
+}()
+```
+
+### Custom Job Implementation
+
+```go
+type AnalysisJob struct {
+    id       string
+    priority int
+    data     []byte
+}
+
+func (j *AnalysisJob) ID() string {
+    return j.id
+}
+
+func (j *AnalysisJob) Priority() int {
+    return j.priority
+}
+
+func (j *AnalysisJob) Execute(ctx context.Context) (interface{}, error) {
+    // Perform analysis
+    result, err := analyzeData(ctx, j.data)
+    if err != nil {
+        return nil, err
+    }
+    return result, nil
+}
+```
+
+### WorkerPool Methods
+
+- `NewWorkerPool(config WorkerPoolConfig) *WorkerPool` - Create a new worker pool
+- `Start() error` - Start processing jobs (thread-safe, call once)
+- `Submit(ctx context.Context, job Job) error` - Submit a job for execution (thread-safe)
+- `Results() <-chan JobResult` - Get the results channel (thread-safe)
+- `Shutdown(ctx context.Context) error` - Gracefully shutdown (thread-safe, call once)
+- `Metrics() *Metrics` - Get current metrics (thread-safe)
+- `Workers() []*Worker` - Get worker information (thread-safe)
+
+### Metrics
+
+The WorkerPool tracks comprehensive metrics:
+
+```go
+metrics := pool.Metrics()
+fmt.Printf("Jobs: %d submitted, %d completed, %d failed\n",
+    metrics.JobsSubmitted.Load(),
+    metrics.JobsCompleted.Load(),
+    metrics.JobsFailed.Load(),
+)
+fmt.Printf("Latency: avg=%v, min=%v, max=%v\n",
+    metrics.AverageLatency(),
+    time.Duration(metrics.MinLatency.Load()),
+    time.Duration(metrics.MaxLatency.Load()),
+)
+fmt.Printf("Workers: %d active, %d idle\n",
+    metrics.ActiveWorkers.Load(),
+    metrics.IdleWorkers.Load(),
+)
+```
+
+### Worker Status
+
+Monitor individual worker health:
+
+```go
+workers := pool.Workers()
+for _, worker := range workers {
+    fmt.Printf("Worker %d: status=%s, jobs=%d, last_error=%v\n",
+        worker.ID(),
+        worker.Status(),
+        worker.JobsProcessed(),
+        worker.LastError(),
+    )
+}
+```
+
+### Thread Safety
+
+All WorkerPool public methods are thread-safe and can be called concurrently:
+- `Submit()` - Safe for concurrent job submission
+- `Results()` - Safe for multiple readers
+- `Metrics()` - Uses atomic operations for safe access
+- `Workers()` - Returns a copy, safe for concurrent access
+
+### Error Handling
+
+```go
+// Submit returns error if pool not started or queue full
+if err := pool.Submit(ctx, job); err != nil {
+    if err.Error() == "job queue is full" {
+        // Handle backpressure
+    }
+}
+
+// Shutdown returns error if timeout exceeded
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+if err := pool.Shutdown(ctx); err != nil {
+    log.Printf("Shutdown timeout: %v", err)
+}
+```
+
+### Best Practices for WorkerPool
+
+1. **Configure appropriate worker count**: Set `MaxWorkers` based on CPU cores and I/O requirements
+2. **Set reasonable timeouts**: Configure `WorkerTimeout` to prevent hung jobs
+3. **Monitor metrics**: Regularly check metrics to detect performance issues
+4. **Handle backpressure**: Check for "queue is full" errors and implement retry logic
+5. **Process results asynchronously**: Read from `Results()` channel in a separate goroutine
+6. **Graceful shutdown**: Always call `Shutdown()` with appropriate timeout
+7. **Use context for cancellation**: Pass context to jobs for early cancellation
+
+---
 
 ## Best Practices
 

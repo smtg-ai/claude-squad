@@ -183,6 +183,50 @@ func (fw *DiataxisFramework) GenerateDocumentation(ctx context.Context) error {
 	return fw.generator.Generate(ctx)
 }
 
+// Validate validates a single document for Diataxis compliance
+// This is a convenience method that can be called without a full framework
+func (doc *Document) Validate() []ValidationIssue {
+	var issues []ValidationIssue
+
+	// Create standalone validator rules
+	rules := []ValidationRule{
+		&RequiredFieldsRule{},
+		&ContentLengthRule{},
+		&CodeBlockValidityRule{},
+		&MetadataRule{},
+		&DiataxisStructureRule{},
+		&LinkValidityRule{},
+	}
+
+	// Run all validation rules
+	for _, rule := range rules {
+		if ruleIssues := rule.Validate(doc); len(ruleIssues) > 0 {
+			issues = append(issues, ruleIssues...)
+		}
+	}
+
+	// Update validation status based on issues
+	if len(issues) == 0 {
+		doc.ValidationStatus = ValidationPassed
+	} else {
+		hasErrors := false
+		for _, issue := range issues {
+			if issue.Severity == "error" {
+				hasErrors = true
+				break
+			}
+		}
+
+		if hasErrors {
+			doc.ValidationStatus = ValidationFailed
+		} else {
+			doc.ValidationStatus = ValidationWarnings
+		}
+	}
+
+	return issues
+}
+
 // GetStatistics returns statistics about the documentation
 func (fw *DiataxisFramework) GetStatistics() *FrameworkStatistics {
 	fw.mu.RLock()

@@ -631,7 +631,8 @@ type AgentOrchestrator struct {
 	startTime             time.Time
 }
 
-// NewOrchestrator creates a new agent orchestrator with the given configuration
+// NewOrchestrator creates a new agent orchestrator with the given configuration.
+// This function is thread-safe and can be called concurrently.
 func NewOrchestrator(config *OrchestratorConfig) *AgentOrchestrator {
 	if config == nil {
 		config = DefaultOrchestratorConfig()
@@ -658,7 +659,8 @@ func NewOrchestrator(config *OrchestratorConfig) *AgentOrchestrator {
 	return o
 }
 
-// AddAgent registers a new agent with the orchestrator
+// AddAgent registers a new agent with the orchestrator.
+// This method is thread-safe and can be called concurrently.
 func (o *AgentOrchestrator) AddAgent(agent *ManagedAgent) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -683,7 +685,8 @@ func (o *AgentOrchestrator) AddAgent(agent *ManagedAgent) error {
 	return nil
 }
 
-// RemoveAgent removes an agent from the orchestrator
+// RemoveAgent removes an agent from the orchestrator.
+// This method is thread-safe and can be called concurrently.
 func (o *AgentOrchestrator) RemoveAgent(agentID string) error {
 	o.mu.Lock()
 	agent, exists := o.agents[agentID]
@@ -720,7 +723,8 @@ func (o *AgentOrchestrator) RemoveAgent(agentID string) error {
 	return nil
 }
 
-// GetAgent returns an agent by ID
+// GetAgent returns an agent by ID.
+// This method is thread-safe and can be called concurrently.
 func (o *AgentOrchestrator) GetAgent(agentID string) (*ManagedAgent, error) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -733,7 +737,8 @@ func (o *AgentOrchestrator) GetAgent(agentID string) (*ManagedAgent, error) {
 	return agent, nil
 }
 
-// ListAgents returns a list of all agent IDs
+// ListAgents returns a list of all agent IDs.
+// This method is thread-safe and returns a copy of the agent ID slice.
 func (o *AgentOrchestrator) ListAgents() []string {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -743,7 +748,8 @@ func (o *AgentOrchestrator) ListAgents() []string {
 	return result
 }
 
-// DistributeTask distributes a task to an appropriate agent
+// DistributeTask distributes a task to an appropriate agent.
+// This method is thread-safe and can be called concurrently.
 func (o *AgentOrchestrator) DistributeTask(task *Task) error {
 	if task == nil {
 		return fmt.Errorf("task cannot be nil")
@@ -1099,12 +1105,14 @@ func (o *AgentOrchestrator) publishEvent(event *AgentEvent) {
 	}
 }
 
-// EventChannel returns the event channel for subscribing to orchestrator events
+// EventChannel returns the event channel for subscribing to orchestrator events.
+// This method is thread-safe and can be called concurrently.
 func (o *AgentOrchestrator) EventChannel() <-chan *AgentEvent {
 	return o.eventChan
 }
 
-// GetMetrics returns orchestrator metrics
+// GetMetrics returns orchestrator metrics.
+// This method is thread-safe and can be called concurrently.
 func (o *AgentOrchestrator) GetMetrics() map[string]interface{} {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -1141,7 +1149,8 @@ func (o *AgentOrchestrator) GetMetrics() map[string]interface{} {
 	}
 }
 
-// Shutdown gracefully shuts down the orchestrator
+// Shutdown gracefully shuts down the orchestrator.
+// This method is thread-safe but should only be called once.
 func (o *AgentOrchestrator) Shutdown(timeout time.Duration) error {
 	log.InfoLog.Println("Shutting down orchestrator...")
 
@@ -1197,7 +1206,8 @@ func (o *AgentOrchestrator) Shutdown(timeout time.Duration) error {
 	return nil
 }
 
-// PauseAgent pauses a specific agent
+// PauseAgent pauses a specific agent.
+// This method is thread-safe and can be called concurrently.
 func (o *AgentOrchestrator) PauseAgent(agentID string) error {
 	agent, err := o.GetAgent(agentID)
 	if err != nil {
@@ -1218,7 +1228,8 @@ func (o *AgentOrchestrator) PauseAgent(agentID string) error {
 	return nil
 }
 
-// ResumeAgent resumes a paused agent
+// ResumeAgent resumes a paused agent.
+// This method is thread-safe and can be called concurrently.
 func (o *AgentOrchestrator) ResumeAgent(agentID string) error {
 	agent, err := o.GetAgent(agentID)
 	if err != nil {
@@ -1239,7 +1250,8 @@ func (o *AgentOrchestrator) ResumeAgent(agentID string) error {
 	return nil
 }
 
-// GetAgentStats returns statistics for a specific agent
+// GetAgentStats returns statistics for a specific agent.
+// This method is thread-safe and can be called concurrently.
 func (o *AgentOrchestrator) GetAgentStats(agentID string) (map[string]interface{}, error) {
 	agent, err := o.GetAgent(agentID)
 	if err != nil {

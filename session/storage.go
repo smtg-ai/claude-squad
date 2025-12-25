@@ -53,7 +53,9 @@ func NewStorage(state config.InstanceStorage) (*Storage, error) {
 	}, nil
 }
 
-// SaveInstances saves the list of instances to disk
+// SaveInstances saves the list of instances to disk.
+// The ctx parameter is optional and will default to context.Background() if nil.
+// Only instances that have been started will be saved.
 func (s *Storage) SaveInstances(ctx context.Context, instances []*Instance) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -76,7 +78,9 @@ func (s *Storage) SaveInstances(ctx context.Context, instances []*Instance) erro
 	return s.state.SaveInstances(jsonData)
 }
 
-// LoadInstances loads the list of instances from disk
+// LoadInstances loads the list of instances from disk.
+// The ctx parameter is optional and will default to context.Background() if nil.
+// Returns an error if the data cannot be unmarshalled or instance creation fails.
 func (s *Storage) LoadInstances(ctx context.Context) ([]*Instance, error) {
 	if ctx == nil {
 		ctx = context.Background()

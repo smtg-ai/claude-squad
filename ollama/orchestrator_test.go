@@ -208,6 +208,9 @@ func TestModelOrchestrator_Shutdown(t *testing.T) {
 	}
 }
 
+// TestRequestBatch verifies batch processing of multiple requests.
+// This test ensures that RequestBatch can collect multiple concurrent requests
+// and wait for all results with a timeout, which is critical for throughput optimization.
 func TestRequestBatch(t *testing.T) {
 	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 2)
 	err := mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
@@ -261,6 +264,12 @@ func TestOrchestratorModelPool(t *testing.T) {
 	}
 }
 
+// TestCircuitBreaker validates the circuit breaker pattern implementation.
+// This test ensures proper state transitions through the circuit breaker lifecycle:
+// 1. Closed -> Open: After threshold failures (3)
+// 2. Open -> Half-Open: After reset timeout (1s)
+// 3. Half-Open -> Closed: After successful request
+// This pattern is critical for preventing cascading failures in distributed systems.
 func TestCircuitBreaker(t *testing.T) {
 	cb := NewCircuitBreaker(3, 1*time.Second)
 
@@ -293,6 +302,12 @@ func TestCircuitBreaker(t *testing.T) {
 	}
 }
 
+// TestRateLimiter validates token bucket rate limiting implementation.
+// This test verifies the rate limiter correctly:
+// - Allows requests within initial token capacity (10 tokens)
+// - Rejects requests exceeding capacity
+// - Refills tokens over time at specified rate (2 tokens/second)
+// This is essential for API rate limiting and preventing resource exhaustion.
 func TestRateLimiter(t *testing.T) {
 	rl := NewRateLimiter(10, 2)
 
@@ -355,6 +370,13 @@ func TestWorkerPool(t *testing.T) {
 	}
 }
 
+// TestConcurrentSubmissions validates thread-safety of concurrent request submissions.
+// This test simulates real-world high-load scenarios with 20 concurrent goroutines
+// submitting balanced requests to verify that:
+// - No race conditions occur during concurrent submission
+// - All requests are processed successfully
+// - Worker pool handles concurrent load correctly
+// - Atomic counters and channel operations are thread-safe
 func TestConcurrentSubmissions(t *testing.T) {
 	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 4)
 	err := mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)

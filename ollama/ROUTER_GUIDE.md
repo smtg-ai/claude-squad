@@ -53,7 +53,7 @@ instance, _ := session.NewInstance(session.InstanceOptions{
 router.RegisterModel("model-1", instance)
 
 // Route a task
-selectedModel, err := router.RouteTask("implement a binary search algorithm")
+selectedModel, err := router.RouteTask(context.Background(), "implement a binary search algorithm")
 if err != nil {
     log.Fatal(err)
 }
@@ -127,7 +127,7 @@ for i := 0; i < 10; i++ {
 }
 
 // Routes similar tasks to the same model
-selectedModel, _ := router.RouteTask("implement a new function")
+selectedModel, _ := router.RouteTask(context.Background(), "implement a new function")
 // Likely selects "coding-specialist"
 ```
 
@@ -146,7 +146,7 @@ isOpen, _ := router.GetCircuitBreakerStatus("flaky-model")
 // isOpen == true
 
 // Model is excluded from routing until recovery
-selectedModel, _ := router.RouteTask("some task")
+selectedModel, _ := router.RouteTask(context.Background(), "some task")
 // selectedModel != "flaky-model"
 
 // Manually recover if needed
@@ -172,7 +172,7 @@ fmt.Printf("Circuit Breaker Open: %v\n", metrics.CircuitBreakerOpen)
 Monitor overall system health:
 
 ```go
-health := router.HealthCheck()
+health := router.HealthCheck(context.Background())
 for modelID, isHealthy := range health {
     if !isHealthy {
         log.Printf("Model %s is unhealthy", modelID)
@@ -220,7 +220,7 @@ router.ResetMetrics()
 
 ```
 TaskRouter
-├── RouteTask(prompt)
+├── RouteTask(ctx, prompt, previousContext...)
 │   ├── Detect Category (TaskCategoryDetector)
 │   ├── Get Available Models (HealthCheck + CircuitBreaker)
 │   └── Apply Strategy
@@ -236,7 +236,7 @@ TaskRouter
 │   ├── Check Circuit Breaker
 │   └── Update Affinity Map
 │
-└── HealthCheck()
+└── HealthCheck(ctx)
     └── Evaluate Model Status
 ```
 
@@ -251,7 +251,7 @@ router := NewTaskRouter(StrategyRoundRobin)
 // Build performance history with real tasks
 for {
     task := getNextTask()
-    model, _ := router.RouteTask(task)
+    model, _ := router.RouteTask(context.Background(), task)
 
     success, latency := executeTask(model, task)
     category := router.GetTaskCategory(task)
@@ -277,7 +277,7 @@ models := map[string][]string{
 
 // Affinity automatically develops through usage
 for task := range tasks {
-    model, _ := router.RouteTask(task)
+    model, _ := router.RouteTask(context.Background(), task)
     success := executeTask(model, task)
     router.RecordTaskResult(model, success, 100*time.Millisecond, TaskCoding)
 }
@@ -294,7 +294,7 @@ router.RegisterModel("backup-model", backupInstance)
 
 // Circuit breaker automatically failsover
 task := "critical-task"
-model, _ := router.RouteTask(task)
+model, _ := router.RouteTask(context.Background(), task)
 success := executeTask(model, task)
 
 if !success {
@@ -303,7 +303,7 @@ if !success {
 }
 
 // Next tasks automatically avoid primary-model if circuit opens
-nextModel, _ := router.RouteTask("another-task")
+nextModel, _ := router.RouteTask(context.Background(), "another-task")
 // Will route to backup-model if primary has too many failures
 ```
 

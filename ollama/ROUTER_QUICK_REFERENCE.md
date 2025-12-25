@@ -13,7 +13,7 @@ router.RegisterModel("model-1", instance1)
 router.RegisterModel("model-2", instance2)
 
 // Route a task
-selectedModel, _ := router.RouteTask("implement a new feature")
+selectedModel, _ := router.RouteTask(context.Background(), "implement a new feature")
 
 // Record result
 category := router.GetTaskCategory("implement a new feature")
@@ -54,7 +54,7 @@ router.UnregisterModel("llama-7b")
 
 ### Route a Task
 ```go
-modelID, err := router.RouteTask("your task description")
+modelID, err := router.RouteTask(context.Background(), "your task description")
 ```
 
 ### Record Task Result
@@ -74,7 +74,7 @@ allMetrics := router.GetAllMetrics()
 
 ### Check Health
 ```go
-health := router.HealthCheck()
+health := router.HealthCheck(context.Background())
 for model, isHealthy := range health {
     if !isHealthy {
         fmt.Printf("%s is unhealthy\n", model)
@@ -163,7 +163,8 @@ router := ollama.NewTaskRouter(ollama.StrategyRoundRobin)
 
 // Collect data
 for {
-    model, _ := router.RouteTask(getNextTask())
+    task := getNextTask()
+    model, _ := router.RouteTask(context.Background(), task)
     success, latency := executeTask(model, task)
     category := router.GetTaskCategory(task)
     router.RecordTaskResult(model, success, latency, category)
@@ -185,16 +186,16 @@ router.RegisterModel("documenter", docInstance)
 router.SetRoutingStrategy(ollama.StrategyAffinity)
 
 // Route tasks - automatically learns specialization
-router.RouteTask("implement new feature")      // → coder
-router.RouteTask("write unit tests")           // → tester
-router.RouteTask("update documentation")       // → documenter
+router.RouteTask(context.Background(), "implement new feature")      // → coder
+router.RouteTask(context.Background(), "write unit tests")           // → tester
+router.RouteTask(context.Background(), "update documentation")       // → documenter
 ```
 
 ## Common Troubleshooting
 
 ### "No models registered"
 **Problem**: Trying to route without registering models
-**Solution**: Call `RegisterModel()` before `RouteTask()`
+**Solution**: Call `RegisterModel()` before `RouteTask(ctx, ...)`
 
 ### "No healthy models available"
 **Problem**: All models have circuit breaker open
@@ -224,17 +225,17 @@ Example:
 ```go
 // Safe to call concurrently
 go func() {
-    model, _ := router.RouteTask(task1)
+    model, _ := router.RouteTask(context.Background(), task1)
     router.RecordTaskResult(model, true, latency1, category1)
 }()
 
 go func() {
-    model, _ := router.RouteTask(task2)
+    model, _ := router.RouteTask(context.Background(), task2)
     router.RecordTaskResult(model, false, latency2, category2)
 }()
 
 go func() {
-    health := router.HealthCheck()
+    health := router.HealthCheck(context.Background())
 }()
 ```
 

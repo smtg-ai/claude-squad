@@ -181,7 +181,8 @@ func NewTaskRouter(strategy RoutingStrategy) *TaskRouter {
 	return tr
 }
 
-// RegisterModel adds a model instance to the router
+// RegisterModel adds a model instance to the router and initializes its metrics.
+// Returns an error if modelID is empty, instance is nil, or the model is already registered.
 func (tr *TaskRouter) RegisterModel(modelID string, instance *session.Instance) error {
 	if modelID == "" {
 		return fmt.Errorf("model ID cannot be empty")
@@ -238,7 +239,11 @@ func (tr *TaskRouter) UnregisterModel(modelID string) error {
 	return nil
 }
 
-// RouteTask determines which model should handle the given task
+// RouteTask determines which model should handle the given task.
+// The ctx parameter is used for cancellation checking.
+// The previousContext variadic parameter can contain the previously used model ID
+// for affinity-based routing (only used with StrategyAffinity or StrategyHybrid).
+// Returns the selected model ID and an error if no models are available or context is cancelled.
 func (tr *TaskRouter) RouteTask(ctx context.Context, taskPrompt string, previousContext ...string) (string, error) {
 	// Check if context is already cancelled
 	select {

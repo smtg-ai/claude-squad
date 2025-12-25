@@ -79,7 +79,7 @@ Complete user guide covering:
 Distributes tasks evenly across models in sequence. Best for equal-capability models.
 
 ```go
-selectedModel, _ := router.RouteTask("implement new feature")
+selectedModel, _ := router.RouteTask(context.Background(), "implement new feature")
 // Cycles through: model-1, model-2, model-3, model-1, ...
 ```
 
@@ -88,7 +88,7 @@ Routes to the model with the fewest pending tasks. Minimizes queue depth.
 
 ```go
 router.SetRoutingStrategy(StrategyLeastLoaded)
-selectedModel, _ := router.RouteTask("fix bug")
+selectedModel, _ := router.RouteTask(context.Background(), "fix bug")
 // Routes to model with: min(TotalRequests - SuccessfulTasks)
 ```
 
@@ -97,7 +97,7 @@ Randomly selects among available models. Useful for chaos testing.
 
 ```go
 router.SetRoutingStrategy(StrategyRandom)
-selectedModel, _ := router.RouteTask("write tests")
+selectedModel, _ := router.RouteTask(context.Background(), "write tests")
 ```
 
 #### Performance-Based (`StrategyPerformance`)
@@ -105,7 +105,7 @@ Routes to models with best success rate and lowest latency.
 
 ```go
 router.SetRoutingStrategy(StrategyPerformance)
-selectedModel, _ := router.RouteTask("refactor code")
+selectedModel, _ := router.RouteTask(context.Background(), "refactor code")
 // Scores: (success_rate * 0.7) + (latency_score * 0.3)
 ```
 
@@ -114,7 +114,7 @@ Routes similar tasks to models that previously succeeded with them.
 
 ```go
 router.SetRoutingStrategy(StrategyAffinity)
-selectedModel, _ := router.RouteTask("implement algorithm")
+selectedModel, _ := router.RouteTask(context.Background(), "implement algorithm")
 // Selects based on affinity history
 ```
 
@@ -123,7 +123,7 @@ Combines affinity and performance strategies dynamically.
 
 ```go
 router.SetRoutingStrategy(StrategyHybrid)
-selectedModel, _ := router.RouteTask("comprehensive task")
+selectedModel, _ := router.RouteTask(context.Background(), "comprehensive task")
 // Uses affinity if available, falls back to performance
 ```
 
@@ -183,7 +183,7 @@ Automatically learns which models excel at specific task types:
 router.RecordTaskResult("coding-specialist", true, latency, TaskCoding)
 
 // Future coding tasks prefer coding-specialist
-selectedModel, _ := router.RouteTask("implement algorithm")
+selectedModel, _ := router.RouteTask(context.Background(), "implement algorithm")
 // Returns "coding-specialist" (high affinity score)
 ```
 
@@ -191,7 +191,7 @@ selectedModel, _ := router.RouteTask("implement algorithm")
 
 ```
 TaskRouter (Main Router)
-├── RouteTask(prompt, context...)
+├── RouteTask(ctx, taskPrompt, previousContext...)
 │   ├── 1. Detect Task Category (TaskCategoryDetector)
 │   ├── 2. Filter Healthy Models (HealthCheck + CircuitBreaker)
 │   ├── 3. Apply Routing Strategy
@@ -208,7 +208,7 @@ TaskRouter (Main Router)
 │   ├── Evaluate Circuit Breaker
 │   └── Update Affinity Map
 │
-├── HealthCheck() -> map[string]bool
+├── HealthCheck(ctx) -> map[string]bool
 │   └── Check Circuit Breaker Status
 │
 └── GetAllMetrics() -> map[string]*RouterMetrics
@@ -228,7 +228,7 @@ for modelID, instance := range models {
 }
 
 // Route and execute a task
-selectedModel, _ := router.RouteTask("implement binary search")
+selectedModel, _ := router.RouteTask(context.Background(), "implement binary search")
 category := router.GetTaskCategory("implement binary search")
 
 // Execute task and record result
@@ -244,7 +244,7 @@ fmt.Printf("Success Rate: %.1f%%\n",
     float64(metrics.SuccessfulTasks) / float64(metrics.TotalRequests) * 100)
 
 // Check health across all models
-health := router.HealthCheck()
+health := router.HealthCheck(context.Background())
 for modelID, isHealthy := range health {
     if !isHealthy {
         log.Printf("Model %s is unhealthy", modelID)

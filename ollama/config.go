@@ -24,100 +24,147 @@ const (
 
 // Environment variable names for Ollama configuration overrides
 const (
-	// EnvOllamaEnabled enables or disables Ollama integration (true/false or 1/0)
+	// EnvOllamaEnabled enables or disables Ollama integration.
+	// Valid values: "true", "false", "1", "0" (case-insensitive)
+	// Default: true
 	EnvOllamaEnabled = "OLLAMA_ENABLED"
 
-	// EnvOllamaEndpoint specifies Ollama server endpoint(s) (comma-separated list)
+	// EnvOllamaEndpoint specifies Ollama server endpoint(s).
+	// Format: Single URL or comma-separated list (e.g., "http://host1:11434,http://host2:11434")
+	// Default: http://localhost:11434
 	EnvOllamaEndpoint = "OLLAMA_ENDPOINT"
 
-	// EnvOllamaDefaultEndpoint specifies the name of the default endpoint to use
+	// EnvOllamaDefaultEndpoint specifies the name of the default endpoint to use.
+	// Must match the "name" field of a configured endpoint.
+	// Default: "local"
 	EnvOllamaDefaultEndpoint = "OLLAMA_DEFAULT_ENDPOINT"
 
-	// EnvOllamaConnectionTimeoutMS specifies connection timeout in milliseconds (max 60000)
+	// EnvOllamaConnectionTimeoutMS specifies connection timeout in milliseconds.
+	// Valid range: 1-60000 (1ms to 1 minute)
+	// Default: 10000 (10 seconds)
 	EnvOllamaConnectionTimeoutMS = "OLLAMA_CONNECTION_TIMEOUT_MS"
 
-	// EnvOllamaRequestTimeoutMS specifies request timeout in milliseconds (max 600000)
+	// EnvOllamaRequestTimeoutMS specifies request timeout in milliseconds.
+	// Valid range: 1-600000 (1ms to 10 minutes)
+	// Default: 60000 (60 seconds)
 	EnvOllamaRequestTimeoutMS = "OLLAMA_REQUEST_TIMEOUT_MS"
 
-	// EnvOllamaMaxRetries specifies maximum number of retry attempts
+	// EnvOllamaMaxRetries specifies maximum number of retry attempts.
+	// Must be non-negative.
+	// Default: 3
 	EnvOllamaMaxRetries = "OLLAMA_MAX_RETRIES"
 
-	// EnvOllamaRetryBackoffMS specifies retry backoff duration in milliseconds
+	// EnvOllamaRetryBackoffMS specifies retry backoff duration in milliseconds.
+	// Must be positive.
+	// Default: 500
 	EnvOllamaRetryBackoffMS = "OLLAMA_RETRY_BACKOFF_MS"
 )
 
-// RetryPolicy defines the retry behavior for Ollama API calls
+// RetryPolicy defines the retry behavior for Ollama API calls.
+// Default values: MaxRetries=3, BackoffMS=500
 type RetryPolicy struct {
-	MaxRetries int           `json:"max_retries" yaml:"max_retries"`
-	BackoffMS  int           `json:"backoff_ms" yaml:"backoff_ms"`
-	backoff    time.Duration `json:"-" yaml:"-"`
+	// MaxRetries is the maximum number of retry attempts (default: 3)
+	// JSON/YAML key: "max_retries"
+	MaxRetries int `json:"max_retries" yaml:"max_retries"`
+
+	// BackoffMS is the initial backoff duration in milliseconds (default: 500)
+	// JSON/YAML key: "backoff_ms"
+	BackoffMS int `json:"backoff_ms" yaml:"backoff_ms"`
+
+	// backoff is the computed backoff duration (internal use only)
+	backoff time.Duration `json:"-" yaml:"-"`
 }
 
-// ModelConfig contains configuration for a specific Ollama model
+// ModelConfig contains configuration for a specific Ollama model.
+// All fields are optional (nil means use model defaults).
 type ModelConfig struct {
 	// Temperature controls randomness of responses (0.0 to 1.0 or higher)
+	// JSON/YAML key: "temperature"
 	Temperature *float32 `json:"temperature,omitempty" yaml:"temperature,omitempty"`
 
 	// ContextWindow is the maximum number of tokens in context
+	// JSON/YAML key: "context_window"
 	ContextWindow *int `json:"context_window,omitempty" yaml:"context_window,omitempty"`
 
 	// TopP is the nucleus sampling parameter (0.0 to 1.0)
+	// JSON/YAML key: "top_p"
 	TopP *float32 `json:"top_p,omitempty" yaml:"top_p,omitempty"`
 
 	// TopK limits token selection to top K options
+	// JSON/YAML key: "top_k"
 	TopK *int `json:"top_k,omitempty" yaml:"top_k,omitempty"`
 
 	// RepeatPenalty penalizes repeated tokens
+	// JSON/YAML key: "repeat_penalty"
 	RepeatPenalty *float32 `json:"repeat_penalty,omitempty" yaml:"repeat_penalty,omitempty"`
 
 	// NumPredict is the number of tokens to predict
+	// JSON/YAML key: "num_predict"
 	NumPredict *int `json:"num_predict,omitempty" yaml:"num_predict,omitempty"`
 
 	// Stop sequences for generation
+	// JSON/YAML key: "stop"
 	Stop []string `json:"stop,omitempty" yaml:"stop,omitempty"`
 
 	// System prompt for the model
+	// JSON/YAML key: "system"
 	System *string `json:"system,omitempty" yaml:"system,omitempty"`
 }
 
-// OllamaEndpoint represents a single Ollama server endpoint
+// OllamaEndpoint represents a single Ollama server endpoint.
+// Endpoints are tried in priority order (lower number = higher priority).
 type OllamaEndpoint struct {
 	// Name is a friendly identifier for this endpoint
+	// JSON/YAML key: "name"
 	Name string `json:"name" yaml:"name"`
 
 	// URL is the endpoint URL (e.g., http://localhost:11434)
+	// JSON/YAML key: "url"
 	URL string `json:"url" yaml:"url"`
 
-	// Enabled indicates if this endpoint should be used
+	// Enabled indicates if this endpoint should be used (default: true)
+	// JSON/YAML key: "enabled"
 	Enabled bool `json:"enabled" yaml:"enabled"`
 
-	// Priority determines the order in which endpoints are tried (lower is higher priority)
+	// Priority determines the order in which endpoints are tried (lower is higher priority, default: 0)
+	// JSON/YAML key: "priority"
 	Priority int `json:"priority" yaml:"priority"`
 }
 
-// OllamaConfig holds the complete Ollama configuration
+// OllamaConfig holds the complete Ollama configuration.
+// Configuration is loaded from: defaults → config file → environment variables.
+// See DefaultOllamaConfig() for default values.
 type OllamaConfig struct {
-	// Endpoints is a list of available Ollama server endpoints
+	// Endpoints is a list of available Ollama server endpoints (default: single "local" endpoint at http://localhost:11434)
+	// JSON/YAML key: "endpoints"
 	Endpoints []OllamaEndpoint `json:"endpoints" yaml:"endpoints"`
 
-	// DefaultEndpointName is the name of the endpoint to use by default
+	// DefaultEndpointName is the name of the endpoint to use by default (default: "local")
+	// JSON/YAML key: "default_endpoint"
 	DefaultEndpointName string `json:"default_endpoint" yaml:"default_endpoint"`
 
-	// ConnectionTimeout is the timeout for establishing a connection
-	ConnectionTimeoutMS int           `json:"connection_timeout_ms" yaml:"connection_timeout_ms"`
-	connectionTimeout   time.Duration `json:"-" yaml:"-"`
+	// ConnectionTimeoutMS is the timeout for establishing a connection in milliseconds (default: 10000 = 10 seconds)
+	// JSON/YAML key: "connection_timeout_ms"
+	ConnectionTimeoutMS int `json:"connection_timeout_ms" yaml:"connection_timeout_ms"`
+	// connectionTimeout is the computed timeout duration (internal use only)
+	connectionTimeout time.Duration `json:"-" yaml:"-"`
 
-	// RequestTimeout is the timeout for a single request
-	RequestTimeoutMS int           `json:"request_timeout_ms" yaml:"request_timeout_ms"`
-	requestTimeout   time.Duration `json:"-" yaml:"-"`
+	// RequestTimeoutMS is the timeout for a single request in milliseconds (default: 60000 = 60 seconds)
+	// JSON/YAML key: "request_timeout_ms"
+	RequestTimeoutMS int `json:"request_timeout_ms" yaml:"request_timeout_ms"`
+	// requestTimeout is the computed timeout duration (internal use only)
+	requestTimeout time.Duration `json:"-" yaml:"-"`
 
-	// RetryPolicy defines how to retry failed requests
+	// RetryPolicy defines how to retry failed requests (default: MaxRetries=3, BackoffMS=500)
+	// JSON/YAML key: "retry_policy"
 	RetryPolicy RetryPolicy `json:"retry_policy" yaml:"retry_policy"`
 
-	// Models contains model-specific configurations
+	// Models contains model-specific configurations (default: empty map)
+	// JSON/YAML key: "models"
 	Models map[string]ModelConfig `json:"models" yaml:"models"`
 
-	// Enabled indicates if Ollama integration is enabled
+	// Enabled indicates if Ollama integration is enabled (default: true)
+	// JSON/YAML key: "enabled"
 	Enabled bool `json:"enabled" yaml:"enabled"`
 }
 

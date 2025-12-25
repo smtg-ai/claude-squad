@@ -98,7 +98,10 @@ type ModelOrchestrator struct {
 	lastLoadBalance time.Time
 }
 
-// NewModelOrchestrator creates a new orchestrator for managing multiple Ollama models
+// NewModelOrchestrator creates a new orchestrator for managing multiple Ollama models.
+// The ctx parameter is optional and will default to context.Background() if nil.
+// healthCheckInterval specifies how often to check model health.
+// numWorkers specifies the number of concurrent workers for processing requests.
 func NewModelOrchestrator(ctx context.Context, healthCheckInterval time.Duration, numWorkers int) *ModelOrchestrator {
 	if ctx == nil {
 		ctx = context.Background()
@@ -144,7 +147,9 @@ func NewModelOrchestrator(ctx context.Context, healthCheckInterval time.Duration
 	return mo
 }
 
-// RegisterModel adds a new model instance to the orchestrator
+// RegisterModel adds a new model instance to the orchestrator.
+// The ctx parameter is optional and will default to context.Background() if nil.
+// Returns an error if a model with the same name is already registered.
 func (mo *ModelOrchestrator) RegisterModel(ctx context.Context, name, baseURL string, timeout time.Duration) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -203,11 +208,14 @@ func (mo *ModelOrchestrator) Start() error {
 	return nil
 }
 
-// Submit sends a request to the orchestrator for processing
+// Submit sends a request to the orchestrator for processing.
+// Returns a channel that will receive the RequestResult when processing completes,
+// and an error if the model is not registered, unhealthy, or the request queue is full.
+// The returned channel will be closed after the result is sent.
 func (mo *ModelOrchestrator) Submit(modelName, prompt string, timeout time.Duration) (chan RequestResult, error) {
 	mo.mu.RLock()
+	defer mo.mu.RUnlock()
 	model, exists := mo.models[modelName]
-	mo.mu.RUnlock()
 
 	if !exists {
 		return nil, fmt.Errorf("model '%s' not registered", modelName)
@@ -246,11 +254,15 @@ func (mo *ModelOrchestrator) Submit(modelName, prompt string, timeout time.Durat
 	}
 }
 
-// SubmitBalanced submits a request to the least-loaded healthy model
+// SubmitBalanced submits a request to the least-loaded healthy model.
+// Returns a channel for the RequestResult, the name of the selected model,
+// and an error if no healthy models are available.
+// The model is selected based on the lowest failure count among healthy models.
 func (mo *ModelOrchestrator) SubmitBalanced(prompt string, timeout time.Duration) (chan RequestResult, string, error) {
 	mo.mu.RLock()
+	defer mo.mu.RUnlock()
+
 	if len(mo.models) == 0 {
-		mo.mu.RUnlock()
 		return nil, "", errors.New("no models available")
 	}
 
@@ -267,8 +279,6 @@ func (mo *ModelOrchestrator) SubmitBalanced(prompt string, timeout time.Duration
 			}
 		}
 	}
-
-	mo.mu.RUnlock()
 
 	if selectedModel == nil {
 		return nil, "", errors.New("no healthy models available")
@@ -356,11 +366,12 @@ func (mo *ModelOrchestrator) healthCheckLoop() {
 // performHealthCheck checks the health of all models
 func (mo *ModelOrchestrator) performHealthCheck() {
 	mo.mu.RLock()
+	defer mo.mu.RUnlock()
+
 	models := make([]*ModelInstance, 0, len(mo.models))
 	for _, model := range mo.models {
 		models = append(models, model)
 	}
-	mo.mu.RUnlock()
 
 	var wg sync.WaitGroup
 	for _, model := range models {
@@ -657,9 +668,9 @@ func (rb *RequestBatch) Add(req *Request) {
 // WaitAll waits for all results in the batch
 func (rb *RequestBatch) WaitAll(timeout time.Duration) []RequestResult {
 	rb.mu.Lock()
-	results := rb.results
-	rb.mu.Unlock()
+	defer rb.mu.Unlock()
 
+	results := rb.results
 	allResults := make([]RequestResult, 0, len(results))
 	timeoutCh := time.After(timeout)
 
@@ -713,11 +724,12 @@ func (mp *OrchestratorModelPool) Put(model *ModelInstance) {
 	}
 
 	model.mu.Lock()
+	defer model.mu.Unlock()
+
 	model.name = ""
 	model.baseURL = ""
 	atomic.StoreInt32(&model.failureCount, 0)
 	atomic.StoreInt32(&model.successCount, 0)
-	model.mu.Unlock()
 
 	mp.pool.Put(model)
 }

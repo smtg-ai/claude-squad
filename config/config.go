@@ -26,15 +26,29 @@ func GetConfigDir() (string, error) {
 	return filepath.Join(homeDir, ".claude-squad"), nil
 }
 
-// Config represents the application configuration
+// Config represents the application configuration.
+// Configuration is loaded from ~/.claude-squad/config.json.
+// See DefaultConfig() for default values.
 type Config struct {
-	// DefaultProgram is the default program to run in new instances
+	// DefaultProgram is the default program to run in new instances.
+	// Default: result of GetClaudeCommand() or "claude" if not found.
+	// JSON key: "default_program"
 	DefaultProgram string `json:"default_program"`
+
 	// AutoYes is a flag to automatically accept all prompts.
+	// Default: false
+	// JSON key: "auto_yes"
 	AutoYes bool `json:"auto_yes"`
+
 	// DaemonPollInterval is the interval (ms) at which the daemon polls sessions for autoyes mode.
+	// Valid range: 1-60000 (1ms to 1 minute)
+	// Default: 1000 (1 second)
+	// JSON key: "daemon_poll_interval"
 	DaemonPollInterval int `json:"daemon_poll_interval"`
+
 	// BranchPrefix is the prefix used for git branches created by the application.
+	// Default: "<username>/" or "session/" if username cannot be determined
+	// JSON key: "branch_prefix"
 	BranchPrefix string `json:"branch_prefix"`
 }
 

@@ -50,25 +50,21 @@ func (e *ClaudeSquadExecutor) createInstanceForTask(task *Task) (*session.Instan
 	sessionID := fmt.Sprintf("task-%s-%d", task.ID[:8], time.Now().Unix())
 
 	// Create instance configuration
-	config := session.InstanceConfig{
-		ID:           sessionID,
-		Prompt:       task.Description,
-		Program:      e.program,
-		AutoYes:      e.autoYes,
-		Metadata:     task.Metadata,
-		BranchName:   fmt.Sprintf("oxigraph-task-%s", task.ID[:8]),
-		Priority:     task.Priority,
-		Dependencies: task.Dependencies,
+	opts := session.InstanceOptions{
+		Title:   sessionID,
+		Path:    "/tmp", // TODO: Use proper workspace path
+		Program: e.program,
+		AutoYes: e.autoYes,
 	}
 
 	// Create the instance
-	instance, err := session.NewInstance(config, e.storage)
+	instance, err := session.NewInstance(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create instance: %w", err)
 	}
 
 	// Start the instance
-	if err := instance.Start(); err != nil {
+	if err := instance.Start(true); err != nil {
 		return nil, fmt.Errorf("failed to start instance: %w", err)
 	}
 
@@ -81,6 +77,15 @@ func (e *ClaudeSquadExecutor) monitorInstance(
 	instance *session.Instance,
 	task *Task,
 ) (string, error) {
+	// TODO: Implement proper instance monitoring
+	// The session.Instance type needs additional methods:
+	// - Stop() error
+	// - GetStatus() Status
+	// - GetResult() string
+	// - GetError() error
+	//
+	// For now, return a placeholder result after a delay
+
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
@@ -98,35 +103,19 @@ func (e *ClaudeSquadExecutor) monitorInstance(
 	for {
 		select {
 		case <-ctx.Done():
-			log.InfoLog.Printf("Task %s cancelled, stopping instance", task.ID)
-			instance.Stop()
+			log.InfoLog.Printf("Task %s cancelled", task.ID)
+			// TODO: instance.Stop()
 			return "", ctx.Err()
 
 		case <-ticker.C:
-			status := instance.GetStatus()
+			// TODO: Check actual instance status
+			// status := instance.GetStatus()
 
-			switch status {
-			case session.StatusCompleted:
-				log.InfoLog.Printf("Task %s completed successfully", task.ID)
-				result := instance.GetResult()
-				return result, nil
-
-			case session.StatusFailed:
-				log.ErrorLog.Printf("Task %s failed", task.ID)
-				return "", fmt.Errorf("instance failed: %s", instance.GetError())
-
-			case session.StatusRunning:
-				// Check for timeout
-				if time.Now().After(deadline) {
-					log.ErrorLog.Printf("Task %s timed out after %v", task.ID, timeout)
-					instance.Stop()
-					return "", fmt.Errorf("task timed out after %v", timeout)
-				}
-
-				log.InfoLog.Printf("Task %s still running...", task.ID)
-
-			default:
-				log.InfoLog.Printf("Task %s in status: %s", task.ID, status)
+			// For now, just check timeout
+			if time.Now().After(deadline) {
+				log.ErrorLog.Printf("Task %s timed out after %v", task.ID, timeout)
+				// TODO: instance.Stop()
+				return "", fmt.Errorf("task timed out after %v", timeout)
 			}
 		}
 	}
