@@ -159,6 +159,7 @@ type AgentPool struct {
 	ticker        *time.Ticker
 	done          chan struct{}
 	maintenanceWg sync.WaitGroup
+	wg            sync.WaitGroup // Tracks child goroutines spawned during maintenance
 
 	// Metrics snapshot
 	metricsLock sync.RWMutex
@@ -205,6 +206,23 @@ func NewAgentPool(config PoolConfig) (*AgentPool, error) {
 	}
 	if config.MaxPoolSize > 10 {
 		config.MaxPoolSize = 10 // Hard cap at 10
+	}
+
+	// Validate ResourceQuota
+	if config.ResourceQuota.MaxMemoryMB < 0 {
+		config.ResourceQuota.MaxMemoryMB = 512
+	}
+	if config.ResourceQuota.MaxCPUPercent < 0 || config.ResourceQuota.MaxCPUPercent > 100 {
+		config.ResourceQuota.MaxCPUPercent = 80.0
+	}
+	if config.ResourceQuota.MaxRecyclesPerID < 0 {
+		config.ResourceQuota.MaxRecyclesPerID = 100
+	}
+	if config.ResourceQuota.RequestsPerQuota < 0 {
+		config.ResourceQuota.RequestsPerQuota = 5000
+	}
+	if config.IdleTimeout <= 0 {
+		config.IdleTimeout = 5 * time.Minute
 	}
 
 	pool := &AgentPool{
@@ -258,8 +276,14 @@ func (p *AgentPool) initializeWarmPool() error {
 		p.agents[agentID] = agent
 		p.mu.Unlock()
 
-		p.availableQueue <- agent
-		p.idleCount.Add(1)
+		select {
+		case p.availableQueue <- agent:
+			p.idleCount.Add(1)
+		case <-p.closedChan:
+			return fmt.Errorf("pool closed during initialization")
+		case <-time.After(5 * time.Second):
+			return fmt.Errorf("timeout adding agent to queue during initialization")
+		}
 	}
 
 	log.InfoLog.Printf("initialized warm pool with %d agents", p.minPoolSize)
@@ -543,7 +567,9 @@ func (p *AgentPool) performMaintenance() {
 			if now.Sub(agent.GetLastUsed()) > p.idleTimeoutDuration &&
 				idleCount+activeCount > int64(p.minPoolSize) {
 				// Safe to remove this idle agent
+				p.wg.Add(1)
 				go func(a *Agent) {
+					defer p.wg.Done()
 					if err := p.killAgent(a); err != nil {
 						log.ErrorLog.Printf("error killing idle agent: %v", err)
 					}
@@ -591,12 +617,18 @@ func (p *AgentPool) autoscale(activeCount, idleCount int64) {
 
 			agentID := fmt.Sprintf("agent-%d", time.Now().UnixNano())
 			p.agents[agentID] = agent
-			p.availableQueue <- agent
-			p.idleCount.Add(1)
 
-			p.metricsLock.Lock()
-			p.lastMetrics.ScaleDirection = "UP"
-			p.metricsLock.Unlock()
+			select {
+			case p.availableQueue <- agent:
+				p.idleCount.Add(1)
+				p.metricsLock.Lock()
+				defer p.metricsLock.Unlock()
+				p.lastMetrics.ScaleDirection = "UP"
+			default:
+				// Queue full, kill the newly spawned agent
+				log.ErrorLog.Printf("failed to add agent to queue during scale-up: queue full")
+				p.killAgent(agent)
+			}
 
 			log.InfoLog.Printf("scaled pool up: utilization=%.2f%%, total agents=%d", utilization*100, totalCount+1)
 		}
@@ -606,7 +638,9 @@ func (p *AgentPool) autoscale(activeCount, idleCount int64) {
 			// Remove one idle agent
 			for id, agent := range p.agents {
 				if agent.GetState() == AgentStateIdle {
+					p.wg.Add(1)
 					go func(a *Agent) {
+						defer p.wg.Done()
 						if err := p.killAgent(a); err != nil {
 							log.ErrorLog.Printf("error killing agent during scale-down: %v", err)
 						}
@@ -614,8 +648,8 @@ func (p *AgentPool) autoscale(activeCount, idleCount int64) {
 					delete(p.agents, id)
 
 					p.metricsLock.Lock()
+					defer p.metricsLock.Unlock()
 					p.lastMetrics.ScaleDirection = "DOWN"
-					p.metricsLock.Unlock()
 
 					log.InfoLog.Printf("scaled pool down: utilization=%.2f%%, total agents=%d", utilization*100, totalCount-1)
 					return
@@ -675,8 +709,33 @@ func (p *AgentPool) Close() error {
 	close(p.closedChan)
 	close(p.done)
 
-	// Wait for maintenance loop to finish
-	p.maintenanceWg.Wait()
+	// Wait for maintenance loop to finish with timeout
+	maintenanceDone := make(chan struct{})
+	go func() {
+		p.maintenanceWg.Wait()
+		close(maintenanceDone)
+	}()
+
+	select {
+	case <-maintenanceDone:
+		log.InfoLog.Printf("maintenance loop stopped gracefully")
+	case <-time.After(10 * time.Second):
+		log.WarningLog.Printf("maintenance loop shutdown timeout exceeded")
+	}
+
+	// Wait for all child goroutines spawned during maintenance to finish with timeout
+	childrenDone := make(chan struct{})
+	go func() {
+		p.wg.Wait()
+		close(childrenDone)
+	}()
+
+	select {
+	case <-childrenDone:
+		log.InfoLog.Printf("all child goroutines stopped gracefully")
+	case <-time.After(10 * time.Second):
+		log.WarningLog.Printf("child goroutines shutdown timeout exceeded")
+	}
 
 	// Kill all agents
 	p.mu.Lock()
@@ -695,7 +754,7 @@ func (p *AgentPool) Close() error {
 		return fmt.Errorf("errors during pool shutdown: %v", errs)
 	}
 
-	log.ErrorLog.Print("agent pool closed successfully")
+	log.InfoLog.Print("agent pool closed successfully")
 	return nil
 }
 
@@ -739,12 +798,19 @@ func (p *AgentPool) LoadState(ctx context.Context) error {
 }
 
 // WarmPool ensures at least minPoolSize agents are available
-func (p *AgentPool) WarmPool() error {
+func (p *AgentPool) WarmPool(ctx context.Context) error {
 	p.mu.Lock()
 	currentSize := len(p.agents)
 	p.mu.Unlock()
 
 	for currentSize < p.minPoolSize {
+		// Check context cancellation before spawning
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		agent, err := p.spawnAgent()
 		if err != nil {
 			return fmt.Errorf("failed to warm pool: %w", err)
@@ -755,8 +821,16 @@ func (p *AgentPool) WarmPool() error {
 		p.agents[agentID] = agent
 		p.mu.Unlock()
 
-		p.availableQueue <- agent
-		p.idleCount.Add(1)
+		select {
+		case p.availableQueue <- agent:
+			p.idleCount.Add(1)
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-p.closedChan:
+			return fmt.Errorf("pool closed during warm pool operation")
+		case <-time.After(5 * time.Second):
+			return fmt.Errorf("timeout adding agent to queue in WarmPool")
+		}
 
 		currentSize++
 	}

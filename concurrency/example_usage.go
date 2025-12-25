@@ -65,7 +65,7 @@ func ExampleWorkerPoolBasicUsage() {
 			timeout:    time.Duration(100+rand.Intn(400)) * time.Millisecond,
 		}
 
-		if err := pool.Submit(job); err != nil {
+		if err := pool.Submit(context.Background(), job); err != nil {
 			log.Printf("Failed to submit job: %v", err)
 		}
 	}
@@ -127,7 +127,7 @@ func ExamplePriorityProcessing() {
 			timeout:    200 * time.Millisecond,
 		}
 
-		if err := pool.Submit(job); err != nil {
+		if err := pool.Submit(context.Background(), job); err != nil {
 			log.Printf("Failed to submit job: %v", err)
 		}
 	}
@@ -167,7 +167,7 @@ func ExampleErrorAggregation() {
 			priority:   1,
 			timeout:    100 * time.Millisecond,
 		}
-		pool.Submit(job)
+		pool.Submit(context.Background(), job)
 	}
 
 	// Collect all results
@@ -241,7 +241,7 @@ func ExampleWorkerHealthMonitoring() {
 			priority:   1,
 			timeout:    time.Duration(50+rand.Intn(200)) * time.Millisecond,
 		}
-		pool.Submit(job)
+		pool.Submit(context.Background(), job)
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -283,7 +283,7 @@ func ExampleBatchProcessing() {
 				timeout:    time.Duration(100+rand.Intn(300)) * time.Millisecond,
 			}
 
-			if err := pool.Submit(job); err != nil {
+			if err := pool.Submit(context.Background(), job); err != nil {
 				log.Printf("Failed to submit job: %v", err)
 			}
 		}
@@ -339,7 +339,7 @@ func ExampleWorkerPoolGracefulShutdown() {
 			priority:   1,
 			timeout:    2 * time.Second,
 		}
-		pool.Submit(job)
+		pool.Submit(context.Background(), job)
 	}
 
 	// Process results

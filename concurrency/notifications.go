@@ -3,11 +3,13 @@ package concurrency
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"sync"
 	"text/template"
 	"time"
@@ -203,14 +205,44 @@ type WebhookChannel struct {
 	mu         sync.Mutex
 }
 
+// validateWebhookURL validates a webhook URL to prevent SSRF attacks
+func validateWebhookURL(webhookURL string) error {
+	parsedURL, err := url.Parse(webhookURL)
+	if err != nil {
+		return fmt.Errorf("invalid webhook URL: %w", err)
+	}
+
+	// Only allow http/https
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return fmt.Errorf("invalid URL scheme: only http/https allowed")
+	}
+
+	// Reject credentials in URL
+	if parsedURL.User != nil {
+		return fmt.Errorf("credentials in URL not allowed")
+	}
+
+	return nil
+}
+
 // NewWebhookChannel creates a new webhook notification channel
-func NewWebhookChannel(webhookURL string) *WebhookChannel {
+func NewWebhookChannel(webhookURL string) (*WebhookChannel, error) {
+	// Validate URL to prevent SSRF attacks
+	if err := validateWebhookURL(webhookURL); err != nil {
+		return nil, err
+	}
+
 	return &WebhookChannel{
 		webhookURL: webhookURL,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					MinVersion: tls.VersionTLS12,
+				},
+			},
 		},
-	}
+	}, nil
 }
 
 func (c *WebhookChannel) Name() string {

@@ -524,7 +524,10 @@ func TestSystemChannel(t *testing.T) {
 
 func TestWebhookChannel(t *testing.T) {
 	// This is a basic test - in production you'd use a test server
-	channel := NewWebhookChannel("http://example.com/webhook")
+	channel, err := NewWebhookChannel("http://example.com/webhook")
+	if err != nil {
+		t.Fatalf("Failed to create webhook channel: %v", err)
+	}
 
 	if channel.Name() != "webhook" {
 		t.Errorf("Expected channel name 'webhook', got '%s'", channel.Name())
@@ -532,6 +535,72 @@ func TestWebhookChannel(t *testing.T) {
 
 	if !channel.SupportsRecipient("anyone") {
 		t.Error("WebhookChannel should support all recipients")
+	}
+}
+
+func TestWebhookChannelURLValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		url         string
+		shouldError bool
+		errorMsg    string
+	}{
+		{
+			name:        "valid http URL",
+			url:         "http://example.com/webhook",
+			shouldError: false,
+		},
+		{
+			name:        "valid https URL",
+			url:         "https://example.com/webhook",
+			shouldError: false,
+		},
+		{
+			name:        "invalid scheme - file",
+			url:         "file:///etc/passwd",
+			shouldError: true,
+			errorMsg:    "invalid URL scheme",
+		},
+		{
+			name:        "invalid scheme - ftp",
+			url:         "ftp://example.com/webhook",
+			shouldError: true,
+			errorMsg:    "invalid URL scheme",
+		},
+		{
+			name:        "URL with credentials",
+			url:         "http://user:pass@example.com/webhook",
+			shouldError: true,
+			errorMsg:    "credentials in URL not allowed",
+		},
+		{
+			name:        "invalid URL format",
+			url:         "not-a-valid-url",
+			shouldError: true,
+			errorMsg:    "invalid webhook URL",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			channel, err := NewWebhookChannel(tt.url)
+
+			if tt.shouldError {
+				if err == nil {
+					t.Errorf("Expected error for URL %s, got nil", tt.url)
+				}
+				if channel != nil {
+					t.Error("Expected nil channel when error occurs")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error for URL %s, got %v", tt.url, err)
+				}
+				if channel == nil {
+					t.Error("Expected non-nil channel when no error occurs")
+				}
+			}
+		})
 	}
 }
 

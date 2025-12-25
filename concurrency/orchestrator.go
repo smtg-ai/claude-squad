@@ -196,13 +196,13 @@ func (cb *CircuitBreaker) RecordFailure() {
 	case CircuitClosed:
 		if cb.failures >= cb.maxFailures {
 			cb.state = CircuitOpen
-			log.ErrorLog.Printf("Circuit breaker opened after %d failures", cb.failures)
+			log.WarningLog.Printf("Circuit breaker opened after %d failures", cb.failures)
 		}
 	case CircuitHalfOpen:
 		// Failed during testing, reopen the circuit
 		cb.state = CircuitOpen
 		cb.consecutiveTests = 0
-		log.ErrorLog.Printf("Circuit breaker reopened after test failure")
+		log.WarningLog.Printf("Circuit breaker reopened after test failure")
 	}
 }
 
@@ -443,7 +443,11 @@ func (a *ManagedAgent) ExecuteTask(ctx context.Context, task *Task) *TaskResult 
 	errChan := make(chan error, 1)
 	go func() {
 		err := a.instance.SendPrompt(task.Prompt)
-		errChan <- err
+		select {
+		case errChan <- err:
+		case <-execCtx.Done():
+			// Context cancelled, don't block on send
+		}
 	}()
 
 	select {
@@ -893,9 +897,11 @@ func (o *AgentOrchestrator) executeTask(task *Task) {
 	defer o.wg.Done()
 	defer func() {
 		<-o.taskSemaphore // Release semaphore slot
+		// Always cleanup activeTasks to prevent memory leak
 		o.mu.Lock()
 		delete(o.activeTasks, task.ID)
 		o.mu.Unlock()
+		log.InfoLog.Printf("Task %s removed from activeTasks map", task.ID)
 	}()
 
 	// Select agent
@@ -913,6 +919,7 @@ func (o *AgentOrchestrator) executeTask(task *Task) {
 		o.mu.Lock()
 		o.totalTasksFailed++
 		o.mu.Unlock()
+		// Cleanup happens in defer above
 		return
 	}
 
@@ -953,7 +960,7 @@ func (o *AgentOrchestrator) sendTaskResult(task *Task, result *TaskResult) {
 		case task.ResultChan <- result:
 			// Result sent successfully
 		case <-time.After(5 * time.Second):
-			log.ErrorLog.Printf("Timeout sending result for task %s", task.ID)
+			log.WarningLog.Printf("Timeout sending result for task %s", task.ID)
 		case <-o.ctx.Done():
 			return
 		}
@@ -1074,7 +1081,7 @@ func (o *AgentOrchestrator) publishEvent(event *AgentEvent) {
 		// Event published
 	default:
 		// Event channel full, log warning
-		log.ErrorLog.Printf("Event channel full, dropping event: %s for agent %s", event.Type, event.AgentID)
+		log.WarningLog.Printf("Event channel full, dropping event: %s for agent %s", event.Type, event.AgentID)
 	}
 }
 
@@ -1141,6 +1148,17 @@ func (o *AgentOrchestrator) Shutdown(timeout time.Duration) error {
 		log.ErrorLog.Println("Timeout waiting for workers to stop")
 		return fmt.Errorf("shutdown timeout exceeded")
 	}
+
+	// Clean up any remaining active tasks to prevent memory leak
+	o.mu.Lock()
+	remainingTasks := len(o.activeTasks)
+	if remainingTasks > 0 {
+		log.WarningLog.Printf("Cleaning up %d active tasks that were not processed", remainingTasks)
+		for taskID := range o.activeTasks {
+			delete(o.activeTasks, taskID)
+		}
+	}
+	o.mu.Unlock()
 
 	// Stop all agents
 	o.mu.RLock()

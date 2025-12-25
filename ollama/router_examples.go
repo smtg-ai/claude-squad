@@ -3,6 +3,7 @@ package ollama
 import (
 	"claude-squad/log"
 	"claude-squad/session"
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -43,7 +44,7 @@ func Example1_BasicRoundRobinRouting() error {
 
 	fmt.Println("=== Round-Robin Routing Example ===")
 	for i, task := range tasks {
-		selectedModel, err := router.RouteTask(task)
+		selectedModel, err := router.RouteTask(context.Background(),task)
 		if err != nil {
 			return err
 		}
@@ -140,7 +141,7 @@ func Example2_PerformanceBasedRouting() error {
 	}
 
 	for i, task := range newTasks {
-		selectedModel, _ := router.RouteTask(task)
+		selectedModel, _ := router.RouteTask(context.Background(),task)
 		category := router.GetTaskCategory(task)
 
 		fmt.Printf(
@@ -214,7 +215,7 @@ func Example3_ModelAffinityRouting() error {
 	}
 
 	for i, task := range newTasks {
-		selectedModel, _ := router.RouteTask(task.prompt)
+		selectedModel, _ := router.RouteTask(context.Background(),task.prompt)
 		category := router.GetTaskCategory(task.prompt)
 
 		match := "✓"
@@ -275,7 +276,7 @@ func Example4_CircuitBreakerPattern() error {
 
 	// Now route tasks - should avoid model-a
 	for i := 0; i < 3; i++ {
-		selectedModel, _ := router.RouteTask("Implement new feature")
+		selectedModel, _ := router.RouteTask(context.Background(),"Implement new feature")
 
 		if selectedModel == "model-a" {
 			fmt.Printf("Task %d: Routed to %s (UNEXPECTED)\n", i+1, selectedModel)
@@ -288,7 +289,7 @@ func Example4_CircuitBreakerPattern() error {
 	router.ForceHealthRecovery("model-a")
 
 	// Try routing again
-	selectedModel, _ := router.RouteTask("Implement another feature")
+	selectedModel, _ := router.RouteTask(context.Background(),"Implement another feature")
 	fmt.Printf("After recovery: Routed to %s\n", selectedModel)
 
 	return nil
@@ -340,7 +341,7 @@ func Example5_HybridRoutingStrategy() error {
 	}
 
 	for i, task := range similarTasks {
-		selectedModel, _ := router.RouteTask(task)
+		selectedModel, _ := router.RouteTask(context.Background(),task)
 		category := router.GetTaskCategory(task)
 
 		fmt.Printf(
@@ -376,7 +377,7 @@ func Example6_DynamicStrategySwapping() error {
 	// Route with round-robin
 	fmt.Println("1. Round-Robin Strategy:")
 	for i := 0; i < 3; i++ {
-		model, _ := router.RouteTask(task)
+		model, _ := router.RouteTask(context.Background(),task)
 		fmt.Printf("   Request %d -> %s\n", i+1, model)
 	}
 
@@ -384,7 +385,7 @@ func Example6_DynamicStrategySwapping() error {
 	router.SetRoutingStrategy(StrategyRandom)
 	fmt.Println("\n2. Random Strategy:")
 	for i := 0; i < 3; i++ {
-		model, _ := router.RouteTask(task)
+		model, _ := router.RouteTask(context.Background(),task)
 		fmt.Printf("   Request %d -> %s\n", i+1, model)
 	}
 
@@ -392,7 +393,7 @@ func Example6_DynamicStrategySwapping() error {
 	router.SetRoutingStrategy(StrategyLeastLoaded)
 	fmt.Println("\n3. Least-Loaded Strategy:")
 	for i := 0; i < 3; i++ {
-		model, _ := router.RouteTask(task)
+		model, _ := router.RouteTask(context.Background(),task)
 		category := router.GetTaskCategory(task)
 		router.RecordTaskResult(model, true, 100*time.Millisecond, category)
 		fmt.Printf("   Request %d -> %s\n", i+1, model)

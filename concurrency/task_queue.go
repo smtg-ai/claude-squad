@@ -433,8 +433,13 @@ func (tq *TaskQueue) Process(task *QueueTask) error {
 				select {
 				case tq.priorityQueues[t.Priority] <- t:
 					log.InfoLog.Printf("task %s requeued for retry", t.ID)
+				case <-tq.stopCh:
+					log.InfoLog.Printf("task %s not requeued: queue stopping", t.ID)
+				case <-time.After(5 * time.Second):
+					log.ErrorLog.Printf("timeout requeuing task %s (attempt %d/%d): queue full", t.ID, t.RetryCount, task.MaxRetries)
+					tq.moveToDeadLetterQueue(t)
 				default:
-					log.ErrorLog.Printf("failed to requeue task %s: queue full", t.ID)
+					log.ErrorLog.Printf("failed to requeue task %s (attempt %d/%d): queue full", t.ID, t.RetryCount, task.MaxRetries)
 					tq.moveToDeadLetterQueue(t)
 				}
 			}(task, delay)
@@ -468,6 +473,10 @@ func (tq *TaskQueue) Process(task *QueueTask) error {
 
 	// Check if any tasks are waiting for this dependency
 	tq.checkAndEnqueueDependentTasks(task.ID)
+
+	// Auto-cleanup: Delete completed task from map to prevent memory leak
+	delete(tq.tasks, task.ID)
+	log.InfoLog.Printf("task %s removed from task map after completion", task.ID)
 
 	if err := tq.persistState(); err != nil {
 		log.WarningLog.Printf("failed to persist state after task completion: %v", err)
@@ -512,6 +521,10 @@ func (tq *TaskQueue) checkAndEnqueueDependentTasks(completedTaskID string) {
 			select {
 			case tq.priorityQueues[task.Priority] <- task:
 				log.InfoLog.Printf("task %s dependencies satisfied, enqueued", taskID)
+			case <-tq.stopCh:
+				log.InfoLog.Printf("task %s not enqueued: queue stopping", taskID)
+			case <-time.After(5 * time.Second):
+				log.ErrorLog.Printf("timeout enqueuing task %s after dependency completion", taskID)
 			default:
 				log.ErrorLog.Printf("failed to enqueue task %s: queue full", taskID)
 			}
@@ -596,8 +609,19 @@ func (tq *TaskQueue) Stop() error {
 	// Cancel context to interrupt any running tasks
 	tq.cancel()
 
-	// Wait for all workers to finish
-	tq.wg.Wait()
+	// Wait for all workers to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		tq.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.InfoLog.Printf("all task queue workers stopped gracefully")
+	case <-time.After(30 * time.Second):
+		log.WarningLog.Printf("task queue shutdown timeout exceeded after 30s")
+	}
 
 	// Persist final state
 	if err := tq.persistState(); err != nil {
@@ -656,17 +680,17 @@ func (tq *TaskQueue) persistState() error {
 
 	// Prepare state for serialization
 	type persistedTask struct {
-		ID           string      `json:"id"`
-		Priority     QueuePriority    `json:"priority"`
-		Dependencies []string    `json:"dependencies"`
-		RetryCount   int         `json:"retry_count"`
-		MaxRetries   int         `json:"max_retries"`
-		Status       TaskStatus  `json:"status"`
-		CreatedAt    time.Time   `json:"created_at"`
-		StartedAt    *time.Time  `json:"started_at,omitempty"`
-		CompletedAt  *time.Time  `json:"completed_at,omitempty"`
-		LastError    string      `json:"last_error,omitempty"`
-		Metadata     interface{} `json:"metadata,omitempty"`
+		ID           string        `json:"id"`
+		Priority     QueuePriority `json:"priority"`
+		Dependencies []string      `json:"dependencies"`
+		RetryCount   int           `json:"retry_count"`
+		MaxRetries   int           `json:"max_retries"`
+		Status       TaskStatus    `json:"status"`
+		CreatedAt    time.Time     `json:"created_at"`
+		StartedAt    *time.Time    `json:"started_at,omitempty"`
+		CompletedAt  *time.Time    `json:"completed_at,omitempty"`
+		LastError    string        `json:"last_error,omitempty"`
+		Metadata     interface{}   `json:"metadata,omitempty"`
 	}
 
 	state := struct {
@@ -726,17 +750,17 @@ func (tq *TaskQueue) loadState() error {
 	}
 
 	type persistedTask struct {
-		ID           string      `json:"id"`
-		Priority     QueuePriority    `json:"priority"`
-		Dependencies []string    `json:"dependencies"`
-		RetryCount   int         `json:"retry_count"`
-		MaxRetries   int         `json:"max_retries"`
-		Status       TaskStatus  `json:"status"`
-		CreatedAt    time.Time   `json:"created_at"`
-		StartedAt    *time.Time  `json:"started_at,omitempty"`
-		CompletedAt  *time.Time  `json:"completed_at,omitempty"`
-		LastError    string      `json:"last_error,omitempty"`
-		Metadata     interface{} `json:"metadata,omitempty"`
+		ID           string        `json:"id"`
+		Priority     QueuePriority `json:"priority"`
+		Dependencies []string      `json:"dependencies"`
+		RetryCount   int           `json:"retry_count"`
+		MaxRetries   int           `json:"max_retries"`
+		Status       TaskStatus    `json:"status"`
+		CreatedAt    time.Time     `json:"created_at"`
+		StartedAt    *time.Time    `json:"started_at,omitempty"`
+		CompletedAt  *time.Time    `json:"completed_at,omitempty"`
+		LastError    string        `json:"last_error,omitempty"`
+		Metadata     interface{}   `json:"metadata,omitempty"`
 	}
 
 	state := struct {

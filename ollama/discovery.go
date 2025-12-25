@@ -3,6 +3,8 @@ package ollama
 import (
 	"bytes"
 	"claude-squad/log"
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -140,7 +142,7 @@ func NewModelDiscovery(apiURL string, pollInterval time.Duration, cacheTTL time.
 
 	// Validate API URL for security
 	if err := validateAPIURL(apiURL); err != nil {
-		log.ErrorLog.Printf("invalid API URL %q: %v, using default", apiURL, err)
+		log.WarningLog.Printf("invalid API URL %q: %v, using default", apiURL, err)
 		apiURL = "http://localhost:11434"
 	}
 
@@ -158,6 +160,14 @@ func NewModelDiscovery(apiURL string, pollInterval time.Duration, cacheTTL time.
 		contextWindow: 4096,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+				TLSClientConfig: &tls.Config{
+					MinVersion: tls.VersionTLS12,
+				},
+			},
 		},
 		models:         make(map[string]*ModelInfo),
 		eventCh:        make(chan ModelChangeEvent, 100),
@@ -230,19 +240,30 @@ func (md *ModelDiscovery) pollWorker() {
 
 // discoverModels queries the Ollama API for available models
 func (md *ModelDiscovery) discoverModels() error {
-	resp, err := md.httpClient.Get(md.apiURL + "/api/tags")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", md.apiURL+"/api/tags", nil)
 	if err != nil {
 		md.mu.Lock()
+		defer md.mu.Unlock()
 		md.isHealthy = false
-		md.mu.Unlock()
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := md.httpClient.Do(req)
+	if err != nil {
+		md.mu.Lock()
+		defer md.mu.Unlock()
+		md.isHealthy = false
 		return fmt.Errorf("failed to query Ollama API: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		md.mu.Lock()
+		defer md.mu.Unlock()
 		md.isHealthy = false
-		md.mu.Unlock()
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("Ollama API returned status %d: %s", resp.StatusCode, string(body))
 	}
@@ -250,8 +271,8 @@ func (md *ModelDiscovery) discoverModels() error {
 	var olmResp OllamaResponse
 	if err := json.NewDecoder(resp.Body).Decode(&olmResp); err != nil {
 		md.mu.Lock()
+		defer md.mu.Unlock()
 		md.isHealthy = false
-		md.mu.Unlock()
 		return fmt.Errorf("failed to decode Ollama response: %w", err)
 	}
 
@@ -371,7 +392,10 @@ func (md *ModelDiscovery) checkModelHealth(model *ModelInfo) error {
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", md.apiURL+"/api/generate", bytes.NewReader(data))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", md.apiURL+"/api/generate", bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -596,7 +620,14 @@ func (md *ModelDiscovery) SetContextWindow(contextWindow int) {
 }
 
 // RefreshModels forces an immediate model discovery
-func (md *ModelDiscovery) RefreshModels() error {
+func (md *ModelDiscovery) RefreshModels(ctx context.Context) error {
+	// Check if context is already cancelled
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	return md.discoverModels()
 }
 

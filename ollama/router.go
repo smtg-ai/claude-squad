@@ -3,6 +3,7 @@ package ollama
 import (
 	"claude-squad/log"
 	"claude-squad/session"
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -161,6 +162,13 @@ func NewTaskRouter(strategy RoutingStrategy) *TaskRouter {
 
 // RegisterModel adds a model instance to the router
 func (tr *TaskRouter) RegisterModel(modelID string, instance *session.Instance) error {
+	if modelID == "" {
+		return fmt.Errorf("model ID cannot be empty")
+	}
+	if instance == nil {
+		return fmt.Errorf("instance cannot be nil")
+	}
+
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 
@@ -205,7 +213,14 @@ func (tr *TaskRouter) UnregisterModel(modelID string) error {
 }
 
 // RouteTask determines which model should handle the given task
-func (tr *TaskRouter) RouteTask(taskPrompt string, previousContext ...string) (string, error) {
+func (tr *TaskRouter) RouteTask(ctx context.Context, taskPrompt string, previousContext ...string) (string, error) {
+	// Check if context is already cancelled
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	default:
+	}
+
 	tr.mu.RLock()
 	defer tr.mu.RUnlock()
 
@@ -282,7 +297,7 @@ func (tr *TaskRouter) RecordTaskResult(modelID string, success bool, latency tim
 		failureCount := atomic.LoadInt32(&metrics.FailureCount)
 		if int(failureCount) >= tr.circuitBreakerConfig.FailureThreshold {
 			metrics.CircuitBreakerOpen = true
-			log.InfoLog.Printf("circuit breaker opened for model %s after %d failures",
+			log.WarningLog.Printf("circuit breaker opened for model %s after %d failures",
 				modelID, failureCount)
 		}
 
@@ -301,7 +316,14 @@ func (tr *TaskRouter) RecordTaskResult(modelID string, success bool, latency tim
 }
 
 // HealthCheck checks the health of registered models
-func (tr *TaskRouter) HealthCheck() map[string]bool {
+func (tr *TaskRouter) HealthCheck(ctx context.Context) map[string]bool {
+	// Check if context is already cancelled
+	select {
+	case <-ctx.Done():
+		return make(map[string]bool)
+	default:
+	}
+
 	tr.mu.RLock()
 	defer tr.mu.RUnlock()
 
@@ -309,13 +331,20 @@ func (tr *TaskRouter) HealthCheck() map[string]bool {
 	now := time.Now()
 
 	for modelID, metrics := range tr.metrics {
+		// Check context cancellation during iteration
+		select {
+		case <-ctx.Done():
+			return health
+		default:
+		}
+
 		isHealthy := true
 
 		// Circuit breaker check
 		if metrics.CircuitBreakerOpen {
 			if now.Sub(metrics.FailureWindow) > tr.circuitBreakerConfig.Timeout {
 				// Try to recover (half-open state)
-				metrics.FailureCount = 0
+				atomic.StoreInt32(&metrics.FailureCount, 0)
 				metrics.CircuitBreakerOpen = false
 				isHealthy = true
 			} else {
@@ -408,6 +437,9 @@ func (tr *TaskRouter) routeLeastLoaded(availableModels []string) (string, error)
 
 	for _, modelID := range availableModels {
 		metrics := tr.metrics[modelID]
+		if metrics == nil {
+			continue // Skip models without metrics
+		}
 		// Calculate current load based on total requests vs successful tasks
 		load := metrics.TotalRequests - metrics.SuccessfulTasks
 
@@ -447,6 +479,9 @@ func (tr *TaskRouter) routePerformance(availableModels []string, category TaskCa
 
 	for _, modelID := range availableModels {
 		metrics := tr.metrics[modelID]
+		if metrics == nil {
+			continue // Skip models without metrics
+		}
 
 		// Calculate success rate
 		successRate := float64(0)
@@ -548,7 +583,7 @@ func (tr *TaskRouter) getAvailableModels() []string {
 		if metrics.CircuitBreakerOpen {
 			if now.Sub(metrics.FailureWindow) > tr.circuitBreakerConfig.Timeout {
 				// Try to recover
-				metrics.FailureCount = 0
+				atomic.StoreInt32(&metrics.FailureCount, 0)
 				metrics.CircuitBreakerOpen = false
 				isHealthy = true
 			} else {
@@ -577,6 +612,9 @@ func (tr *TaskRouter) calculatePerformanceWeights() {
 
 		for modelID := range tr.metrics {
 			metrics := tr.metrics[modelID]
+			if metrics == nil {
+				continue // Skip models without metrics
+			}
 
 			successRate := float64(0)
 			if metrics.TotalRequests > 0 {
@@ -602,6 +640,10 @@ func NewTaskAffinityMap() *TaskAffinityMap {
 
 // IncrementAffinity increases affinity score for a model-category pair
 func (tam *TaskAffinityMap) IncrementAffinity(category TaskCategory, modelID string, amount int) {
+	if modelID == "" || amount < 0 {
+		return
+	}
+
 	tam.mu.Lock()
 	defer tam.mu.Unlock()
 
@@ -614,6 +656,10 @@ func (tam *TaskAffinityMap) IncrementAffinity(category TaskCategory, modelID str
 
 // DecrementAffinity decreases affinity score for a model-category pair
 func (tam *TaskAffinityMap) DecrementAffinity(category TaskCategory, modelID string, amount int) {
+	if modelID == "" || amount < 0 {
+		return
+	}
+
 	tam.mu.Lock()
 	defer tam.mu.Unlock()
 
@@ -763,8 +809,8 @@ func (tr *TaskRouter) ResetMetrics() {
 		metrics.SuccessfulTasks = 0
 		metrics.FailedTasks = 0
 		metrics.AverageLatency = 0
-		metrics.FailureCount = 0
-		metrics.SuccessCount = 0
+		atomic.StoreInt32(&metrics.FailureCount, 0)
+		atomic.StoreInt32(&metrics.SuccessCount, 0)
 		metrics.CircuitBreakerOpen = false
 	}
 
@@ -795,7 +841,7 @@ func (tr *TaskRouter) ForceHealthRecovery(modelID string) error {
 	}
 
 	metrics.CircuitBreakerOpen = false
-	metrics.FailureCount = 0
+	atomic.StoreInt32(&metrics.FailureCount, 0)
 	metrics.FailureWindow = time.Now()
 
 	log.InfoLog.Printf("forced health recovery for model %s", modelID)

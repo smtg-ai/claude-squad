@@ -112,19 +112,16 @@ func (tb *TokenBucket) Acquire(ctx context.Context, n int64) error {
 	defer tb.mu.Unlock()
 
 	for tb.tokens < n {
-		// Wait with context cancellation support
-		done := make(chan struct{})
-		go func() {
-			tb.cond.Wait()
-			close(done)
-		}()
-
+		// Check context before waiting
 		select {
-		case <-done:
-			// Continue loop to check if we have enough tokens
 		case <-ctx.Done():
 			return ctx.Err()
+		default:
 		}
+		// Use time-based polling instead of blocking cond.Wait in goroutine
+		tb.mu.Unlock()
+		time.Sleep(10 * time.Millisecond)
+		tb.mu.Lock()
 	}
 
 	tb.tokens -= n
@@ -196,18 +193,16 @@ func (s *Semaphore) Acquire(ctx context.Context, n int) error {
 	defer s.mu.Unlock()
 
 	for s.current+n > s.capacity {
-		done := make(chan struct{})
-		go func() {
-			s.cond.Wait()
-			close(done)
-		}()
-
+		// Check context before waiting
 		select {
-		case <-done:
-			// Continue loop
 		case <-ctx.Done():
 			return ctx.Err()
+		default:
 		}
+		// Use time-based polling instead of blocking cond.Wait in goroutine
+		s.mu.Unlock()
+		time.Sleep(10 * time.Millisecond)
+		s.mu.Lock()
 	}
 
 	s.current += n

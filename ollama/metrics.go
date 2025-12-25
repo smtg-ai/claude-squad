@@ -67,6 +67,7 @@ type MetricsCollector struct {
 	resourceChannel    chan *ResourceMetrics
 	lastResourceUpdate time.Time
 	latencyBuckets     []int64 // bucket boundaries in milliseconds
+	maxModels          int     // maximum number of models to track (0 = unlimited)
 }
 
 // MetricsEvent represents a metrics update event
@@ -102,6 +103,7 @@ func NewMetricsCollector() *MetricsCollector {
 		lastResourceUpdate: time.Now(),
 		// Latency buckets: 1ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 5s
 		latencyBuckets: []int64{1, 5, 10, 25, 50, 100, 250, 500, 1000, 5000},
+		maxModels:      1000, // Limit to 1000 models to prevent unbounded growth
 	}
 }
 
@@ -111,6 +113,11 @@ func (mc *MetricsCollector) RecordLatency(model string, latency time.Duration) {
 	defer mc.mu.Unlock()
 
 	if mc.PerformanceMetrics[model] == nil {
+		// Check if we've hit the model limit
+		if mc.maxModels > 0 && len(mc.PerformanceMetrics) >= mc.maxModels {
+			// Remove least recently used model to make room
+			mc.evictLeastRecentlyUsedModel()
+		}
 		mc.PerformanceMetrics[model] = &PerformanceMetrics{
 			Model:       model,
 			MinLatency:  latency,
@@ -120,6 +127,9 @@ func (mc *MetricsCollector) RecordLatency(model string, latency time.Duration) {
 	}
 
 	metrics := mc.PerformanceMetrics[model]
+	if metrics == nil {
+		return // Safety check: metrics should exist after creation above
+	}
 	metrics.TotalRequests++
 	metrics.SuccessfulReqs++
 	metrics.TotalLatency += latency
@@ -166,6 +176,11 @@ func (mc *MetricsCollector) RecordError(model string, err error) {
 	defer mc.mu.Unlock()
 
 	if mc.PerformanceMetrics[model] == nil {
+		// Check if we've hit the model limit
+		if mc.maxModels > 0 && len(mc.PerformanceMetrics) >= mc.maxModels {
+			// Remove least recently used model to make room
+			mc.evictLeastRecentlyUsedModel()
+		}
 		mc.PerformanceMetrics[model] = &PerformanceMetrics{
 			Model:       model,
 			LatencyHist: mc.newLatencyHistogram(),
@@ -173,6 +188,9 @@ func (mc *MetricsCollector) RecordError(model string, err error) {
 	}
 
 	metrics := mc.PerformanceMetrics[model]
+	if metrics == nil {
+		return // Safety check: metrics should exist after creation above
+	}
 	metrics.TotalRequests++
 	metrics.FailedReqs++
 	metrics.LastUpdated = time.Now()
@@ -200,6 +218,11 @@ func (mc *MetricsCollector) RecordTokens(model string, tokenCount int64) {
 	defer mc.mu.Unlock()
 
 	if mc.PerformanceMetrics[model] == nil {
+		// Check if we've hit the model limit
+		if mc.maxModels > 0 && len(mc.PerformanceMetrics) >= mc.maxModels {
+			// Remove least recently used model to make room
+			mc.evictLeastRecentlyUsedModel()
+		}
 		mc.PerformanceMetrics[model] = &PerformanceMetrics{
 			Model:       model,
 			LatencyHist: mc.newLatencyHistogram(),
@@ -604,6 +627,44 @@ func (mc *MetricsCollector) GetHistogramSummary(model string) (string, error) {
 // Close closes the metrics channel
 func (mc *MetricsCollector) Close() {
 	close(mc.MetricsChannel)
+}
+
+// RemoveModel removes a specific model's metrics from the collector
+func (mc *MetricsCollector) RemoveModel(model string) bool {
+	mc.mu.Lock()
+	defer mc.mu.Unlock()
+
+	if _, exists := mc.PerformanceMetrics[model]; exists {
+		delete(mc.PerformanceMetrics, model)
+		return true
+	}
+	return false
+}
+
+// evictLeastRecentlyUsedModel removes the least recently updated model to make room
+// Must be called with mc.mu locked
+func (mc *MetricsCollector) evictLeastRecentlyUsedModel() {
+	if len(mc.PerformanceMetrics) == 0 {
+		return
+	}
+
+	var oldestModel string
+	var oldestTime time.Time
+	first := true
+
+	for model, metrics := range mc.PerformanceMetrics {
+		if first || metrics.LastUpdated.Before(oldestTime) {
+			oldestModel = model
+			oldestTime = metrics.LastUpdated
+			first = false
+		}
+	}
+
+	if oldestModel != "" {
+		delete(mc.PerformanceMetrics, oldestModel)
+		// Note: We don't log here as this is called with mutex locked
+		// Logging would need to happen after unlock to avoid potential deadlocks
+	}
 }
 
 // writeFile writes data to a file with proper permissions

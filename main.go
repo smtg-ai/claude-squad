@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -152,9 +153,8 @@ func init() {
 		" and runs autoyes mode on them.")
 
 	// Hide the daemonFlag as it's only for internal use
-	err := rootCmd.Flags().MarkHidden("daemon")
-	if err != nil {
-		panic(err)
+	if err := rootCmd.Flags().MarkHidden("daemon"); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to hide daemon flag: %v\n", err)
 	}
 
 	rootCmd.AddCommand(debugCmd)

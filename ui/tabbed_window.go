@@ -133,7 +133,7 @@ func (w *TabbedWindow) ScrollUp() {
 	if w.activeTab == PreviewTab {
 		err := w.preview.ScrollUp(w.instance)
 		if err != nil {
-			log.InfoLog.Printf("tabbed window failed to scroll up: %v", err)
+			log.WarningLog.Printf("tabbed window failed to scroll up: %v", err)
 		}
 	} else {
 		w.diff.ScrollUp()
@@ -144,7 +144,7 @@ func (w *TabbedWindow) ScrollDown() {
 	if w.activeTab == PreviewTab {
 		err := w.preview.ScrollDown(w.instance)
 		if err != nil {
-			log.InfoLog.Printf("tabbed window failed to scroll down: %v", err)
+			log.WarningLog.Printf("tabbed window failed to scroll down: %v", err)
 		}
 	} else {
 		w.diff.ScrollDown()

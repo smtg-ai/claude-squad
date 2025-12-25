@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -829,18 +830,18 @@ func (mr *MetricRegistry) ExportPrometheus() string {
 	mr.mu.RLock()
 	defer mr.mu.RUnlock()
 
-	var output string
+	var builder strings.Builder
 
 	// Export counters
 	for name, counter := range mr.counters {
-		output += fmt.Sprintf("# TYPE %s counter\n", name)
-		output += fmt.Sprintf("%s %d\n\n", name, counter.Get())
+		fmt.Fprintf(&builder, "# TYPE %s counter\n", name)
+		fmt.Fprintf(&builder, "%s %d\n\n", name, counter.Get())
 	}
 
 	// Export gauges
 	for name, gauge := range mr.gauges {
-		output += fmt.Sprintf("# TYPE %s gauge\n", name)
-		output += fmt.Sprintf("%s %.6f\n\n", name, gauge.Get())
+		fmt.Fprintf(&builder, "# TYPE %s gauge\n", name)
+		fmt.Fprintf(&builder, "%s %.6f\n\n", name, gauge.Get())
 	}
 
 	// Export histograms
@@ -849,14 +850,14 @@ func (mr *MetricRegistry) ExportPrometheus() string {
 		if count == 0 {
 			continue
 		}
-		output += fmt.Sprintf("# TYPE %s histogram\n", name)
-		output += fmt.Sprintf("%s_count %d\n", name, count)
-		output += fmt.Sprintf("%s_sum %.6f\n", name, hist.Sum())
-		output += fmt.Sprintf("%s_min %.6f\n", name, hist.Min())
-		output += fmt.Sprintf("%s_max %.6f\n", name, hist.Max())
-		output += fmt.Sprintf("%s{quantile=\"0.5\"} %.6f\n", name, hist.Percentile(50))
-		output += fmt.Sprintf("%s{quantile=\"0.95\"} %.6f\n", name, hist.Percentile(95))
-		output += fmt.Sprintf("%s{quantile=\"0.99\"} %.6f\n\n", name, hist.Percentile(99))
+		fmt.Fprintf(&builder, "# TYPE %s histogram\n", name)
+		fmt.Fprintf(&builder, "%s_count %d\n", name, count)
+		fmt.Fprintf(&builder, "%s_sum %.6f\n", name, hist.Sum())
+		fmt.Fprintf(&builder, "%s_min %.6f\n", name, hist.Min())
+		fmt.Fprintf(&builder, "%s_max %.6f\n", name, hist.Max())
+		fmt.Fprintf(&builder, "%s{quantile=\"0.5\"} %.6f\n", name, hist.Percentile(50))
+		fmt.Fprintf(&builder, "%s{quantile=\"0.95\"} %.6f\n", name, hist.Percentile(95))
+		fmt.Fprintf(&builder, "%s{quantile=\"0.99\"} %.6f\n\n", name, hist.Percentile(99))
 	}
 
 	// Export timers
@@ -865,38 +866,38 @@ func (mr *MetricRegistry) ExportPrometheus() string {
 		if count == 0 {
 			continue
 		}
-		output += fmt.Sprintf("# TYPE %s histogram\n", name)
-		output += fmt.Sprintf("%s_count %d\n", name, count)
-		output += fmt.Sprintf("%s_sum %.6f\n", name, timer.Mean().Seconds()*float64(count))
-		output += fmt.Sprintf("%s_min %.6f\n", name, timer.Min().Seconds())
-		output += fmt.Sprintf("%s_max %.6f\n", name, timer.Max().Seconds())
-		output += fmt.Sprintf("%s{quantile=\"0.5\"} %.6f\n", name, timer.Percentile(50).Seconds())
-		output += fmt.Sprintf("%s{quantile=\"0.95\"} %.6f\n", name, timer.Percentile(95).Seconds())
-		output += fmt.Sprintf("%s{quantile=\"0.99\"} %.6f\n\n", name, timer.Percentile(99).Seconds())
+		fmt.Fprintf(&builder, "# TYPE %s histogram\n", name)
+		fmt.Fprintf(&builder, "%s_count %d\n", name, count)
+		fmt.Fprintf(&builder, "%s_sum %.6f\n", name, timer.Mean().Seconds()*float64(count))
+		fmt.Fprintf(&builder, "%s_min %.6f\n", name, timer.Min().Seconds())
+		fmt.Fprintf(&builder, "%s_max %.6f\n", name, timer.Max().Seconds())
+		fmt.Fprintf(&builder, "%s{quantile=\"0.5\"} %.6f\n", name, timer.Percentile(50).Seconds())
+		fmt.Fprintf(&builder, "%s{quantile=\"0.95\"} %.6f\n", name, timer.Percentile(95).Seconds())
+		fmt.Fprintf(&builder, "%s{quantile=\"0.99\"} %.6f\n\n", name, timer.Percentile(99).Seconds())
 	}
 
 	// Export rolling windows
 	for name, rw := range mr.rollingWins {
-		output += fmt.Sprintf("# TYPE %s_count counter\n", name)
-		output += fmt.Sprintf("%s_count %d\n", name, rw.Count())
-		output += fmt.Sprintf("# TYPE %s_rate gauge\n", name)
-		output += fmt.Sprintf("%s_rate %.6f\n\n", name, rw.Rate())
+		fmt.Fprintf(&builder, "# TYPE %s_count counter\n", name)
+		fmt.Fprintf(&builder, "%s_count %d\n", name, rw.Count())
+		fmt.Fprintf(&builder, "# TYPE %s_rate gauge\n", name)
+		fmt.Fprintf(&builder, "%s_rate %.6f\n\n", name, rw.Rate())
 	}
 
 	// Export agent metrics
 	for agentID, agent := range mr.agents {
 		agent.mu.RLock()
-		output += fmt.Sprintf("# Agent: %s\n", agentID)
-		output += fmt.Sprintf("# TYPE %s counter\n", agent.tasksCompleted.Name())
-		output += fmt.Sprintf("%s %d\n", agent.tasksCompleted.Name(), agent.tasksCompleted.Get())
-		output += fmt.Sprintf("# TYPE %s gauge\n", agent.tasksActive.Name())
-		output += fmt.Sprintf("%s %.6f\n", agent.tasksActive.Name(), agent.tasksActive.Get())
-		output += fmt.Sprintf("# TYPE %s counter\n", agent.errors.Name())
-		output += fmt.Sprintf("%s %d\n\n", agent.errors.Name(), agent.errors.Get())
+		fmt.Fprintf(&builder, "# Agent: %s\n", agentID)
+		fmt.Fprintf(&builder, "# TYPE %s counter\n", agent.tasksCompleted.Name())
+		fmt.Fprintf(&builder, "%s %d\n", agent.tasksCompleted.Name(), agent.tasksCompleted.Get())
+		fmt.Fprintf(&builder, "# TYPE %s gauge\n", agent.tasksActive.Name())
+		fmt.Fprintf(&builder, "%s %.6f\n", agent.tasksActive.Name(), agent.tasksActive.Get())
+		fmt.Fprintf(&builder, "# TYPE %s counter\n", agent.errors.Name())
+		fmt.Fprintf(&builder, "%s %d\n\n", agent.errors.Name(), agent.errors.Get())
 		agent.mu.RUnlock()
 	}
 
-	return output
+	return builder.String()
 }
 
 // MetricsCollector is the main collector that orchestrates all metrics

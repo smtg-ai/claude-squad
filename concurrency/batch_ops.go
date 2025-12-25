@@ -3,6 +3,7 @@ package concurrency
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -108,14 +109,15 @@ func (pr *PartialResult) Error() error {
 		return pr.Failures[0].Error
 	}
 
-	errMsg := fmt.Sprintf("%d operations failed:", len(pr.Failures))
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "%d operations failed:", len(pr.Failures))
 	for _, failure := range pr.Failures {
-		errMsg += fmt.Sprintf("\n  - %s on instance '%s': %v",
+		fmt.Fprintf(&builder, "\n  - %s on instance '%s': %v",
 			failure.Operation.Name(),
 			failure.Instance.Title,
 			failure.Error)
 	}
-	return fmt.Errorf("%s", errMsg)
+	return fmt.Errorf("%s", builder.String())
 }
 
 // ProgressCallback is called when an operation completes (success or failure)

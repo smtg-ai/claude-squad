@@ -18,6 +18,9 @@ func NewConcurrentProcessor(maxWorkers int) *ConcurrentProcessor {
 	if maxWorkers <= 0 {
 		maxWorkers = MaxConcurrentWorkers
 	}
+	if maxWorkers > 1000 {
+		maxWorkers = 1000 // Cap at reasonable limit
+	}
 
 	return &ConcurrentProcessor{
 		maxWorkers: maxWorkers,

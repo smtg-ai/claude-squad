@@ -116,7 +116,10 @@ func (w *Worker) incrementJobsProcessed() {
 // LastError returns the last error encountered by this worker.
 func (w *Worker) LastError() error {
 	if err := w.lastError.Load(); err != nil {
-		return err.(error)
+		if e, ok := err.(error); ok {
+			return e
+		}
+		return fmt.Errorf("unexpected error type: %T", err)
 	}
 	return nil
 }
@@ -224,7 +227,11 @@ func (pq *priorityQueue) Swap(i, j int) {
 
 func (pq *priorityQueue) Push(x interface{}) {
 	n := len(pq.items)
-	item := x.(*priorityQueueItem)
+	item, ok := x.(*priorityQueueItem)
+	if !ok {
+		// This should never happen if the heap interface is used correctly
+		panic(fmt.Sprintf("priorityQueue.Push: unexpected type %T, want *priorityQueueItem", x))
+	}
 	item.index = n
 	pq.items = append(pq.items, item)
 }
@@ -285,8 +292,14 @@ func NewWorkerPool(config WorkerPoolConfig) *WorkerPool {
 	if config.MaxWorkers <= 0 {
 		config.MaxWorkers = 10
 	}
+	if config.MaxWorkers > 1000 {
+		config.MaxWorkers = 1000 // Cap at reasonable limit
+	}
 	if config.QueueSize <= 0 {
 		config.QueueSize = 1000
+	}
+	if config.QueueSize > 100000 {
+		config.QueueSize = 100000 // Cap at reasonable limit
 	}
 	if config.WorkerTimeout <= 0 {
 		config.WorkerTimeout = 5 * time.Minute
@@ -340,7 +353,7 @@ func (wp *WorkerPool) Start() error {
 
 // Submit adds a job to the worker pool for execution.
 // Returns an error if the pool is shut down or the queue is full.
-func (wp *WorkerPool) Submit(job Job) error {
+func (wp *WorkerPool) Submit(ctx context.Context, job Job) error {
 	if !wp.started.Load() {
 		return fmt.Errorf("worker pool not started")
 	}
@@ -348,6 +361,8 @@ func (wp *WorkerPool) Submit(job Job) error {
 	select {
 	case <-wp.ctx.Done():
 		return fmt.Errorf("worker pool is shutting down")
+	case <-ctx.Done():
+		return ctx.Err()
 	default:
 	}
 
@@ -358,6 +373,8 @@ func (wp *WorkerPool) Submit(job Job) error {
 		return nil
 	case <-wp.ctx.Done():
 		return fmt.Errorf("worker pool is shutting down")
+	case <-ctx.Done():
+		return ctx.Err()
 	default:
 		return fmt.Errorf("job queue is full")
 	}
@@ -461,7 +478,13 @@ func (wp *WorkerPool) dispatchNextJob() bool {
 		wp.jobQueue.mu.Unlock()
 		return false
 	}
-	item := heap.Pop(wp.jobQueue).(*priorityQueueItem)
+	popped := heap.Pop(wp.jobQueue)
+	item, ok := popped.(*priorityQueueItem)
+	if !ok {
+		wp.jobQueue.mu.Unlock()
+		// Log error or handle unexpected type - this should never happen
+		return false
+	}
 	wp.jobQueue.mu.Unlock()
 
 	// Try to dispatch job to a worker (non-blocking)
