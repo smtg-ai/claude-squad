@@ -159,6 +159,7 @@ type AgentPool struct {
 	ticker        *time.Ticker
 	done          chan struct{}
 	maintenanceWg sync.WaitGroup
+	wg            sync.WaitGroup // Tracks child goroutines spawned during maintenance
 
 	// Metrics snapshot
 	metricsLock sync.RWMutex
@@ -543,7 +544,9 @@ func (p *AgentPool) performMaintenance() {
 			if now.Sub(agent.GetLastUsed()) > p.idleTimeoutDuration &&
 				idleCount+activeCount > int64(p.minPoolSize) {
 				// Safe to remove this idle agent
+				p.wg.Add(1)
 				go func(a *Agent) {
+					defer p.wg.Done()
 					if err := p.killAgent(a); err != nil {
 						log.ErrorLog.Printf("error killing idle agent: %v", err)
 					}
@@ -606,7 +609,9 @@ func (p *AgentPool) autoscale(activeCount, idleCount int64) {
 			// Remove one idle agent
 			for id, agent := range p.agents {
 				if agent.GetState() == AgentStateIdle {
+					p.wg.Add(1)
 					go func(a *Agent) {
+						defer p.wg.Done()
 						if err := p.killAgent(a); err != nil {
 							log.ErrorLog.Printf("error killing agent during scale-down: %v", err)
 						}
@@ -677,6 +682,9 @@ func (p *AgentPool) Close() error {
 
 	// Wait for maintenance loop to finish
 	p.maintenanceWg.Wait()
+
+	// Wait for all child goroutines spawned during maintenance to finish
+	p.wg.Wait()
 
 	// Kill all agents
 	p.mu.Lock()

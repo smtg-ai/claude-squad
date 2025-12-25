@@ -116,7 +116,10 @@ func (w *Worker) incrementJobsProcessed() {
 // LastError returns the last error encountered by this worker.
 func (w *Worker) LastError() error {
 	if err := w.lastError.Load(); err != nil {
-		return err.(error)
+		if e, ok := err.(error); ok {
+			return e
+		}
+		return fmt.Errorf("unexpected error type: %T", err)
 	}
 	return nil
 }
@@ -224,7 +227,11 @@ func (pq *priorityQueue) Swap(i, j int) {
 
 func (pq *priorityQueue) Push(x interface{}) {
 	n := len(pq.items)
-	item := x.(*priorityQueueItem)
+	item, ok := x.(*priorityQueueItem)
+	if !ok {
+		// This should never happen if the heap interface is used correctly
+		panic(fmt.Sprintf("priorityQueue.Push: unexpected type %T, want *priorityQueueItem", x))
+	}
 	item.index = n
 	pq.items = append(pq.items, item)
 }
@@ -461,7 +468,13 @@ func (wp *WorkerPool) dispatchNextJob() bool {
 		wp.jobQueue.mu.Unlock()
 		return false
 	}
-	item := heap.Pop(wp.jobQueue).(*priorityQueueItem)
+	popped := heap.Pop(wp.jobQueue)
+	item, ok := popped.(*priorityQueueItem)
+	if !ok {
+		wp.jobQueue.mu.Unlock()
+		// Log error or handle unexpected type - this should never happen
+		return false
+	}
 	wp.jobQueue.mu.Unlock()
 
 	// Try to dispatch job to a worker (non-blocking)

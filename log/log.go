@@ -25,7 +25,16 @@ var globalLogFile *os.File
 func Initialize(daemon bool) {
 	f, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
-		panic(fmt.Sprintf("could not open log file: %s", err))
+		// Fallback to stderr
+		fmtS := "%s"
+		if daemon {
+			fmtS = "[DAEMON] %s"
+		}
+		InfoLog = log.New(os.Stderr, fmt.Sprintf(fmtS, "INFO:"), log.Ldate|log.Ltime|log.Lshortfile)
+		WarningLog = log.New(os.Stderr, fmt.Sprintf(fmtS, "WARNING:"), log.Ldate|log.Ltime|log.Lshortfile)
+		ErrorLog = log.New(os.Stderr, fmt.Sprintf(fmtS, "ERROR:"), log.Ldate|log.Ltime|log.Lshortfile)
+		fmt.Fprintf(os.Stderr, "Warning: using stderr for logging: %v\n", err)
+		return
 	}
 
 	// Set log format to include timestamp and file/line number

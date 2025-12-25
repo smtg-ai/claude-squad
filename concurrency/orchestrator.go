@@ -893,9 +893,11 @@ func (o *AgentOrchestrator) executeTask(task *Task) {
 	defer o.wg.Done()
 	defer func() {
 		<-o.taskSemaphore // Release semaphore slot
+		// Always cleanup activeTasks to prevent memory leak
 		o.mu.Lock()
 		delete(o.activeTasks, task.ID)
 		o.mu.Unlock()
+		log.InfoLog.Printf("Task %s removed from activeTasks map", task.ID)
 	}()
 
 	// Select agent
@@ -913,6 +915,7 @@ func (o *AgentOrchestrator) executeTask(task *Task) {
 		o.mu.Lock()
 		o.totalTasksFailed++
 		o.mu.Unlock()
+		// Cleanup happens in defer above
 		return
 	}
 
@@ -1141,6 +1144,17 @@ func (o *AgentOrchestrator) Shutdown(timeout time.Duration) error {
 		log.ErrorLog.Println("Timeout waiting for workers to stop")
 		return fmt.Errorf("shutdown timeout exceeded")
 	}
+
+	// Clean up any remaining active tasks to prevent memory leak
+	o.mu.Lock()
+	remainingTasks := len(o.activeTasks)
+	if remainingTasks > 0 {
+		log.WarningLog.Printf("Cleaning up %d active tasks that were not processed", remainingTasks)
+		for taskID := range o.activeTasks {
+			delete(o.activeTasks, taskID)
+		}
+	}
+	o.mu.Unlock()
 
 	// Stop all agents
 	o.mu.RLock()

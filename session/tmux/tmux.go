@@ -400,19 +400,14 @@ func (t *TmuxSession) Detach() {
 	// Close the attached pty session.
 	err := t.ptmx.Close()
 	if err != nil {
-		// This is a fatal error. We can't detach if we can't close the PTY. It's better to just panic and have the
-		// user re-invoke the program than to ruin their terminal pane.
-		msg := fmt.Sprintf("error closing attach pty session: %v", err)
-		log.ErrorLog.Println(msg)
-		panic(msg)
+		log.ErrorLog.Printf("error closing PTY: %v", err)
+		// Continue cleanup instead of panic
 	}
 	// Attach goroutines should die on EOF due to the ptmx closing. Call
 	// t.Restore to set a new t.ptmx.
 	if err = t.Restore(); err != nil {
-		// This is a fatal error. Our invariant that a started TmuxSession always has a valid ptmx is violated.
-		msg := fmt.Sprintf("error closing attach pty session: %v", err)
-		log.ErrorLog.Println(msg)
-		panic(msg)
+		log.ErrorLog.Printf("error restoring PTY after detach: %v", err)
+		// Continue cleanup instead of panic
 	}
 
 	// Cancel goroutines created by Attach.

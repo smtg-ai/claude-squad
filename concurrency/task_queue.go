@@ -469,6 +469,10 @@ func (tq *TaskQueue) Process(task *QueueTask) error {
 	// Check if any tasks are waiting for this dependency
 	tq.checkAndEnqueueDependentTasks(task.ID)
 
+	// Auto-cleanup: Delete completed task from map to prevent memory leak
+	delete(tq.tasks, task.ID)
+	log.InfoLog.Printf("task %s removed from task map after completion", task.ID)
+
 	if err := tq.persistState(); err != nil {
 		log.WarningLog.Printf("failed to persist state after task completion: %v", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/atotto/clipboard"
@@ -57,6 +58,7 @@ type Instance struct {
 
 	// The below fields are initialized upon calling Start().
 
+	mu      sync.RWMutex
 	started bool
 	// tmuxSession is the tmux session for the instance.
 	tmuxSession *tmux.TmuxSession
@@ -129,7 +131,9 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 	}
 
 	if instance.Paused() {
+		instance.mu.Lock()
 		instance.started = true
+		instance.mu.Unlock()
 		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program)
 	} else {
 		if err := instance.Start(false); err != nil {
@@ -175,7 +179,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 }
 
 func (i *Instance) RepoName() (string, error) {
-	if !i.started {
+	if !i.Started() {
 		return "", fmt.Errorf("cannot get repo name for instance that has not been started")
 	}
 	return i.gitWorktree.GetRepoName(), nil
@@ -218,7 +222,9 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 				setupErr = fmt.Errorf("%v (cleanup error: %v)", setupErr, cleanupErr)
 			}
 		} else {
+			i.mu.Lock()
 			i.started = true
+			i.mu.Unlock()
 		}
 	}()
 
@@ -253,7 +259,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 
 // Kill terminates the instance and cleans up all resources
 func (i *Instance) Kill() error {
-	if !i.started {
+	if !i.Started() {
 		// If instance was never started, just return success
 		return nil
 	}
@@ -295,14 +301,14 @@ func (i *Instance) combineErrors(errs []error) error {
 }
 
 func (i *Instance) Preview() (string, error) {
-	if !i.started || i.Status == Paused {
+	if !i.Started() || i.Status == Paused {
 		return "", nil
 	}
 	return i.tmuxSession.CapturePaneContent()
 }
 
 func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
-	if !i.started {
+	if !i.Started() {
 		return false, false
 	}
 	return i.tmuxSession.HasUpdated()
@@ -310,7 +316,7 @@ func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
 
 // TapEnter sends an enter key press to the tmux session if AutoYes is enabled.
 func (i *Instance) TapEnter() {
-	if !i.started || !i.AutoYes {
+	if !i.Started() || !i.AutoYes {
 		return
 	}
 	if err := i.tmuxSession.TapEnter(); err != nil {
@@ -319,14 +325,14 @@ func (i *Instance) TapEnter() {
 }
 
 func (i *Instance) Attach() (chan struct{}, error) {
-	if !i.started {
+	if !i.Started() {
 		return nil, fmt.Errorf("cannot attach instance that has not been started")
 	}
 	return i.tmuxSession.Attach()
 }
 
 func (i *Instance) SetPreviewSize(width, height int) error {
-	if !i.started || i.Status == Paused {
+	if !i.Started() || i.Status == Paused {
 		return fmt.Errorf("cannot set preview size for instance that has not been started or " +
 			"is paused")
 	}
@@ -335,20 +341,22 @@ func (i *Instance) SetPreviewSize(width, height int) error {
 
 // GetGitWorktree returns the git worktree for the instance
 func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {
-	if !i.started {
+	if !i.Started() {
 		return nil, fmt.Errorf("cannot get git worktree for instance that has not been started")
 	}
 	return i.gitWorktree, nil
 }
 
 func (i *Instance) Started() bool {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 	return i.started
 }
 
 // SetTitle sets the title of the instance. Returns an error if the instance has started.
 // We cant change the title once it's been used for a tmux session etc.
 func (i *Instance) SetTitle(title string) error {
-	if i.started {
+	if i.Started() {
 		return fmt.Errorf("cannot change title of a started instance")
 	}
 	i.Title = title
@@ -366,7 +374,7 @@ func (i *Instance) TmuxAlive() bool {
 
 // Pause stops the tmux session and removes the worktree, preserving the branch
 func (i *Instance) Pause() error {
-	if !i.started {
+	if !i.Started() {
 		return fmt.Errorf("cannot pause instance that has not been started")
 	}
 	if i.Status == Paused {
@@ -426,7 +434,7 @@ func (i *Instance) Pause() error {
 
 // Resume recreates the worktree and restarts the tmux session
 func (i *Instance) Resume() error {
-	if !i.started {
+	if !i.Started() {
 		return fmt.Errorf("cannot resume instance that has not been started")
 	}
 	if i.Status != Paused {
@@ -482,7 +490,7 @@ func (i *Instance) Resume() error {
 
 // UpdateDiffStats updates the git diff statistics for this instance
 func (i *Instance) UpdateDiffStats() error {
-	if !i.started {
+	if !i.Started() {
 		i.diffStats = nil
 		return nil
 	}
@@ -513,7 +521,7 @@ func (i *Instance) GetDiffStats() *git.DiffStats {
 
 // SendPrompt sends a prompt to the tmux session
 func (i *Instance) SendPrompt(prompt string) error {
-	if !i.started {
+	if !i.Started() {
 		return fmt.Errorf("instance not started")
 	}
 	if i.tmuxSession == nil {
@@ -534,7 +542,7 @@ func (i *Instance) SendPrompt(prompt string) error {
 
 // PreviewFullHistory captures the entire tmux pane output including full scrollback history
 func (i *Instance) PreviewFullHistory() (string, error) {
-	if !i.started || i.Status == Paused {
+	if !i.Started() || i.Status == Paused {
 		return "", nil
 	}
 	return i.tmuxSession.CapturePaneContentWithOptions("-", "-")
@@ -547,7 +555,7 @@ func (i *Instance) SetTmuxSession(session *tmux.TmuxSession) {
 
 // SendKeys sends keys to the tmux session
 func (i *Instance) SendKeys(keys string) error {
-	if !i.started || i.Status == Paused {
+	if !i.Started() || i.Status == Paused {
 		return fmt.Errorf("cannot send keys to instance that has not been started or is paused")
 	}
 	return i.tmuxSession.SendKeys(keys)

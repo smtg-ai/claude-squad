@@ -2,6 +2,7 @@ package concurrency
 
 import (
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -87,7 +88,10 @@ func ExampleMultiChannel() {
 	// Register multiple channels
 	inAppChannel := NewInAppChannel()
 	systemChannel := NewSystemChannel()
-	webhookChannel := NewWebhookChannel("http://example.com/webhook")
+	webhookChannel, err := NewWebhookChannel("http://example.com/webhook")
+	if err != nil {
+		log.Fatalf("Failed to create webhook channel: %v", err)
+	}
 
 	service.RegisterChannel(inAppChannel)
 	service.RegisterChannel(systemChannel)
@@ -333,7 +337,10 @@ func ExampleErrorHandling() {
 	defer service.Shutdown(10 * time.Second)
 
 	// Register a failing webhook (will retry)
-	failingWebhook := NewWebhookChannel("http://invalid-url-that-will-fail.local")
+	failingWebhook, err := NewWebhookChannel("http://invalid-url-that-will-fail.local")
+	if err != nil {
+		log.Fatalf("Failed to create webhook channel: %v", err)
+	}
 	service.RegisterChannel(failingWebhook)
 
 	// Also register working channel

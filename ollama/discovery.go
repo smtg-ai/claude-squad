@@ -3,6 +3,8 @@ package ollama
 import (
 	"bytes"
 	"claude-squad/log"
+	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -158,6 +160,14 @@ func NewModelDiscovery(apiURL string, pollInterval time.Duration, cacheTTL time.
 		contextWindow: 4096,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+				TLSClientConfig: &tls.Config{
+					MinVersion: tls.VersionTLS12,
+				},
+			},
 		},
 		models:         make(map[string]*ModelInfo),
 		eventCh:        make(chan ModelChangeEvent, 100),
@@ -230,7 +240,18 @@ func (md *ModelDiscovery) pollWorker() {
 
 // discoverModels queries the Ollama API for available models
 func (md *ModelDiscovery) discoverModels() error {
-	resp, err := md.httpClient.Get(md.apiURL + "/api/tags")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", md.apiURL+"/api/tags", nil)
+	if err != nil {
+		md.mu.Lock()
+		md.isHealthy = false
+		md.mu.Unlock()
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := md.httpClient.Do(req)
 	if err != nil {
 		md.mu.Lock()
 		md.isHealthy = false
@@ -371,7 +392,10 @@ func (md *ModelDiscovery) checkModelHealth(model *ModelInfo) error {
 		return fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", md.apiURL+"/api/generate", bytes.NewReader(data))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", md.apiURL+"/api/generate", bytes.NewReader(data))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}

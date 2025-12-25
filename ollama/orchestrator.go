@@ -2,6 +2,7 @@ package ollama
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -108,6 +109,14 @@ func NewModelOrchestrator(healthCheckInterval time.Duration, numWorkers int) *Mo
 		requestCh:           make(chan *Request, numWorkers*2),
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+				TLSClientConfig: &tls.Config{
+					MinVersion: tls.VersionTLS12,
+				},
+			},
 		},
 		ctx:             ctx,
 		cancel:          cancel,
@@ -283,6 +292,7 @@ func (mo *ModelOrchestrator) GetModelStatus() map[string]ModelHealthStatus {
 
 	status := make(map[string]ModelHealthStatus)
 	for name, model := range mo.models {
+		model.mu.Lock()
 		status[name] = ModelHealthStatus{
 			Name:         model.name,
 			IsHealthy:    model.isHealthy.Load(),
@@ -291,6 +301,7 @@ func (mo *ModelOrchestrator) GetModelStatus() map[string]ModelHealthStatus {
 			LastHealthAt: model.lastHealthTime,
 			URL:          model.baseURL,
 		}
+		model.mu.Unlock()
 	}
 
 	return status
