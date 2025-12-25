@@ -1,3 +1,10 @@
 flask==3.0.0
 pyoxigraph==0.3.22
 werkzeug==3.0.1
+
+# Testing dependencies
+pytest==7.4.3
+pytest-cov==4.1.0
+
+# Validation dependencies (for future SHACL support)
+# pyshacl==0.25.0  # Uncomment when SHACL validation is needed

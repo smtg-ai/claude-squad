@@ -1,0 +1,296 @@
+@prefix : <http://claude-squad.ai/ontology/v1.0.0#> .
+@prefix cs: <http://claude-squad.ai/ontology/v1.0.0#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+
+# ============================================================================
+# Claude Squad Task Orchestration Ontology
+# W3C Best Practice Compliant Turtle Definition
+# ============================================================================
+
+<http://claude-squad.ai/ontology/v1.0.0>
+    a owl:Ontology ;
+    owl:versionInfo "1.0.0" ;
+    dcterms:title "Claude Squad Task Orchestration Ontology"@en ;
+    dcterms:description """
+        A comprehensive ontology for managing AI agent task orchestration
+        with support for dependencies, provenance tracking, and workflow
+        management. Designed for maximum 10 concurrent agent execution.
+    """@en ;
+    dcterms:created "2025-01-01T00:00:00Z"^^xsd:dateTime ;
+    dcterms:creator "Claude Squad Team"@en ;
+    dcterms:license <https://www.gnu.org/licenses/agpl-3.0.html> ;
+    owl:imports <http://www.w3.org/ns/prov-o#> .
+
+# ============================================================================
+# Classes
+# ============================================================================
+
+cs:Task
+    a owl:Class ;
+    rdfs:label "Task"@en ;
+    rdfs:comment "A unit of work to be executed by an AI agent"@en ;
+    rdfs:subClassOf prov:Entity .
+
+cs:Agent
+    a owl:Class ;
+    rdfs:label "Agent"@en ;
+    rdfs:comment "An AI agent capable of executing tasks"@en ;
+    rdfs:subClassOf prov:Agent , foaf:Agent .
+
+cs:Execution
+    a owl:Class ;
+    rdfs:label "Execution"@en ;
+    rdfs:comment "A specific execution instance of a task"@en ;
+    rdfs:subClassOf prov:Activity .
+
+cs:Result
+    a owl:Class ;
+    rdfs:label "Result"@en ;
+    rdfs:comment "The result produced by a task execution"@en ;
+    rdfs:subClassOf prov:Entity .
+
+cs:Workflow
+    a owl:Class ;
+    rdfs:label "Workflow"@en ;
+    rdfs:comment "A collection of related tasks forming a workflow"@en ;
+    rdfs:subClassOf prov:Plan .
+
+cs:TaskStatus
+    a owl:Class ;
+    rdfs:label "Task Status"@en ;
+    rdfs:comment "Enumeration of possible task statuses"@en .
+
+# ============================================================================
+# Object Properties
+# ============================================================================
+
+cs:dependsOn
+    a owl:ObjectProperty , owl:TransitiveProperty ;
+    rdfs:label "depends on"@en ;
+    rdfs:comment "Indicates that a task depends on the completion of another task"@en ;
+    rdfs:domain cs:Task ;
+    rdfs:range cs:Task ;
+    rdfs:subPropertyOf prov:wasDerivedFrom .
+
+cs:assignedTo
+    a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "assigned to"@en ;
+    rdfs:comment "Links a task to the agent assigned to execute it"@en ;
+    rdfs:domain cs:Task ;
+    rdfs:range cs:Agent .
+
+cs:hasExecution
+    a owl:ObjectProperty ;
+    rdfs:label "has execution"@en ;
+    rdfs:comment "Links a task to one of its execution instances"@en ;
+    rdfs:domain cs:Task ;
+    rdfs:range cs:Execution ;
+    owl:inverseOf cs:executesTask .
+
+cs:executesTask
+    a owl:ObjectProperty ;
+    rdfs:label "executes task"@en ;
+    rdfs:comment "Links an execution to the task it executes"@en ;
+    rdfs:domain cs:Execution ;
+    rdfs:range cs:Task .
+
+cs:hasResult
+    a owl:ObjectProperty , owl:FunctionalProperty ;
+    rdfs:label "has result"@en ;
+    rdfs:comment "Links an execution to its result"@en ;
+    rdfs:domain cs:Execution ;
+    rdfs:range cs:Result .
+
+cs:partOfWorkflow
+    a owl:ObjectProperty ;
+    rdfs:label "part of workflow"@en ;
+    rdfs:comment "Indicates that a task is part of a workflow"@en ;
+    rdfs:domain cs:Task ;
+    rdfs:range cs:Workflow .
+
+cs:blockedBy
+    a owl:ObjectProperty ;
+    rdfs:label "blocked by"@en ;
+    rdfs:comment "Indicates a task is blocked by incomplete dependencies"@en ;
+    rdfs:domain cs:Task ;
+    rdfs:range cs:Task .
+
+# ============================================================================
+# Datatype Properties
+# ============================================================================
+
+cs:hasDescription
+    a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:label "has description"@en ;
+    rdfs:comment "Textual description of a task"@en ;
+    rdfs:domain cs:Task ;
+    rdfs:range xsd:string .
+
+cs:hasStatus
+    a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:label "has status"@en ;
+    rdfs:comment "Current status of a task"@en ;
+    rdfs:domain cs:Task ;
+    rdfs:range xsd:string .
+
+cs:hasPriority
+    a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:label "has priority"@en ;
+    rdfs:comment "Priority level of a task (0-10, where 10 is highest)"@en ;
+    rdfs:domain cs:Task ;
+    rdfs:range xsd:integer .
+
+cs:createdAt
+    a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:label "created at"@en ;
+    rdfs:comment "Timestamp when the task was created"@en ;
+    rdfs:domain cs:Task ;
+    rdfs:range xsd:dateTime ;
+    rdfs:subPropertyOf dcterms:created .
+
+cs:startedAt
+    a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:label "started at"@en ;
+    rdfs:comment "Timestamp when the execution started"@en ;
+    rdfs:domain cs:Execution ;
+    rdfs:range xsd:dateTime ;
+    rdfs:subPropertyOf prov:startedAtTime .
+
+cs:completedAt
+    a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:label "completed at"@en ;
+    rdfs:comment "Timestamp when the execution completed"@en ;
+    rdfs:domain cs:Execution ;
+    rdfs:range xsd:dateTime ;
+    rdfs:subPropertyOf prov:endedAtTime .
+
+cs:hasDuration
+    a owl:DatatypeProperty , owl:FunctionalProperty ;
+    rdfs:label "has duration"@en ;
+    rdfs:comment "Duration of task execution in seconds"@en ;
+    rdfs:domain cs:Execution ;
+    rdfs:range xsd:decimal .
+
+cs:hasErrorMessage
+    a owl:DatatypeProperty ;
+    rdfs:label "has error message"@en ;
+    rdfs:comment "Error message if execution failed"@en ;
+    rdfs:domain cs:Execution ;
+    rdfs:range xsd:string .
+
+# ============================================================================
+# Status Individuals (Enumeration)
+# ============================================================================
+
+cs:StatusPending
+    a cs:TaskStatus ;
+    rdfs:label "pending"@en ;
+    rdfs:comment "Task is waiting to be executed"@en .
+
+cs:StatusRunning
+    a cs:TaskStatus ;
+    rdfs:label "running"@en ;
+    rdfs:comment "Task is currently being executed"@en .
+
+cs:StatusCompleted
+    a cs:TaskStatus ;
+    rdfs:label "completed"@en ;
+    rdfs:comment "Task has completed successfully"@en .
+
+cs:StatusFailed
+    a cs:TaskStatus ;
+    rdfs:label "failed"@en ;
+    rdfs:comment "Task execution has failed"@en .
+
+cs:StatusCancelled
+    a cs:TaskStatus ;
+    rdfs:label "cancelled"@en ;
+    rdfs:comment "Task was cancelled before completion"@en .
+
+# ============================================================================
+# Property Restrictions (OWL Constraints)
+# ============================================================================
+
+cs:PendingTask
+    a owl:Class ;
+    rdfs:label "Pending Task"@en ;
+    rdfs:subClassOf cs:Task ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty cs:hasStatus ;
+        owl:hasValue "pending"
+    ] .
+
+cs:RunningTask
+    a owl:Class ;
+    rdfs:label "Running Task"@en ;
+    rdfs:subClassOf cs:Task ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty cs:hasStatus ;
+        owl:hasValue "running"
+    ] .
+
+cs:CompletedTask
+    a owl:Class ;
+    rdfs:label "Completed Task"@en ;
+    rdfs:subClassOf cs:Task ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty cs:hasStatus ;
+        owl:hasValue "completed"
+    ] ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty cs:completedAt ;
+        owl:minCardinality 1
+    ] .
+
+cs:HighPriorityTask
+    a owl:Class ;
+    rdfs:label "High Priority Task"@en ;
+    rdfs:subClassOf cs:Task ;
+    rdfs:subClassOf [
+        a owl:Restriction ;
+        owl:onProperty cs:hasPriority ;
+        owl:someValuesFrom [
+            a rdfs:Datatype ;
+            owl:onDatatype xsd:integer ;
+            owl:withRestrictions (
+                [ xsd:minInclusive 8 ]
+                [ xsd:maxInclusive 10 ]
+            )
+        ]
+    ] .
+
+# ============================================================================
+# Example Usage (Commented)
+# ============================================================================
+
+# cs:task/example-001
+#     a cs:Task ;
+#     cs:hasDescription "Analyze authentication module"@en ;
+#     cs:hasStatus "pending" ;
+#     cs:hasPriority 10 ;
+#     cs:createdAt "2025-01-01T12:00:00Z"^^xsd:dateTime ;
+#     cs:assignedTo cs:agent/claude-001 ;
+#     dcterms:identifier "example-001" .
+#
+# cs:agent/claude-001
+#     a cs:Agent , prov:SoftwareAgent ;
+#     foaf:name "Claude Code Agent 1"@en ;
+#     prov:actedOnBehalfOf cs:agent/system .
+#
+# cs:execution/example-001-exec-1
+#     a cs:Execution ;
+#     cs:executesTask cs:task/example-001 ;
+#     cs:startedAt "2025-01-01T12:05:00Z"^^xsd:dateTime ;
+#     cs:completedAt "2025-01-01T12:10:00Z"^^xsd:dateTime ;
+#     cs:hasDuration "300.0"^^xsd:decimal ;
+#     prov:wasAssociatedWith cs:agent/claude-001 .
