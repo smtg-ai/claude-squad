@@ -49,7 +49,10 @@ type Menu struct {
 	instance      *session.Instance
 	isInDiffTab   bool
 
-	// keyDown is the key which is pressed. The default is -1.
+	instanceGroup []keys.KeyName
+	actionGroup   []keys.KeyName
+	systemGroup   []keys.KeyName
+
 	keyDown keys.KeyName
 }
 
@@ -121,28 +124,24 @@ func (m *Menu) updateOptions() {
 }
 
 func (m *Menu) addInstanceOptions() {
-	// Instance management group
-	options := []keys.KeyName{keys.KeyNew, keys.KeyKill}
+	m.instanceGroup = []keys.KeyName{keys.KeyNew, keys.KeyKill}
 
-	// Action group
-	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeySubmit}
+	m.actionGroup = []keys.KeyName{keys.KeyEnter, keys.KeyShell, keys.KeySubmit}
 	if m.instance.Status == session.Paused {
-		actionGroup = append(actionGroup, keys.KeyResume)
+		m.actionGroup = append(m.actionGroup, keys.KeyResume)
 	} else {
-		actionGroup = append(actionGroup, keys.KeyCheckout)
+		m.actionGroup = append(m.actionGroup, keys.KeyCheckout)
 	}
-
-	// Navigation group (when in diff tab)
 	if m.isInDiffTab {
-		actionGroup = append(actionGroup, keys.KeyShiftUp)
+		m.actionGroup = append(m.actionGroup, keys.KeyShiftUp)
 	}
 
-	// System group
-	systemGroup := []keys.KeyName{keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
+	m.systemGroup = []keys.KeyName{keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
 
-	// Combine all groups
-	options = append(options, actionGroup...)
-	options = append(options, systemGroup...)
+	var options []keys.KeyName
+	options = append(options, m.instanceGroup...)
+	options = append(options, m.actionGroup...)
+	options = append(options, m.systemGroup...)
 
 	m.options = options
 }
@@ -156,14 +155,13 @@ func (m *Menu) SetSize(width, height int) {
 func (m *Menu) String() string {
 	var s strings.Builder
 
-	// Define group boundaries
 	groups := []struct {
 		start int
 		end   int
 	}{
-		{0, 2}, // Instance management group (n, d)
-		{2, 5}, // Action group (enter, submit, pause/resume)
-		{6, 8}, // System group (tab, help, q)
+		{0, len(m.instanceGroup)},
+		{len(m.instanceGroup), len(m.instanceGroup) + len(m.actionGroup)},
+		{len(m.instanceGroup) + len(m.actionGroup), len(m.options)},
 	}
 
 	for i, k := range m.options {

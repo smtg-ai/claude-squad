@@ -305,6 +305,11 @@ func (l *List) Attach() (chan struct{}, error) {
 	return targetInstance.Attach()
 }
 
+func (l *List) AttachShell() (chan struct{}, error) {
+	targetInstance := l.items[l.selectedIdx]
+	return targetInstance.AttachShell()
+}
+
 // Up selects the prev item in the list.
 func (l *List) Up() {
 	if len(l.items) == 0 {
