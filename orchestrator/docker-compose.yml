@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  oxigraph-orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: oxigraph-orchestrator
+    ports:
+      - "5000:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FLASK_ENV=production
+    volumes:
+      - oxigraph-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - claude-squad
+
+networks:
+  claude-squad:
+    driver: bridge
+
+volumes:
+  oxigraph-data:
+    driver: local

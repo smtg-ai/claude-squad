@@ -1,0 +1,204 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix cs: <http://claude-squad.ai/ontology/v1.0.0#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# ============================================================================
+# SHACL Shapes for Claude Squad Ontology Validation
+# W3C Best Practice: Use SHACL for data validation
+# ============================================================================
+
+# Task Shape - Validates all task instances
+cs:TaskShape
+    a sh:NodeShape ;
+    sh:targetClass cs:Task ;
+    sh:property [
+        sh:path cs:hasDescription ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:minLength 1 ;
+        sh:maxLength 1000 ;
+        sh:message "Task must have exactly one description between 1-1000 characters" ;
+    ] ;
+    sh:property [
+        sh:path cs:hasStatus ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:in ( "pending" "running" "completed" "failed" "cancelled" ) ;
+        sh:message "Task must have exactly one valid status" ;
+    ] ;
+    sh:property [
+        sh:path cs:hasPriority ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 0 ;
+        sh:maxInclusive 10 ;
+        sh:message "Task priority must be an integer between 0 and 10" ;
+    ] ;
+    sh:property [
+        sh:path cs:createdAt ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:message "Task must have exactly one creation timestamp" ;
+    ] ;
+    sh:property [
+        sh:path cs:assignedTo ;
+        sh:maxCount 1 ;
+        sh:class cs:Agent ;
+        sh:message "Task can have at most one assigned agent" ;
+    ] ;
+    sh:property [
+        sh:path cs:dependsOn ;
+        sh:class cs:Task ;
+        sh:message "Dependencies must be other tasks" ;
+    ] .
+
+# Agent Shape - Validates all agent instances
+cs:AgentShape
+    a sh:NodeShape ;
+    sh:targetClass cs:Agent ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:minCount 1 ;
+        sh:hasValue cs:Agent ;
+        sh:message "Agent must have type cs:Agent" ;
+    ] .
+
+# Execution Shape - Validates execution instances
+cs:ExecutionShape
+    a sh:NodeShape ;
+    sh:targetClass cs:Execution ;
+    sh:property [
+        sh:path cs:executesTask ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:class cs:Task ;
+        sh:message "Execution must reference exactly one task" ;
+    ] ;
+    sh:property [
+        sh:path cs:startedAt ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:message "Execution can have at most one start time" ;
+    ] ;
+    sh:property [
+        sh:path cs:completedAt ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:dateTime ;
+        sh:message "Execution can have at most one completion time" ;
+    ] ;
+    sh:property [
+        sh:path cs:hasDuration ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:decimal ;
+        sh:minInclusive 0 ;
+        sh:message "Duration must be a non-negative decimal" ;
+    ] .
+
+# Workflow Shape - Validates workflow instances
+cs:WorkflowShape
+    a sh:NodeShape ;
+    sh:targetClass cs:Workflow ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:minCount 1 ;
+        sh:hasValue cs:Workflow ;
+    ] .
+
+# Running Task Constraint - Max 10 concurrent
+cs:ConcurrencyConstraintShape
+    a sh:NodeShape ;
+    sh:targetNode cs:ConcurrencyCheck ;
+    sh:sparql [
+        sh:message "Cannot exceed 10 running tasks simultaneously" ;
+        sh:prefixes cs: ;
+        sh:select """
+            PREFIX cs: <http://claude-squad.ai/ontology/v1.0.0#>
+            SELECT $this (COUNT(?task) as ?runningCount)
+            WHERE {
+                ?task a cs:Task ;
+                      cs:hasStatus "running" .
+            }
+            GROUP BY $this
+            HAVING (COUNT(?task) > 10)
+        """ ;
+    ] .
+
+# Dependency Cycle Detection
+cs:NoCyclicDependenciesShape
+    a sh:NodeShape ;
+    sh:targetClass cs:Task ;
+    sh:sparql [
+        sh:message "Task has cyclic dependencies" ;
+        sh:prefixes cs: ;
+        sh:select """
+            PREFIX cs: <http://claude-squad.ai/ontology/v1.0.0#>
+            SELECT $this
+            WHERE {
+                $this cs:dependsOn+ $this .
+            }
+        """ ;
+    ] .
+
+# Completed Task Must Have Execution
+cs:CompletedTaskExecutionShape
+    a sh:NodeShape ;
+    sh:targetClass cs:Task ;
+    sh:sparql [
+        sh:message "Completed task must have at least one execution" ;
+        sh:prefixes cs: ;
+        sh:select """
+            PREFIX cs: <http://claude-squad.ai/ontology/v1.0.0#>
+            SELECT $this
+            WHERE {
+                $this cs:hasStatus "completed" .
+                FILTER NOT EXISTS {
+                    $this cs:hasExecution ?exec .
+                }
+            }
+        """ ;
+    ] .
+
+# Priority Validation for High Priority Tasks
+cs:HighPriorityAssignmentShape
+    a sh:NodeShape ;
+    sh:targetClass cs:Task ;
+    sh:sparql [
+        sh:message "High priority tasks (8-10) should have an assigned agent" ;
+        sh:severity sh:Warning ;
+        sh:prefixes cs: ;
+        sh:select """
+            PREFIX cs: <http://claude-squad.ai/ontology/v1.0.0#>
+            SELECT $this
+            WHERE {
+                $this cs:hasPriority ?priority .
+                FILTER (?priority >= 8)
+                FILTER NOT EXISTS {
+                    $this cs:assignedTo ?agent .
+                }
+            }
+        """ ;
+    ] .
+
+# Execution Time Consistency
+cs:ExecutionTimeConsistencyShape
+    a sh:NodeShape ;
+    sh:targetClass cs:Execution ;
+    sh:sparql [
+        sh:message "Execution completion time must be after start time" ;
+        sh:prefixes cs: ;
+        sh:select """
+            PREFIX cs: <http://claude-squad.ai/ontology/v1.0.0#>
+            PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+            SELECT $this
+            WHERE {
+                $this cs:startedAt ?start ;
+                      cs:completedAt ?end .
+                FILTER (?end < ?start)
+            }
+        """ ;
+    ] .
