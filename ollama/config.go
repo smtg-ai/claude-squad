@@ -22,6 +22,30 @@ const (
 	DefaultRetryBackoff      = 500 * time.Millisecond
 )
 
+// Environment variable names for Ollama configuration overrides
+const (
+	// EnvOllamaEnabled enables or disables Ollama integration (true/false or 1/0)
+	EnvOllamaEnabled = "OLLAMA_ENABLED"
+
+	// EnvOllamaEndpoint specifies Ollama server endpoint(s) (comma-separated list)
+	EnvOllamaEndpoint = "OLLAMA_ENDPOINT"
+
+	// EnvOllamaDefaultEndpoint specifies the name of the default endpoint to use
+	EnvOllamaDefaultEndpoint = "OLLAMA_DEFAULT_ENDPOINT"
+
+	// EnvOllamaConnectionTimeoutMS specifies connection timeout in milliseconds (max 60000)
+	EnvOllamaConnectionTimeoutMS = "OLLAMA_CONNECTION_TIMEOUT_MS"
+
+	// EnvOllamaRequestTimeoutMS specifies request timeout in milliseconds (max 600000)
+	EnvOllamaRequestTimeoutMS = "OLLAMA_REQUEST_TIMEOUT_MS"
+
+	// EnvOllamaMaxRetries specifies maximum number of retry attempts
+	EnvOllamaMaxRetries = "OLLAMA_MAX_RETRIES"
+
+	// EnvOllamaRetryBackoffMS specifies retry backoff duration in milliseconds
+	EnvOllamaRetryBackoffMS = "OLLAMA_RETRY_BACKOFF_MS"
+)
+
 // RetryPolicy defines the retry behavior for Ollama API calls
 type RetryPolicy struct {
 	MaxRetries int           `json:"max_retries" yaml:"max_retries"`
@@ -230,15 +254,25 @@ func LoadOllamaConfigFromFile(filePath string) (*OllamaConfig, error) {
 
 // validateAndApplyDefaults validates the configuration and applies sensible defaults
 func validateAndApplyDefaults(cfg *OllamaConfig) *OllamaConfig {
-	// Validate connection timeout
-	if cfg.ConnectionTimeoutMS <= 0 {
+	// Validate connection timeout (min > 0, max 60000ms = 1 minute)
+	if cfg.ConnectionTimeoutMS <= 0 || cfg.ConnectionTimeoutMS > 60000 {
+		originalTimeout := cfg.ConnectionTimeoutMS
 		cfg.ConnectionTimeoutMS = int(DefaultConnectionTimeout.Milliseconds())
+		if originalTimeout > 60000 {
+			log.WarningLog.Printf("connection timeout %dms exceeds maximum 60000ms, reset to default %dms",
+				originalTimeout, cfg.ConnectionTimeoutMS)
+		}
 	}
 	cfg.connectionTimeout = time.Duration(cfg.ConnectionTimeoutMS) * time.Millisecond
 
-	// Validate request timeout
-	if cfg.RequestTimeoutMS <= 0 {
+	// Validate request timeout (min > 0, max 600000ms = 10 minutes)
+	if cfg.RequestTimeoutMS <= 0 || cfg.RequestTimeoutMS > 600000 {
+		originalTimeout := cfg.RequestTimeoutMS
 		cfg.RequestTimeoutMS = int(DefaultRequestTimeout.Milliseconds())
+		if originalTimeout > 600000 {
+			log.WarningLog.Printf("request timeout %dms exceeds maximum 600000ms, reset to default %dms",
+				originalTimeout, cfg.RequestTimeoutMS)
+		}
 	}
 	cfg.requestTimeout = time.Duration(cfg.RequestTimeoutMS) * time.Millisecond
 
@@ -294,12 +328,12 @@ func validateAndApplyDefaults(cfg *OllamaConfig) *OllamaConfig {
 // applyEnvironmentOverrides applies environment variable overrides to the configuration
 func applyEnvironmentOverrides(cfg *OllamaConfig) *OllamaConfig {
 	// OLLAMA_ENABLED
-	if enabled := os.Getenv("OLLAMA_ENABLED"); enabled != "" {
+	if enabled := os.Getenv(EnvOllamaEnabled); enabled != "" {
 		cfg.Enabled = strings.ToLower(enabled) == "true" || enabled == "1"
 	}
 
 	// OLLAMA_ENDPOINT (comma-separated list of endpoints)
-	if endpoint := os.Getenv("OLLAMA_ENDPOINT"); endpoint != "" {
+	if endpoint := os.Getenv(EnvOllamaEndpoint); endpoint != "" {
 		endpoints := strings.Split(endpoint, ",")
 		cfg.Endpoints = []OllamaEndpoint{}
 		for i, ep := range endpoints {
@@ -319,12 +353,12 @@ func applyEnvironmentOverrides(cfg *OllamaConfig) *OllamaConfig {
 	}
 
 	// OLLAMA_DEFAULT_ENDPOINT
-	if defaultEp := os.Getenv("OLLAMA_DEFAULT_ENDPOINT"); defaultEp != "" {
+	if defaultEp := os.Getenv(EnvOllamaDefaultEndpoint); defaultEp != "" {
 		cfg.DefaultEndpointName = strings.TrimSpace(defaultEp)
 	}
 
 	// OLLAMA_CONNECTION_TIMEOUT_MS
-	if timeout := os.Getenv("OLLAMA_CONNECTION_TIMEOUT_MS"); timeout != "" {
+	if timeout := os.Getenv(EnvOllamaConnectionTimeoutMS); timeout != "" {
 		if ms := parseIntEnv(timeout); ms > 0 {
 			cfg.ConnectionTimeoutMS = ms
 			cfg.connectionTimeout = time.Duration(ms) * time.Millisecond
@@ -332,7 +366,7 @@ func applyEnvironmentOverrides(cfg *OllamaConfig) *OllamaConfig {
 	}
 
 	// OLLAMA_REQUEST_TIMEOUT_MS
-	if timeout := os.Getenv("OLLAMA_REQUEST_TIMEOUT_MS"); timeout != "" {
+	if timeout := os.Getenv(EnvOllamaRequestTimeoutMS); timeout != "" {
 		if ms := parseIntEnv(timeout); ms > 0 {
 			cfg.RequestTimeoutMS = ms
 			cfg.requestTimeout = time.Duration(ms) * time.Millisecond
@@ -340,14 +374,14 @@ func applyEnvironmentOverrides(cfg *OllamaConfig) *OllamaConfig {
 	}
 
 	// OLLAMA_MAX_RETRIES
-	if retries := os.Getenv("OLLAMA_MAX_RETRIES"); retries != "" {
+	if retries := os.Getenv(EnvOllamaMaxRetries); retries != "" {
 		if maxRetries := parseIntEnv(retries); maxRetries >= 0 {
 			cfg.RetryPolicy.MaxRetries = maxRetries
 		}
 	}
 
 	// OLLAMA_RETRY_BACKOFF_MS
-	if backoff := os.Getenv("OLLAMA_RETRY_BACKOFF_MS"); backoff != "" {
+	if backoff := os.Getenv(EnvOllamaRetryBackoffMS); backoff != "" {
 		if ms := parseIntEnv(backoff); ms > 0 {
 			cfg.RetryPolicy.BackoffMS = ms
 			cfg.RetryPolicy.backoff = time.Duration(ms) * time.Millisecond

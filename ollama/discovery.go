@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -639,6 +640,7 @@ func (md *ModelDiscovery) Events() <-chan ModelChangeEvent {
 // WaitForModels waits until at least one model is discovered or timeout
 func (md *ModelDiscovery) WaitForModels(timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
+	attempt := 0
 
 	for {
 		md.mu.RLock()
@@ -652,7 +654,14 @@ func (md *ModelDiscovery) WaitForModels(timeout time.Duration) error {
 			return fmt.Errorf("timeout waiting for models to be discovered")
 		}
 
-		time.Sleep(500 * time.Millisecond)
+		// Exponential backoff with cap
+		baseDelay := 500 * time.Millisecond
+		backoff := time.Duration(math.Pow(2, float64(attempt))) * baseDelay
+		if backoff > 30*time.Second {
+			backoff = 30 * time.Second // Cap at 30 seconds
+		}
+		time.Sleep(backoff)
+		attempt++
 	}
 }
 

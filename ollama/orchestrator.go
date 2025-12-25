@@ -99,8 +99,11 @@ type ModelOrchestrator struct {
 }
 
 // NewModelOrchestrator creates a new orchestrator for managing multiple Ollama models
-func NewModelOrchestrator(healthCheckInterval time.Duration, numWorkers int) *ModelOrchestrator {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewModelOrchestrator(ctx context.Context, healthCheckInterval time.Duration, numWorkers int) *ModelOrchestrator {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(ctx)
 
 	mo := &ModelOrchestrator{
 		models:              make(map[string]*ModelInstance),
@@ -142,7 +145,11 @@ func NewModelOrchestrator(healthCheckInterval time.Duration, numWorkers int) *Mo
 }
 
 // RegisterModel adds a new model instance to the orchestrator
-func (mo *ModelOrchestrator) RegisterModel(name, baseURL string, timeout time.Duration) error {
+func (mo *ModelOrchestrator) RegisterModel(ctx context.Context, name, baseURL string, timeout time.Duration) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	mo.mu.Lock()
 	defer mo.mu.Unlock()
 
@@ -180,7 +187,7 @@ func (mo *ModelOrchestrator) Start() error {
 	mo.mu.RLock()
 	if len(mo.models) == 0 {
 		mo.mu.RUnlock()
-		return errors.New("no models registered")
+		return fmt.Errorf("no models registered\n\nTo register models:\n  1. Ensure Ollama is running: ollama serve\n  2. Pull a model: ollama pull codellama")
 	}
 	mo.mu.RUnlock()
 
@@ -308,6 +315,9 @@ func (mo *ModelOrchestrator) GetModelStatus() map[string]ModelHealthStatus {
 }
 
 // GetOrchestrationMetrics returns current orchestrator metrics
+// Note: Returns by value (not pointer) to provide immutable snapshot of metrics.
+// This prevents external modification and is safe for concurrent access.
+// See router.GetModelMetrics() which returns pointer for individual lookups.
 func (mo *ModelOrchestrator) GetOrchestrationMetrics() OrchestratorMetrics {
 	total := atomic.LoadInt64(&mo.totalRequests)
 	successful := atomic.LoadInt64(&mo.successfulReqs)
@@ -410,6 +420,8 @@ func (mo *ModelOrchestrator) pingModel(ctx context.Context, model *ModelInstance
 }
 
 // Shutdown gracefully shuts down the orchestrator and all workers
+// Note: Uses timeout parameter for flexible shutdown control, unlike framework.Close()
+// which uses a fixed timeout. This allows callers to specify their shutdown deadline.
 func (mo *ModelOrchestrator) Shutdown(timeout time.Duration) error {
 	var errs []error
 

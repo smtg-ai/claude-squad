@@ -319,6 +319,9 @@ func (f *OllamaFramework) GetLastHealthCheckTime() time.Time {
 }
 
 // Close gracefully shuts down the framework
+// Note: Uses fixed 5s timeout for simplicity. For flexible timeout control,
+// see orchestrator.Shutdown(timeout) which accepts a timeout parameter.
+// This design choice balances API simplicity with common use cases.
 func (f *OllamaFramework) Close() error {
 	f.cancel()
 

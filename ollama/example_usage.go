@@ -10,21 +10,22 @@ import (
 
 // ExampleOrchestrator demonstrates how to use the ModelOrchestrator
 func ExampleOrchestrator() {
+	ctx := context.Background()
 	// Create a new orchestrator with health checks every 10 seconds and 4 workers
-	orchestrator := NewModelOrchestrator(10*time.Second, 4)
+	orchestrator := NewModelOrchestrator(ctx, 10*time.Second, 4)
 
 	// Register multiple Ollama models
-	err := orchestrator.RegisterModel("llama2", "http://localhost:11434", 30*time.Second)
+	err := orchestrator.RegisterModel(ctx, "llama2", "http://localhost:11434", 30*time.Second)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = orchestrator.RegisterModel("neural-chat", "http://localhost:11435", 30*time.Second)
+	err = orchestrator.RegisterModel(ctx, "neural-chat", "http://localhost:11435", 30*time.Second)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = orchestrator.RegisterModel("mistral", "http://localhost:11436", 30*time.Second)
+	err = orchestrator.RegisterModel(ctx, "mistral", "http://localhost:11436", 30*time.Second)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -198,7 +199,7 @@ func ExampleOrchestrator() {
 	// Example 9: Dynamic model registration
 	fmt.Println("\n=== Example 9: Dynamic Model Management ===")
 	newModel := "phi"
-	if err := orchestrator.RegisterModel(newModel, "http://localhost:11437", 30*time.Second); err != nil {
+	if err := orchestrator.RegisterModel(ctx, newModel, "http://localhost:11437", 30*time.Second); err != nil {
 		log.Printf("Error registering new model: %v", err)
 	} else {
 		fmt.Printf("Successfully registered model: %s\n", newModel)
@@ -216,8 +217,8 @@ func ExampleOrchestrator() {
 
 	// Example 10: Context-aware shutdown
 	fmt.Println("\n=== Example 10: Context-Aware Shutdown ===")
-	orchestrator2 := NewModelOrchestrator(5*time.Second, 2)
-	if err := orchestrator2.RegisterModel("test-model", "http://localhost:11438", 20*time.Second); err != nil {
+	orchestrator2 := NewModelOrchestrator(ctx, 5*time.Second, 2)
+	if err := orchestrator2.RegisterModel(ctx, "test-model", "http://localhost:11438", 20*time.Second); err != nil {
 		log.Fatal(err)
 	}
 

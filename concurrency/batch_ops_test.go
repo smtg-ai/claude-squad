@@ -89,7 +89,6 @@ func (m *MockOperationWithRetry) Rollback(ctx context.Context, instance *session
 	return nil
 }
 
-
 func TestPartialResult(t *testing.T) {
 	pr := NewPartialResult()
 
@@ -473,8 +472,8 @@ func TestRetryOperation(t *testing.T) {
 
 	// Operation that fails first time, succeeds second time
 	retryableOp := &MockOperationWithRetry{
-		name:     "retryable",
-		attempts: 0,
+		name:      "retryable",
+		attempts:  0,
 		failUntil: 1, // fail first attempt
 	}
 

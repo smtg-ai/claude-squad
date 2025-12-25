@@ -334,17 +334,17 @@ func loadDocumentsFromDirectory(framework *docs.DiataxisFramework, dir string) e
 
 		// Create document
 		doc := &docs.Document{
-			ID:       getDocID(metadata, path),
-			Type:     getDocType(metadata, path),
-			Title:    getMetadataString(metadata, "title", filepath.Base(path)),
-			Description: getMetadataString(metadata, "description", ""),
-			Content:  body,
-			FilePath: path,
-			Metadata: metadata,
-			Tags:     getMetadataStringSlice(metadata, "tags"),
-			Version:  getMetadataString(metadata, "version", "1.0"),
-			Author:   getMetadataString(metadata, "author", ""),
-			RelatedDocs: getMetadataStringSlice(metadata, "related"),
+			ID:            getDocID(metadata, path),
+			Type:          getDocType(metadata, path),
+			Title:         getMetadataString(metadata, "title", filepath.Base(path)),
+			Description:   getMetadataString(metadata, "description", ""),
+			Content:       body,
+			FilePath:      path,
+			Metadata:      metadata,
+			Tags:          getMetadataStringSlice(metadata, "tags"),
+			Version:       getMetadataString(metadata, "version", "1.0"),
+			Author:        getMetadataString(metadata, "author", ""),
+			RelatedDocs:   getMetadataStringSlice(metadata, "related"),
 			Prerequisites: getMetadataStringSlice(metadata, "prerequisites"),
 		}
 

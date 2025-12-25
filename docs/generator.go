@@ -57,8 +57,8 @@ func (dg *DocumentGenerator) Generate(ctx context.Context) error {
 
 // SiteBuilder builds the documentation site
 type SiteBuilder struct {
-	config        *FrameworkConfig
-	outputDir     string
+	config         *FrameworkConfig
+	outputDir      string
 	templateEngine *TemplateEngine
 }
 
@@ -70,8 +70,8 @@ func NewSiteBuilder(config *FrameworkConfig) *SiteBuilder {
 	}
 
 	return &SiteBuilder{
-		config:        config,
-		outputDir:     outputDir,
+		config:         config,
+		outputDir:      outputDir,
 		templateEngine: NewTemplateEngine(config.TemplateDir),
 	}
 }

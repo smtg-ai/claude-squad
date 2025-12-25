@@ -61,6 +61,17 @@ func DefaultConfig() *Config {
 	}
 }
 
+// Validate checks if the configuration is valid
+func (c *Config) Validate() error {
+	if c.DaemonPollInterval <= 0 {
+		return fmt.Errorf("daemon_poll_interval must be positive, got %d", c.DaemonPollInterval)
+	}
+	if c.DaemonPollInterval > 60000 {
+		return fmt.Errorf("daemon_poll_interval must be <= 60000ms (1 minute), got %d", c.DaemonPollInterval)
+	}
+	return nil
+}
+
 // GetClaudeCommand attempts to find the "claude" command in the user's shell
 // It checks in the following order:
 // 1. Shell alias resolution: using "which" command
@@ -128,13 +139,14 @@ func LoadConfig() *Config {
 			return defaultCfg
 		}
 
-		log.WarningLog.Printf("failed to get config file: %v", err)
+		log.WarningLog.Printf("failed to read config file: %v", err)
 		return DefaultConfig()
 	}
 
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
-		log.ErrorLog.Printf("failed to parse config file: %v", err)
+		log.ErrorLog.Printf("config file exists but contains invalid JSON (using defaults): %v", err)
+		log.WarningLog.Printf("to fix this, either correct the JSON in %s or delete it to regenerate", configPath)
 		return DefaultConfig()
 	}
 

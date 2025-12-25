@@ -423,7 +423,12 @@ func (rp *ResourcePool) SetCapacity(newCapacity int64) error {
 	}
 
 	// Transfer current usage to new semaphore
-	newSem.Acquire(context.Background(), int(rp.allocated))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := newSem.Acquire(ctx, int(rp.allocated)); err != nil {
+		rp.capacity = oldCapacity
+		return fmt.Errorf("failed to transfer usage to new semaphore: %w", err)
+	}
 	rp.semaphore = newSem
 
 	return nil

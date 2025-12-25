@@ -2,6 +2,7 @@ package log
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,7 +13,10 @@ var (
 	WarningLog *log.Logger
 	InfoLog    *log.Logger
 	ErrorLog   *log.Logger
+	DebugLog   *log.Logger
 )
+
+var debugEnabled = os.Getenv("DEBUG") == "true" || os.Getenv("DEBUG") == "1"
 
 var logFileName = filepath.Join(os.TempDir(), "claudesquad.log")
 
@@ -33,6 +37,11 @@ func Initialize(daemon bool) {
 		InfoLog = log.New(os.Stderr, fmt.Sprintf(fmtS, "INFO:"), log.Ldate|log.Ltime|log.Lshortfile)
 		WarningLog = log.New(os.Stderr, fmt.Sprintf(fmtS, "WARNING:"), log.Ldate|log.Ltime|log.Lshortfile)
 		ErrorLog = log.New(os.Stderr, fmt.Sprintf(fmtS, "ERROR:"), log.Ldate|log.Ltime|log.Lshortfile)
+		if debugEnabled {
+			DebugLog = log.New(os.Stderr, fmt.Sprintf(fmtS, "DEBUG:"), log.Ldate|log.Ltime|log.Lshortfile)
+		} else {
+			DebugLog = log.New(io.Discard, "", 0)
+		}
 		fmt.Fprintf(os.Stderr, "Warning: using stderr for logging: %v\n", err)
 		return
 	}
@@ -47,6 +56,11 @@ func Initialize(daemon bool) {
 	InfoLog = log.New(f, fmt.Sprintf(fmtS, "INFO:"), log.Ldate|log.Ltime|log.Lshortfile)
 	WarningLog = log.New(f, fmt.Sprintf(fmtS, "WARNING:"), log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLog = log.New(f, fmt.Sprintf(fmtS, "ERROR:"), log.Ldate|log.Ltime|log.Lshortfile)
+	if debugEnabled {
+		DebugLog = log.New(f, fmt.Sprintf(fmtS, "DEBUG:"), log.Ldate|log.Ltime|log.Lshortfile)
+	} else {
+		DebugLog = log.New(io.Discard, "", 0)
+	}
 
 	globalLogFile = f
 }
@@ -82,4 +96,9 @@ func (e *Every) ShouldLog() bool {
 	default:
 		return false
 	}
+}
+
+// IsDebugEnabled returns true if debug logging is enabled.
+func IsDebugEnabled() bool {
+	return debugEnabled
 }

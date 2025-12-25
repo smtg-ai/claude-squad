@@ -9,7 +9,7 @@ import (
 
 func TestNewDiataxisFramework(t *testing.T) {
 	config := &FrameworkConfig{
-		MaxConcurrentWorkers: 5,
+		MaxConcurrentWorkers:  5,
 		EnableSyntaxHighlight: true,
 	}
 
@@ -206,9 +206,9 @@ Summary of what was learned.`,
 			"duration":   "30min",
 			"category":   "getting-started",
 		},
-		Tags:    []string{"tutorial", "beginner", "getting-started"},
-		Version: "1.0",
-		Author:  "Test Author",
+		Tags:        []string{"tutorial", "beginner", "getting-started"},
+		Version:     "1.0",
+		Author:      "Test Author",
 		RelatedDocs: []string{"related-1", "related-2"},
 	}
 

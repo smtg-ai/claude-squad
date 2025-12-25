@@ -88,6 +88,23 @@ type TaskRouter struct {
 	strategyUpdateInterval time.Duration
 }
 
+// getMetricsMap returns the metrics map, lazily initializing if nil
+// This prevents panics if TaskRouter is created without using NewTaskRouter
+func (tr *TaskRouter) getMetricsMap() map[string]*RouterMetrics {
+	if tr.metrics == nil {
+		tr.metrics = make(map[string]*RouterMetrics)
+	}
+	return tr.metrics
+}
+
+// getPerformanceWeights returns the performance weights map, lazily initializing if nil
+func (tr *TaskRouter) getPerformanceWeights() map[TaskCategory]map[string]float64 {
+	if tr.performanceWeights == nil {
+		tr.performanceWeights = make(map[TaskCategory]map[string]float64)
+	}
+	return tr.performanceWeights
+}
+
 // TaskCategoryDetector defines an interface for detecting task categories
 type TaskCategoryDetector interface {
 	Detect(prompt string) TaskCategory
@@ -172,11 +189,12 @@ func (tr *TaskRouter) RegisterModel(modelID string, instance *session.Instance) 
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 
-	if _, exists := tr.metrics[modelID]; exists {
+	metrics := tr.getMetricsMap()
+	if _, exists := metrics[modelID]; exists {
 		return fmt.Errorf("model %s already registered", modelID)
 	}
 
-	tr.metrics[modelID] = &RouterMetrics{
+	metrics[modelID] = &RouterMetrics{
 		ModelID:            modelID,
 		TotalRequests:      0,
 		SuccessfulTasks:    0,
@@ -200,11 +218,12 @@ func (tr *TaskRouter) UnregisterModel(modelID string) error {
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 
-	if _, exists := tr.metrics[modelID]; !exists {
+	metrics := tr.getMetricsMap()
+	if _, exists := metrics[modelID]; !exists {
 		return fmt.Errorf("model %s not registered", modelID)
 	}
 
-	delete(tr.metrics, modelID)
+	delete(metrics, modelID)
 	tr.modelPool.RemoveInstance(modelID)
 	tr.affinityMap.ClearModel(modelID)
 	log.InfoLog.Printf("unregistered model %s", modelID)
@@ -224,7 +243,8 @@ func (tr *TaskRouter) RouteTask(ctx context.Context, taskPrompt string, previous
 	tr.mu.RLock()
 	defer tr.mu.RUnlock()
 
-	if len(tr.metrics) == 0 {
+	metrics := tr.getMetricsMap()
+	if len(metrics) == 0 {
 		return "", fmt.Errorf("no models registered")
 	}
 
@@ -273,7 +293,8 @@ func (tr *TaskRouter) RecordTaskResult(modelID string, success bool, latency tim
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 
-	metrics, exists := tr.metrics[modelID]
+	metricsMap := tr.getMetricsMap()
+	metrics, exists := metricsMap[modelID]
 	if !exists {
 		return fmt.Errorf("model %s not registered", modelID)
 	}
@@ -330,7 +351,8 @@ func (tr *TaskRouter) HealthCheck(ctx context.Context) map[string]bool {
 	health := make(map[string]bool)
 	now := time.Now()
 
-	for modelID, metrics := range tr.metrics {
+	metricsMap := tr.getMetricsMap()
+	for modelID, metrics := range metricsMap {
 		// Check context cancellation during iteration
 		select {
 		case <-ctx.Done():
@@ -359,11 +381,15 @@ func (tr *TaskRouter) HealthCheck(ctx context.Context) map[string]bool {
 }
 
 // GetModelMetrics returns metrics for a specific model
+// Note: Returns pointer (not value) for individual metric lookups to allow nil returns.
+// This differs from orchestrator.GetOrchestrationMetrics() which returns by value
+// for aggregate metrics. The pointer return allows error handling for missing models.
 func (tr *TaskRouter) GetModelMetrics(modelID string) (*RouterMetrics, error) {
 	tr.mu.RLock()
 	defer tr.mu.RUnlock()
 
-	metrics, exists := tr.metrics[modelID]
+	metricsMap := tr.getMetricsMap()
+	metrics, exists := metricsMap[modelID]
 	if !exists {
 		return nil, fmt.Errorf("model %s not registered", modelID)
 	}
@@ -378,8 +404,9 @@ func (tr *TaskRouter) GetAllMetrics() map[string]*RouterMetrics {
 	tr.mu.RLock()
 	defer tr.mu.RUnlock()
 
+	metricsMap := tr.getMetricsMap()
 	metricsCopy := make(map[string]*RouterMetrics)
-	for modelID, metrics := range tr.metrics {
+	for modelID, metrics := range metricsMap {
 		m := *metrics
 		metricsCopy[modelID] = &m
 	}
@@ -435,8 +462,9 @@ func (tr *TaskRouter) routeLeastLoaded(availableModels []string) (string, error)
 	var leastLoadedModel string
 	minLoad := int64(math.MaxInt64)
 
+	metricsMap := tr.getMetricsMap()
 	for _, modelID := range availableModels {
-		metrics := tr.metrics[modelID]
+		metrics := metricsMap[modelID]
 		if metrics == nil {
 			continue // Skip models without metrics
 		}
@@ -477,8 +505,9 @@ func (tr *TaskRouter) routePerformance(availableModels []string, category TaskCa
 	var bestModel string
 	bestScore := float64(-1)
 
+	metricsMap := tr.getMetricsMap()
 	for _, modelID := range availableModels {
-		metrics := tr.metrics[modelID]
+		metrics := metricsMap[modelID]
 		if metrics == nil {
 			continue // Skip models without metrics
 		}
@@ -576,7 +605,8 @@ func (tr *TaskRouter) getAvailableModels() []string {
 	var available []string
 	now := time.Now()
 
-	for modelID, metrics := range tr.metrics {
+	metricsMap := tr.getMetricsMap()
+	for modelID, metrics := range metricsMap {
 		isHealthy := true
 
 		// Circuit breaker check
@@ -601,17 +631,22 @@ func (tr *TaskRouter) getAvailableModels() []string {
 
 // calculatePerformanceWeights pre-calculates performance weights for all categories
 func (tr *TaskRouter) calculatePerformanceWeights() {
-	tr.performanceWeights = make(map[TaskCategory]map[string]float64)
+	perfWeights := tr.getPerformanceWeights()
+	// Clear existing weights
+	for k := range perfWeights {
+		delete(perfWeights, k)
+	}
 
 	categories := []TaskCategory{
 		TaskCoding, TaskRefactoring, TaskTesting, TaskDocumentation, TaskDebugging, TaskCodeReview,
 	}
 
+	metricsMap := tr.getMetricsMap()
 	for _, category := range categories {
 		weights := make(map[string]float64)
 
-		for modelID := range tr.metrics {
-			metrics := tr.metrics[modelID]
+		for modelID := range metricsMap {
+			metrics := metricsMap[modelID]
 			if metrics == nil {
 				continue // Skip models without metrics
 			}
@@ -625,7 +660,7 @@ func (tr *TaskRouter) calculatePerformanceWeights() {
 			weights[modelID] = (successRate * 0.7) + (latencyScore * 0.3)
 		}
 
-		tr.performanceWeights[category] = weights
+		perfWeights[category] = weights
 	}
 }
 
@@ -804,7 +839,8 @@ func (tr *TaskRouter) ResetMetrics() {
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 
-	for _, metrics := range tr.metrics {
+	metricsMap := tr.getMetricsMap()
+	for _, metrics := range metricsMap {
 		metrics.TotalRequests = 0
 		metrics.SuccessfulTasks = 0
 		metrics.FailedTasks = 0
@@ -822,7 +858,8 @@ func (tr *TaskRouter) GetCircuitBreakerStatus(modelID string) (bool, error) {
 	tr.mu.RLock()
 	defer tr.mu.RUnlock()
 
-	metrics, exists := tr.metrics[modelID]
+	metricsMap := tr.getMetricsMap()
+	metrics, exists := metricsMap[modelID]
 	if !exists {
 		return false, fmt.Errorf("model %s not registered", modelID)
 	}
@@ -835,7 +872,8 @@ func (tr *TaskRouter) ForceHealthRecovery(modelID string) error {
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 
-	metrics, exists := tr.metrics[modelID]
+	metricsMap := tr.getMetricsMap()
+	metrics, exists := metricsMap[modelID]
 	if !exists {
 		return fmt.Errorf("model %s not registered", modelID)
 	}

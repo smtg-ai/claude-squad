@@ -22,22 +22,22 @@ type MarkdownParser struct {
 func NewMarkdownParser() *MarkdownParser {
 	md := goldmark.New(
 		goldmark.WithExtensions(
-			extension.GFM,              // GitHub Flavored Markdown
-			extension.Table,            // Tables
-			extension.Strikethrough,    // Strikethrough text
-			extension.TaskList,         // Task lists
-			extension.Linkify,          // Auto-link URLs
-			extension.Footnote,         // Footnotes
-			extension.DefinitionList,   // Definition lists
-			extension.Typographer,      // Smart quotes and dashes
+			extension.GFM,            // GitHub Flavored Markdown
+			extension.Table,          // Tables
+			extension.Strikethrough,  // Strikethrough text
+			extension.TaskList,       // Task lists
+			extension.Linkify,        // Auto-link URLs
+			extension.Footnote,       // Footnotes
+			extension.DefinitionList, // Definition lists
+			extension.Typographer,    // Smart quotes and dashes
 		),
 		goldmark.WithParserOptions(
 			parser.WithAutoHeadingID(), // Auto-generate heading IDs
 		),
 		goldmark.WithRendererOptions(
-			html.WithHardWraps(),       // Hard line breaks
-			html.WithXHTML(),           // XHTML output
-			html.WithUnsafe(),          // Allow raw HTML (for advanced features)
+			html.WithHardWraps(), // Hard line breaks
+			html.WithXHTML(),     // XHTML output
+			html.WithUnsafe(),    // Allow raw HTML (for advanced features)
 		),
 	)
 

@@ -51,13 +51,13 @@ func (e *ClaudeSquadExecutor) createInstanceForTask(task *Task) (*session.Instan
 
 	// Create instance configuration
 	config := session.InstanceConfig{
-		ID:          sessionID,
-		Prompt:      task.Description,
-		Program:     e.program,
-		AutoYes:     e.autoYes,
-		Metadata:    task.Metadata,
-		BranchName:  fmt.Sprintf("oxigraph-task-%s", task.ID[:8]),
-		Priority:    task.Priority,
+		ID:           sessionID,
+		Prompt:       task.Description,
+		Program:      e.program,
+		AutoYes:      e.autoYes,
+		Metadata:     task.Metadata,
+		BranchName:   fmt.Sprintf("oxigraph-task-%s", task.ID[:8]),
+		Priority:     task.Priority,
 		Dependencies: task.Dependencies,
 	}
 

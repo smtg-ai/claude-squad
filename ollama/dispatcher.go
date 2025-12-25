@@ -3,6 +3,7 @@ package ollama
 import (
 	"claude-squad/log"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -231,7 +232,7 @@ func (d *TaskDispatcher) SubmitBatch(tasks []*Task) error {
 	}
 
 	if len(submitErrors) > 0 {
-		return fmt.Errorf("batch submission encountered errors: %v", submitErrors)
+		return errors.Join(submitErrors...)
 	}
 
 	return nil

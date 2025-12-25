@@ -124,7 +124,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	h.list = ui.NewList(&h.spinner, autoYes)
 
 	// Load saved instances
-	instances, err := storage.LoadInstances()
+	instances, err := storage.LoadInstances(ctx)
 	if err != nil {
 		fmt.Printf("Failed to load instances: %v\n", err)
 		os.Exit(1)
@@ -258,9 +258,22 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {
-	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+	// Create a context with timeout for cleanup operations
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Save instances to storage
+	if err := m.storage.SaveInstances(ctx, m.list.GetInstances()); err != nil {
 		return m, m.handleError(err)
 	}
+
+	// Save application state
+	if state, ok := m.appState.(*config.State); ok {
+		if err := config.SaveState(state); err != nil {
+			log.ErrorLog.Printf("failed to save app state during shutdown: %v", err)
+		}
+	}
+
 	return m, tea.Quit
 }
 
@@ -337,7 +350,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(err)
 			}
 			// Save after adding new instance
-			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+			if err := m.storage.SaveInstances(m.ctx, m.list.GetInstances()); err != nil {
 				return m, m.handleError(err)
 			}
 			// Instance added successfully, call the finalizer.
@@ -362,7 +375,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 		case tea.KeyRunes:
 			if runewidth.StringWidth(instance.Title) >= 32 {
-				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
+				return m, m.handleError(fmt.Errorf("title too long: %d characters (max 32)", runewidth.StringWidth(instance.Title)))
 			}
 			if err := instance.SetTitle(instance.Title + string(msg.Runes)); err != nil {
 				return m, m.handleError(err)

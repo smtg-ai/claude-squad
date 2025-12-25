@@ -4,6 +4,7 @@ import (
 	"claude-squad/log"
 	"claude-squad/session"
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -751,7 +752,7 @@ func (p *AgentPool) Close() error {
 	close(p.availableQueue)
 
 	if len(errs) > 0 {
-		return fmt.Errorf("errors during pool shutdown: %v", errs)
+		return errors.Join(errs...)
 	}
 
 	log.InfoLog.Print("agent pool closed successfully")
@@ -764,6 +765,10 @@ func (p *AgentPool) SaveState(ctx context.Context) error {
 		return fmt.Errorf("storage not configured")
 	}
 
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	p.mu.RLock()
 	instances := make([]*session.Instance, 0, len(p.agents))
 	for _, agent := range p.agents {
@@ -771,7 +776,7 @@ func (p *AgentPool) SaveState(ctx context.Context) error {
 	}
 	p.mu.RUnlock()
 
-	return p.storage.SaveInstances(instances)
+	return p.storage.SaveInstances(ctx, instances)
 }
 
 // LoadState restores pool state from storage (if configured)
@@ -780,7 +785,11 @@ func (p *AgentPool) LoadState(ctx context.Context) error {
 		return fmt.Errorf("storage not configured")
 	}
 
-	instances, err := p.storage.LoadInstances()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	instances, err := p.storage.LoadInstances(ctx)
 	if err != nil {
 		return err
 	}

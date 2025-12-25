@@ -36,15 +36,15 @@ type Document struct {
 	Author      string                 `json:"author,omitempty"`
 
 	// Cross-references and relationships
-	RelatedDocs []string               `json:"related_docs,omitempty"`
-	Prerequisites []string             `json:"prerequisites,omitempty"`
+	RelatedDocs   []string `json:"related_docs,omitempty"`
+	Prerequisites []string `json:"prerequisites,omitempty"`
 
 	// Validation and quality metrics
-	ValidationStatus ValidationStatus  `json:"validation_status"`
+	ValidationStatus ValidationStatus `json:"validation_status"`
 	QualityScore     float64          `json:"quality_score"`
 
 	// Processed content (HTML, syntax highlighted, etc.)
-	ProcessedContent string            `json:"processed_content,omitempty"`
+	ProcessedContent string `json:"processed_content,omitempty"`
 }
 
 // ValidationStatus represents the validation state of a document
@@ -59,37 +59,37 @@ const (
 
 // DiataxisFramework manages the entire documentation system
 type DiataxisFramework struct {
-	documents    map[string]*Document
-	docsByType   map[DocType][]*Document
-	processor    *ConcurrentProcessor
-	validator    *DocumentValidator
-	generator    *DocumentGenerator
-	mu           sync.RWMutex
+	documents  map[string]*Document
+	docsByType map[DocType][]*Document
+	processor  *ConcurrentProcessor
+	validator  *DocumentValidator
+	generator  *DocumentGenerator
+	mu         sync.RWMutex
 
 	// Configuration
-	config       *FrameworkConfig
+	config *FrameworkConfig
 }
 
 // FrameworkConfig holds configuration for the Diataxis framework
 type FrameworkConfig struct {
-	MaxConcurrentWorkers int
-	EnableSyntaxHighlight bool
+	MaxConcurrentWorkers     int
+	EnableSyntaxHighlight    bool
 	EnableCrossRefValidation bool
-	EnableMetrics bool
-	OutputFormat string // html, markdown, json
-	TemplateDir string
-	OutputDir string
+	EnableMetrics            bool
+	OutputFormat             string // html, markdown, json
+	TemplateDir              string
+	OutputDir                string
 }
 
 // NewDiataxisFramework creates a new Diataxis documentation framework
 func NewDiataxisFramework(config *FrameworkConfig) *DiataxisFramework {
 	if config == nil {
 		config = &FrameworkConfig{
-			MaxConcurrentWorkers: MaxConcurrentWorkers,
-			EnableSyntaxHighlight: true,
+			MaxConcurrentWorkers:     MaxConcurrentWorkers,
+			EnableSyntaxHighlight:    true,
 			EnableCrossRefValidation: true,
-			EnableMetrics: true,
-			OutputFormat: "html",
+			EnableMetrics:            true,
+			OutputFormat:             "html",
 		}
 	}
 
@@ -189,7 +189,7 @@ func (fw *DiataxisFramework) GetStatistics() *FrameworkStatistics {
 	defer fw.mu.RUnlock()
 
 	stats := &FrameworkStatistics{
-		TotalDocuments: len(fw.documents),
+		TotalDocuments:  len(fw.documents),
 		DocumentsByType: make(map[DocType]int),
 		ValidationStats: make(map[ValidationStatus]int),
 	}
@@ -212,26 +212,26 @@ func (fw *DiataxisFramework) GetStatistics() *FrameworkStatistics {
 
 // FrameworkStatistics holds statistics about the documentation framework
 type FrameworkStatistics struct {
-	TotalDocuments      int                        `json:"total_documents"`
-	DocumentsByType     map[DocType]int            `json:"documents_by_type"`
-	ValidationStats     map[ValidationStatus]int   `json:"validation_stats"`
-	AverageQualityScore float64                    `json:"average_quality_score"`
+	TotalDocuments      int                      `json:"total_documents"`
+	DocumentsByType     map[DocType]int          `json:"documents_by_type"`
+	ValidationStats     map[ValidationStatus]int `json:"validation_stats"`
+	AverageQualityScore float64                  `json:"average_quality_score"`
 }
 
 // ValidationReport contains results from document validation
 type ValidationReport struct {
-	TotalDocuments   int
-	PassedCount      int
-	FailedCount      int
-	WarningsCount    int
-	Issues           []ValidationIssue
-	ProcessingTime   time.Duration
+	TotalDocuments int
+	PassedCount    int
+	FailedCount    int
+	WarningsCount  int
+	Issues         []ValidationIssue
+	ProcessingTime time.Duration
 }
 
 // ValidationIssue represents a validation problem
 type ValidationIssue struct {
-	DocumentID  string
-	Severity    string // error, warning, info
-	Message     string
-	Location    string
+	DocumentID string
+	Severity   string // error, warning, info
+	Message    string
+	Location   string
 }

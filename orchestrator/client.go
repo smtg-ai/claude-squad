@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+const (
+	// DefaultHTTPTimeout is the default timeout for HTTP requests.
+	// Can be overridden via ClientConfig.Timeout.
+	DefaultHTTPTimeout = 30 * time.Second
+)
+
 // Task represents an agent task in the knowledge graph
 type Task struct {
 	ID           string            `json:"id"`
@@ -60,7 +66,7 @@ func NewClient(baseURL string) *Client {
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: DefaultHTTPTimeout,
 			Transport: &http.Transport{
 				MaxIdleConns:        100,
 				MaxIdleConnsPerHost: 10,

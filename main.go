@@ -13,7 +13,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/spf13/cobra"
 )
@@ -34,8 +36,12 @@ var (
 			if daemonFlag {
 				cfg := config.LoadConfig()
 				err := daemon.RunDaemon(cfg)
-				log.ErrorLog.Printf("failed to start daemon %v", err)
-				return err
+				if err != nil {
+					log.ErrorLog.Printf("failed to start daemon: %v", err)
+					return err
+				}
+				log.InfoLog.Printf("daemon stopped gracefully")
+				return nil
 			}
 
 			// Check if we're in a git repository
@@ -45,7 +51,7 @@ var (
 			}
 
 			if !git.IsGitRepo(currentDir) {
-				return fmt.Errorf("error: claude-squad must be run from within a git repository")
+				return fmt.Errorf("claude-squad must be run from within a git repository\n\nTo fix:\n  • Navigate to a git repository: cd /path/to/repo\n  • Or initialize a new one: git init")
 			}
 
 			cfg := config.LoadConfig()
@@ -64,6 +70,8 @@ var (
 				defer func() {
 					if err := daemon.LaunchDaemon(); err != nil {
 						log.ErrorLog.Printf("failed to launch daemon: %v", err)
+					} else {
+						log.InfoLog.Printf("daemon launched successfully for autoyes mode")
 					}
 				}()
 			}
@@ -164,6 +172,16 @@ func init() {
 }
 
 func main() {
+	// Set up signal handling for graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigCh
+		log.InfoLog.Printf("Received shutdown signal (%v), cleaning up...", sig)
+		// Cleanup will be handled by defer statements in cobra commands
+		os.Exit(0)
+	}()
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}

@@ -17,6 +17,11 @@ func (e *OllamaError) Error() string {
 	return fmt.Sprintf("%s: %s", e.Code, e.Message)
 }
 
+// Unwrap returns the wrapped error, enabling errors.Is and errors.As
+func (e *OllamaError) Unwrap() error {
+	return e.Err
+}
+
 // Common errors
 var (
 	ErrorTimeout = &OllamaError{

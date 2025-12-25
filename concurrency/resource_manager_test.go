@@ -252,15 +252,15 @@ func TestResourceQuota(t *testing.T) {
 
 func TestResourceManager(t *testing.T) {
 	config := &Config{
-		CPUCapacity:         100,
-		MemoryCapacity:      1024,
-		FileHandlesCapacity: 100,
-		NetworkCapacity:     50,
-		RateLimit:           100,
+		CPUCapacity:             100,
+		MemoryCapacity:          1024,
+		FileHandlesCapacity:     100,
+		NetworkCapacity:         50,
+		RateLimit:               100,
 		EnableDeadlockDetection: false,
-		ScaleUpThreshold:    80.0,
-		ScaleDownThreshold:  20.0,
-		MonitorInterval:     1 * time.Second,
+		ScaleUpThreshold:        80.0,
+		ScaleDownThreshold:      20.0,
+		MonitorInterval:         1 * time.Second,
 	}
 
 	rm, err := NewResourceManager(config)
