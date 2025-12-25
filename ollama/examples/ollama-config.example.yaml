@@ -1,0 +1,110 @@
+# Ollama Configuration Examples
+
+# Basic configuration with single endpoint
+---
+enabled: true
+endpoints:
+  - name: local
+    url: http://localhost:11434
+    enabled: true
+    priority: 0
+default_endpoint: local
+connection_timeout_ms: 10000
+request_timeout_ms: 60000
+retry_policy:
+  max_retries: 3
+  backoff_ms: 500
+models: {}
+
+---
+# Production configuration with multiple endpoints and failover
+
+enabled: true
+
+# List of Ollama server endpoints
+endpoints:
+  # Primary endpoint with lowest priority (tried first)
+  - name: primary
+    url: http://ollama-primary.prod.local:11434
+    enabled: true
+    priority: 0
+
+  # Secondary endpoint for failover
+  - name: secondary
+    url: http://ollama-secondary.prod.local:11434
+    enabled: true
+    priority: 1
+
+  # GPU-accelerated endpoint for heavy workloads
+  - name: gpu-accelerated
+    url: http://ollama-gpu.prod.local:11434
+    enabled: true
+    priority: 10
+
+  # Backup endpoint (disabled by default)
+  - name: backup
+    url: http://ollama-backup.archive.local:11434
+    enabled: false
+    priority: 100
+
+# Default endpoint to use if not specified
+default_endpoint: primary
+
+# Connection timeout (milliseconds)
+connection_timeout_ms: 10000
+
+# Request timeout (milliseconds) - how long to wait for responses
+request_timeout_ms: 120000
+
+# Retry policy for failed requests
+retry_policy:
+  max_retries: 3
+  backoff_ms: 500  # Wait 500ms before first retry, then increases exponentially
+
+# Model-specific configurations
+models:
+  # Llama 2 configuration
+  llama2:
+    temperature: 0.7
+    context_window: 4096
+    top_p: 0.9
+    top_k: 40
+    repeat_penalty: 1.1
+    num_predict: 512
+    stop:
+      - "\n"
+      - "Human:"
+    system: "You are a helpful AI assistant built on Llama 2."
+
+  # Mistral configuration
+  mistral:
+    temperature: 0.8
+    context_window: 8192
+    top_p: 0.95
+    top_k: 50
+    repeat_penalty: 1.05
+    num_predict: 1024
+    system: "You are Mistral, a helpful AI assistant."
+
+  # Neural Chat configuration for conversations
+  neural-chat:
+    temperature: 0.6
+    context_window: 4096
+    top_p: 0.9
+    top_k: 40
+
+  # Code-focused model
+  codellama:
+    temperature: 0.1  # Lower temp for more deterministic code
+    context_window: 4096
+    top_p: 0.95
+    num_predict: 2048
+    system: "You are a code generation assistant. Provide only the code without explanations."
+
+  # Specialized model for summarization
+  orca-mini:
+    temperature: 0.5
+    context_window: 2048
+    top_p: 0.9
+    num_predict: 256
+    system: "You are summarization expert. Provide concise and accurate summaries."

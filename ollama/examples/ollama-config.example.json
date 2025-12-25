@@ -1,0 +1,55 @@
+{
+  "enabled": true,
+  "endpoints": [
+    {
+      "name": "local",
+      "url": "http://localhost:11434",
+      "enabled": true,
+      "priority": 0
+    },
+    {
+      "name": "remote-gpu",
+      "url": "http://gpu-server.internal:11434",
+      "enabled": true,
+      "priority": 1
+    },
+    {
+      "name": "backup",
+      "url": "http://backup-ollama:11434",
+      "enabled": false,
+      "priority": 2
+    }
+  ],
+  "default_endpoint": "local",
+  "connection_timeout_ms": 10000,
+  "request_timeout_ms": 60000,
+  "retry_policy": {
+    "max_retries": 3,
+    "backoff_ms": 500
+  },
+  "models": {
+    "llama2": {
+      "temperature": 0.7,
+      "context_window": 4096,
+      "top_p": 0.9,
+      "top_k": 40,
+      "repeat_penalty": 1.1,
+      "num_predict": 512,
+      "stop": ["\n"],
+      "system": "You are a helpful AI assistant."
+    },
+    "mistral": {
+      "temperature": 0.8,
+      "context_window": 8192,
+      "top_p": 0.95,
+      "top_k": 50,
+      "repeat_penalty": 1.05,
+      "num_predict": 1024
+    },
+    "neural-chat": {
+      "temperature": 0.6,
+      "context_window": 4096,
+      "top_p": 0.9
+    }
+  }
+}
