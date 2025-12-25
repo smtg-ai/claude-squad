@@ -244,12 +244,18 @@ func TestRequestBatch(t *testing.T) {
 func TestOrchestratorModelPool(t *testing.T) {
 	pool := NewOrchestratorModelPool(5)
 
-	model1 := pool.Get()
+	model1, err := pool.Get()
+	if err != nil {
+		t.Fatalf("Failed to get model from pool: %v", err)
+	}
 	model1.name = "test"
 
 	pool.Put(model1)
 
-	model2 := pool.Get()
+	model2, err := pool.Get()
+	if err != nil {
+		t.Fatalf("Failed to get model from pool: %v", err)
+	}
 	if model2.name != "" {
 		t.Fatalf("Expected empty name after reuse, got %s", model2.name)
 	}
