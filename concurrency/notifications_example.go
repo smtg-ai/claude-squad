@@ -102,7 +102,7 @@ func ExampleMultiChannel() {
 		Type:     TypeError,
 		Priority: PriorityCritical,
 		Payload: map[string]interface{}{
-			"message": "Critical system error detected!",
+			"message":    "Critical system error detected!",
 			"error_code": 500,
 		},
 		Recipients: []string{"admin@example.com"},

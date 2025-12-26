@@ -303,8 +303,8 @@ func ExampleRetryOperation() {
 	// Will retry up to 3 times with 1 second delay between retries
 	retryablePause := NewRetryOperation(
 		NewBatchPauseOperation(),
-		3,                // max retries
-		1*time.Second,    // delay between retries
+		3,             // max retries
+		1*time.Second, // delay between retries
 	)
 
 	executor := NewBatchExecutor(1)

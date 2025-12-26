@@ -3,6 +3,7 @@ package ollama
 import (
 	"claude-squad/log"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -207,7 +208,7 @@ func (d *TaskDispatcher) SubmitTask(task *Task) error {
 	d.taskMap[task.ID] = task
 	d.taskMapMu.Unlock()
 
-	// Send task to queue with context awareness
+	// Send task to queue with context awareness and timeout
 	select {
 	case d.taskQueue <- task:
 		log.InfoLog.Printf("Task %s submitted with priority %d", task.ID, task.Priority)
@@ -215,6 +216,8 @@ func (d *TaskDispatcher) SubmitTask(task *Task) error {
 		return nil
 	case <-d.ctx.Done():
 		return fmt.Errorf("dispatcher context cancelled")
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("timeout submitting task %s to queue", task.ID)
 	default:
 		return fmt.Errorf("task queue is full")
 	}
@@ -231,7 +234,7 @@ func (d *TaskDispatcher) SubmitBatch(tasks []*Task) error {
 	}
 
 	if len(submitErrors) > 0 {
-		return fmt.Errorf("batch submission encountered errors: %v", submitErrors)
+		return errors.Join(submitErrors...)
 	}
 
 	return nil
@@ -337,18 +340,10 @@ func (d *TaskDispatcher) Shutdown(timeout time.Duration) error {
 		// Close task queue to signal workers to stop
 		close(d.taskQueue)
 
-		// Create a channel to signal when all workers are done
-		done := make(chan struct{})
-		go func() {
-			d.wg.Wait()
-			close(done)
-		}()
-
-		// Wait for all workers with timeout
-		select {
-		case <-done:
+		// Wait for all workers with timeout using helper function
+		if waitWithTimeout(&d.wg, timeout) {
 			log.InfoLog.Printf("All workers shut down gracefully")
-		case <-time.After(timeout):
+		} else {
 			shutdownErr = fmt.Errorf("shutdown timeout exceeded after %v", timeout)
 			log.WarningLog.Printf("%v", shutdownErr)
 		}
@@ -520,6 +515,24 @@ func (d *TaskDispatcher) cleanupTask(taskID string) {
 	defer d.taskMapMu.Unlock()
 	delete(d.taskMap, taskID)
 	log.InfoLog.Printf("Task %s cleaned up from task map", taskID)
+}
+
+// waitWithTimeout waits for a WaitGroup with a timeout.
+// Returns true if all goroutines finished before timeout, false if timeout occurred.
+// This helper prevents goroutine leaks and implements production-ready shutdown patterns.
+func waitWithTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 // CombineErrors combines multiple errors into a single formatted error

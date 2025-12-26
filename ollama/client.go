@@ -10,6 +10,8 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -20,14 +22,39 @@ type Client struct {
 	baseURL    string
 }
 
+// validateURL validates that a URL is safe to use
+func validateURL(rawURL string) error {
+	if rawURL == "" {
+		return fmt.Errorf("URL cannot be empty")
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL format: %w", err)
+	}
+
+	// Only allow http and https schemes
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("invalid URL scheme %q: only http and https are allowed", u.Scheme)
+	}
+
+	// Ensure URL does not contain credentials
+	if u.User != nil {
+		return fmt.Errorf("URL must not contain credentials (username/password)")
+	}
+
+	return nil
+}
+
 // NewClient creates a new Ollama client with the provided configuration
 func NewClient(config *ClientConfig) (*Client, error) {
 	if config == nil {
 		return nil, NewFrameworkError(ErrCodeInvalidRequest, "client config cannot be nil", nil)
 	}
 
-	if config.BaseURL == "" {
-		return nil, NewFrameworkError(ErrCodeInvalidRequest, "base URL cannot be empty", nil)
+	if err := validateURL(config.BaseURL); err != nil {
+		return nil, NewFrameworkError(ErrCodeInvalidRequest, fmt.Sprintf("invalid base URL: %v", err), nil)
 	}
 
 	timeout := time.Duration(config.Timeout) * time.Second
@@ -140,6 +167,23 @@ func (c *Client) CheckHealth(ctx context.Context) (bool, error) {
 	}
 
 	return status != "", nil
+}
+
+// Ping performs a simple health check on the Ollama API
+func (c *Client) Ping(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", c.baseURL+"/api/version", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("health check failed: status %d", resp.StatusCode)
+	}
+	return nil
 }
 
 // GetStatus retrieves detailed status information from the Ollama API
@@ -343,8 +387,8 @@ func (c *Client) SetTimeout(seconds int) {
 
 // SetBaseURL updates the client's base URL
 func (c *Client) SetBaseURL(baseURL string) error {
-	if baseURL == "" {
-		return NewFrameworkError(ErrCodeInvalidRequest, "base URL cannot be empty", nil)
+	if err := validateURL(baseURL); err != nil {
+		return NewFrameworkError(ErrCodeInvalidRequest, fmt.Sprintf("invalid base URL: %v", err), nil)
 	}
 	c.baseURL = baseURL
 	c.config.BaseURL = baseURL

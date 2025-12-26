@@ -2,6 +2,7 @@ package session
 
 import (
 	"claude-squad/config"
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -52,8 +53,14 @@ func NewStorage(state config.InstanceStorage) (*Storage, error) {
 	}, nil
 }
 
-// SaveInstances saves the list of instances to disk
-func (s *Storage) SaveInstances(instances []*Instance) error {
+// SaveInstances saves the list of instances to disk.
+// The ctx parameter is optional and will default to context.Background() if nil.
+// Only instances that have been started will be saved.
+func (s *Storage) SaveInstances(ctx context.Context, instances []*Instance) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	// Convert instances to InstanceData
 	data := make([]InstanceData, 0)
 	for _, instance := range instances {
@@ -71,8 +78,14 @@ func (s *Storage) SaveInstances(instances []*Instance) error {
 	return s.state.SaveInstances(jsonData)
 }
 
-// LoadInstances loads the list of instances from disk
-func (s *Storage) LoadInstances() ([]*Instance, error) {
+// LoadInstances loads the list of instances from disk.
+// The ctx parameter is optional and will default to context.Background() if nil.
+// Returns an error if the data cannot be unmarshalled or instance creation fails.
+func (s *Storage) LoadInstances(ctx context.Context) ([]*Instance, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	jsonData := s.state.GetInstances()
 
 	var instancesData []InstanceData
@@ -94,7 +107,8 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 
 // DeleteInstance removes an instance from storage
 func (s *Storage) DeleteInstance(title string) error {
-	instances, err := s.LoadInstances()
+	ctx := context.Background()
+	instances, err := s.LoadInstances(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load instances: %w", err)
 	}
@@ -114,12 +128,13 @@ func (s *Storage) DeleteInstance(title string) error {
 		return fmt.Errorf("instance not found: %s", title)
 	}
 
-	return s.SaveInstances(newInstances)
+	return s.SaveInstances(ctx, newInstances)
 }
 
 // UpdateInstance updates an existing instance in storage
 func (s *Storage) UpdateInstance(instance *Instance) error {
-	instances, err := s.LoadInstances()
+	ctx := context.Background()
+	instances, err := s.LoadInstances(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load instances: %w", err)
 	}
@@ -139,7 +154,7 @@ func (s *Storage) UpdateInstance(instance *Instance) error {
 		return fmt.Errorf("instance not found: %s", data.Title)
 	}
 
-	return s.SaveInstances(instances)
+	return s.SaveInstances(ctx, instances)
 }
 
 // DeleteAllInstances removes all stored instances

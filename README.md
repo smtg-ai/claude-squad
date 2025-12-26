@@ -59,12 +59,13 @@ Usage:
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
   debug       Print debug information like config paths
+  docs        Manage Diataxis documentation framework
   help        Help about any command
   reset       Reset all stored instances
   version     Print the version number of claude-squad
 
 Flags:
-  -y, --autoyes          [experimental] If enabled, all instances will automatically accept prompts for claude code & aider
+  -y, --autoyes          [experimental] If enabled, all instances will automatically accept prompts
   -h, --help             help for claude-squad
   -p, --program string   Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')
 ```
@@ -88,6 +89,41 @@ NOTE: The default program is `claude` and we recommend using the latest version.
 
 <br />
 
+#### Ollama Integration
+
+Claude Squad includes built-in support for [Ollama](https://ollama.ai/) to manage local model endpoints:
+
+- **Multiple Endpoint Support**: Configure and manage multiple Ollama server endpoints with failover
+- **Model-Specific Settings**: Configure temperature, context windows, and other parameters per model
+- **Flexible Configuration**: Load from JSON or YAML files at `~/.claude-squad/ollama/ollama.json`
+- **Priority-Based Failover**: Endpoints are tried in priority order for high availability
+
+For detailed configuration options, see the [Ollama README](/ollama/README.md).
+
+<br />
+
+#### Documentation Management
+
+Claude Squad includes a documentation framework based on [Diataxis](https://diataxis.fr/):
+
+```bash
+# Initialize documentation structure
+cs docs init
+
+# Generate documentation site
+cs docs generate
+
+# Validate documentation
+cs docs validate
+
+# Show documentation statistics
+cs docs stats
+```
+
+The framework organizes documentation into four types: Tutorials, How-To Guides, Reference, and Explanation.
+
+<br />
+
 #### Menu
 The menu at the bottom of the screen shows available commands: 
 
@@ -95,12 +131,12 @@ The menu at the bottom of the screen shows available commands:
 - `n` - Create a new session
 - `N` - Create a new session with a prompt
 - `D` - Kill (delete) the selected session
-- `↑/j`, `↓/k` - Navigate between sessions
+- `↑/k`, `↓/j` - Navigate between sessions
 
 ##### Actions
 - `↵/o` - Attach to the selected session to reprompt
-- `ctrl-q` - Detach from session
-- `s` - Commit and push branch to github
+- `ctrl+b, d` - Detach from session (tmux shortcut)
+- `p` - Push branch to GitHub
 - `c` - Checkout. Commits changes and pauses the session
 - `r` - Resume a paused session
 - `?` - Show help menu
@@ -108,7 +144,7 @@ The menu at the bottom of the screen shows available commands:
 ##### Navigation
 - `tab` - Switch between preview tab and diff tab
 - `q` - Quit the application
-- `shift-↓/↑` - scroll in diff view
+- `shift+↓/↑` - Scroll in diff view
 
 ### FAQs
 

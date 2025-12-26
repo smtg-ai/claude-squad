@@ -26,15 +26,29 @@ func GetConfigDir() (string, error) {
 	return filepath.Join(homeDir, ".claude-squad"), nil
 }
 
-// Config represents the application configuration
+// Config represents the application configuration.
+// Configuration is loaded from ~/.claude-squad/config.json.
+// See DefaultConfig() for default values.
 type Config struct {
-	// DefaultProgram is the default program to run in new instances
+	// DefaultProgram is the default program to run in new instances.
+	// Default: result of GetClaudeCommand() or "claude" if not found.
+	// JSON key: "default_program"
 	DefaultProgram string `json:"default_program"`
+
 	// AutoYes is a flag to automatically accept all prompts.
+	// Default: false
+	// JSON key: "auto_yes"
 	AutoYes bool `json:"auto_yes"`
+
 	// DaemonPollInterval is the interval (ms) at which the daemon polls sessions for autoyes mode.
+	// Valid range: 1-60000 (1ms to 1 minute)
+	// Default: 1000 (1 second)
+	// JSON key: "daemon_poll_interval"
 	DaemonPollInterval int `json:"daemon_poll_interval"`
+
 	// BranchPrefix is the prefix used for git branches created by the application.
+	// Default: "<username>/" or "session/" if username cannot be determined
+	// JSON key: "branch_prefix"
 	BranchPrefix string `json:"branch_prefix"`
 }
 
@@ -59,6 +73,17 @@ func DefaultConfig() *Config {
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
 	}
+}
+
+// Validate checks if the configuration is valid
+func (c *Config) Validate() error {
+	if c.DaemonPollInterval <= 0 {
+		return fmt.Errorf("daemon_poll_interval must be positive, got %d", c.DaemonPollInterval)
+	}
+	if c.DaemonPollInterval > 60000 {
+		return fmt.Errorf("daemon_poll_interval must be <= 60000ms (1 minute), got %d", c.DaemonPollInterval)
+	}
+	return nil
 }
 
 // GetClaudeCommand attempts to find the "claude" command in the user's shell
@@ -128,13 +153,14 @@ func LoadConfig() *Config {
 			return defaultCfg
 		}
 
-		log.WarningLog.Printf("failed to get config file: %v", err)
+		log.WarningLog.Printf("failed to read config file: %v", err)
 		return DefaultConfig()
 	}
 
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
-		log.ErrorLog.Printf("failed to parse config file: %v", err)
+		log.ErrorLog.Printf("config file exists but contains invalid JSON (using defaults): %v", err)
+		log.WarningLog.Printf("to fix this, either correct the JSON in %s or delete it to regenerate", configPath)
 		return DefaultConfig()
 	}
 

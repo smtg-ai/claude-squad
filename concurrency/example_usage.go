@@ -3,9 +3,10 @@ package concurrency
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/rand"
 	"time"
+
+	"claude-squad/log"
 )
 
 // Example demonstrates various use cases for the worker pool.
@@ -53,7 +54,8 @@ func ExampleWorkerPoolBasicUsage() {
 
 	// Start the pool
 	if err := pool.Start(); err != nil {
-		log.Fatalf("Failed to start worker pool: %v", err)
+		log.ErrorLog.Printf("Failed to start worker pool: %v", err)
+		return
 	}
 
 	// Submit jobs
@@ -66,7 +68,7 @@ func ExampleWorkerPoolBasicUsage() {
 		}
 
 		if err := pool.Submit(context.Background(), job); err != nil {
-			log.Printf("Failed to submit job: %v", err)
+			log.WarningLog.Printf("Failed to submit job: %v", err)
 		}
 	}
 
@@ -74,9 +76,9 @@ func ExampleWorkerPoolBasicUsage() {
 	go func() {
 		for result := range pool.Results() {
 			if result.Error != nil {
-				log.Printf("Job %s failed after %v: %v", result.JobID, result.Duration, result.Error)
+				log.WarningLog.Printf("Job %s failed after %v: %v", result.JobID, result.Duration, result.Error)
 			} else {
-				log.Printf("Job %s succeeded in %v: %v", result.JobID, result.Duration, result.Result)
+				log.InfoLog.Printf("Job %s succeeded in %v: %v", result.JobID, result.Duration, result.Result)
 			}
 		}
 	}()
@@ -89,7 +91,7 @@ func ExampleWorkerPoolBasicUsage() {
 	defer cancel()
 
 	if err := pool.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Shutdown error: %v", err)
+		log.WarningLog.Printf("Shutdown error: %v", err)
 	}
 
 	// Print final metrics
@@ -104,7 +106,8 @@ func ExamplePriorityProcessing() {
 	pool := NewWorkerPool(config)
 
 	if err := pool.Start(); err != nil {
-		log.Fatalf("Failed to start worker pool: %v", err)
+		log.ErrorLog.Printf("Failed to start worker pool: %v", err)
+		return
 	}
 
 	// Submit jobs with different priorities
@@ -128,14 +131,14 @@ func ExamplePriorityProcessing() {
 		}
 
 		if err := pool.Submit(context.Background(), job); err != nil {
-			log.Printf("Failed to submit job: %v", err)
+			log.WarningLog.Printf("Failed to submit job: %v", err)
 		}
 	}
 
 	// Process results
 	go func() {
 		for result := range pool.Results() {
-			log.Printf("Processed: %s (priority %d) in %v",
+			log.InfoLog.Printf("Processed: %s (priority %d) in %v",
 				result.JobID,
 				// You would normally track priority separately
 				0,
@@ -156,7 +159,8 @@ func ExampleErrorAggregation() {
 	pool := NewWorkerPool(config)
 
 	if err := pool.Start(); err != nil {
-		log.Fatalf("Failed to start worker pool: %v", err)
+		log.ErrorLog.Printf("Failed to start worker pool: %v", err)
+		return
 	}
 
 	// Submit jobs (some will fail randomly)
@@ -204,7 +208,8 @@ func ExampleWorkerHealthMonitoring() {
 	pool := NewWorkerPool(config)
 
 	if err := pool.Start(); err != nil {
-		log.Fatalf("Failed to start worker pool: %v", err)
+		log.ErrorLog.Printf("Failed to start worker pool: %v", err)
+		return
 	}
 
 	// Monitor worker health in background
@@ -259,7 +264,8 @@ func ExampleBatchProcessing() {
 	pool := NewWorkerPool(config)
 
 	if err := pool.Start(); err != nil {
-		log.Fatalf("Failed to start worker pool: %v", err)
+		log.ErrorLog.Printf("Failed to start worker pool: %v", err)
+		return
 	}
 
 	// Simulate batch operations on multiple instances
@@ -284,7 +290,7 @@ func ExampleBatchProcessing() {
 			}
 
 			if err := pool.Submit(context.Background(), job); err != nil {
-				log.Printf("Failed to submit job: %v", err)
+				log.WarningLog.Printf("Failed to submit job: %v", err)
 			}
 		}
 	}
@@ -299,9 +305,9 @@ func ExampleBatchProcessing() {
 			instanceResults[instanceID] = append(instanceResults[instanceID], result)
 
 			if result.Error != nil {
-				log.Printf("❌ %s failed: %v", result.JobID, result.Error)
+				log.WarningLog.Printf("Failed: %s - %v", result.JobID, result.Error)
 			} else {
-				log.Printf("✅ %s completed in %v", result.JobID, result.Duration)
+				log.InfoLog.Printf("Completed: %s in %v", result.JobID, result.Duration)
 			}
 		}
 	}()
@@ -328,7 +334,8 @@ func ExampleWorkerPoolGracefulShutdown() {
 	pool := NewWorkerPool(config)
 
 	if err := pool.Start(); err != nil {
-		log.Fatalf("Failed to start worker pool: %v", err)
+		log.ErrorLog.Printf("Failed to start worker pool: %v", err)
+		return
 	}
 
 	// Submit long-running jobs
@@ -347,22 +354,22 @@ func ExampleWorkerPoolGracefulShutdown() {
 	go func() {
 		for result := range pool.Results() {
 			resultCount++
-			log.Printf("Completed job %s (%d/%d)", result.JobID, resultCount, 20)
+			log.InfoLog.Printf("Completed job %s (%d/%d)", result.JobID, resultCount, 20)
 		}
 	}()
 
 	// Simulate interrupt after 3 seconds
 	time.Sleep(3 * time.Second)
-	log.Println("Initiating graceful shutdown...")
+	log.InfoLog.Println("Initiating graceful shutdown...")
 
 	// Graceful shutdown with reasonable timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := pool.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Shutdown completed with warnings: %v", err)
+		log.WarningLog.Printf("Shutdown completed with warnings: %v", err)
 	} else {
-		log.Println("Shutdown completed successfully")
+		log.InfoLog.Println("Shutdown completed successfully")
 	}
 
 	// Final statistics

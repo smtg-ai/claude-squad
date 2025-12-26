@@ -2,9 +2,12 @@ package log
 
 import (
 	"fmt"
+	"io"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -12,7 +15,10 @@ var (
 	WarningLog *log.Logger
 	InfoLog    *log.Logger
 	ErrorLog   *log.Logger
+	DebugLog   *log.Logger
 )
+
+var debugEnabled = os.Getenv("DEBUG") == "true" || os.Getenv("DEBUG") == "1"
 
 var logFileName = filepath.Join(os.TempDir(), "claudesquad.log")
 
@@ -33,6 +39,11 @@ func Initialize(daemon bool) {
 		InfoLog = log.New(os.Stderr, fmt.Sprintf(fmtS, "INFO:"), log.Ldate|log.Ltime|log.Lshortfile)
 		WarningLog = log.New(os.Stderr, fmt.Sprintf(fmtS, "WARNING:"), log.Ldate|log.Ltime|log.Lshortfile)
 		ErrorLog = log.New(os.Stderr, fmt.Sprintf(fmtS, "ERROR:"), log.Ldate|log.Ltime|log.Lshortfile)
+		if debugEnabled {
+			DebugLog = log.New(os.Stderr, fmt.Sprintf(fmtS, "DEBUG:"), log.Ldate|log.Ltime|log.Lshortfile)
+		} else {
+			DebugLog = log.New(io.Discard, "", 0)
+		}
 		fmt.Fprintf(os.Stderr, "Warning: using stderr for logging: %v\n", err)
 		return
 	}
@@ -47,6 +58,11 @@ func Initialize(daemon bool) {
 	InfoLog = log.New(f, fmt.Sprintf(fmtS, "INFO:"), log.Ldate|log.Ltime|log.Lshortfile)
 	WarningLog = log.New(f, fmt.Sprintf(fmtS, "WARNING:"), log.Ldate|log.Ltime|log.Lshortfile)
 	ErrorLog = log.New(f, fmt.Sprintf(fmtS, "ERROR:"), log.Ldate|log.Ltime|log.Lshortfile)
+	if debugEnabled {
+		DebugLog = log.New(f, fmt.Sprintf(fmtS, "DEBUG:"), log.Ldate|log.Ltime|log.Lshortfile)
+	} else {
+		DebugLog = log.New(io.Discard, "", 0)
+	}
 
 	globalLogFile = f
 }
@@ -82,4 +98,51 @@ func (e *Every) ShouldLog() bool {
 	default:
 		return false
 	}
+}
+
+// IsDebugEnabled returns true if debug logging is enabled.
+func IsDebugEnabled() bool {
+	return debugEnabled
+}
+
+// SanitizeURL removes credentials from a URL string for safe logging.
+// It replaces username/password with "***" to prevent leaking sensitive data in logs.
+func SanitizeURL(rawURL string) string {
+	if rawURL == "" {
+		return ""
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		// If parsing fails, redact the entire string to be safe
+		return "[INVALID_URL]"
+	}
+
+	// If there are credentials, redact them
+	if u.User != nil {
+		// Get the original password if it exists
+		_, hasPassword := u.User.Password()
+		if hasPassword {
+			u.User = url.UserPassword("***", "***")
+		} else {
+			u.User = url.User("***")
+		}
+	}
+
+	return u.String()
+}
+
+// SanitizeURLs sanitizes multiple URLs in a string by replacing credentials.
+// This is useful for sanitizing log messages that may contain multiple URLs.
+func SanitizeURLs(message string) string {
+	// Simple heuristic: look for common URL patterns and sanitize them
+	// This handles cases like "connecting to http://user:pass@host:port/path"
+	words := strings.Fields(message)
+	for i, word := range words {
+		// Check if this looks like a URL
+		if strings.Contains(word, "://") {
+			words[i] = SanitizeURL(word)
+		}
+	}
+	return strings.Join(words, " ")
 }

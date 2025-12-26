@@ -9,9 +9,13 @@ import (
 
 // ConcurrentProcessor handles concurrent document processing using worker pools
 type ConcurrentProcessor struct {
-	maxWorkers int
-	pipeline   *ProcessingPipeline
+	maxWorkers       int
+	pipeline         *ProcessingPipeline
+	progressCallback ProgressCallback
 }
+
+// ProgressCallback is called to report processing progress
+type ProgressCallback func(docID string, completed bool, err error)
 
 // NewConcurrentProcessor creates a new concurrent processor
 func NewConcurrentProcessor(maxWorkers int) *ConcurrentProcessor {
@@ -26,6 +30,11 @@ func NewConcurrentProcessor(maxWorkers int) *ConcurrentProcessor {
 		maxWorkers: maxWorkers,
 		pipeline:   NewProcessingPipeline(),
 	}
+}
+
+// SetProgressCallback sets the progress callback function
+func (cp *ConcurrentProcessor) SetProgressCallback(callback ProgressCallback) {
+	cp.progressCallback = callback
 }
 
 // ProcessDocuments processes multiple documents concurrently
@@ -48,12 +57,21 @@ func (cp *ConcurrentProcessor) ProcessDocuments(ctx context.Context, docs []*Doc
 				defer func() { <-semaphore }()
 			case <-ctx.Done():
 				errChan <- ctx.Err()
+				if cp.progressCallback != nil {
+					cp.progressCallback(d.ID, false, ctx.Err())
+				}
 				return
 			}
 
 			// Process the document
-			if err := cp.processDocument(ctx, d); err != nil {
+			err := cp.processDocument(ctx, d)
+			if err != nil {
 				errChan <- fmt.Errorf("failed to process document %s: %w", d.ID, err)
+			}
+
+			// Report progress via callback
+			if cp.progressCallback != nil {
+				cp.progressCallback(d.ID, err == nil, err)
 			}
 		}(doc)
 	}
@@ -62,17 +80,34 @@ func (cp *ConcurrentProcessor) ProcessDocuments(ctx context.Context, docs []*Doc
 	wg.Wait()
 	close(errChan)
 
-	// Collect errors
+	// Collect all errors
 	var errs []error
 	for err := range errChan {
 		errs = append(errs, err)
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("processing failed with %d errors: %v", len(errs), errs[0])
+		// Return aggregated error with all error details
+		return &ProcessingErrors{
+			Count:  len(errs),
+			Errors: errs,
+		}
 	}
 
 	return nil
+}
+
+// ProcessingErrors aggregates multiple processing errors
+type ProcessingErrors struct {
+	Count  int
+	Errors []error
+}
+
+func (pe *ProcessingErrors) Error() string {
+	if pe.Count == 1 {
+		return fmt.Sprintf("processing failed: %v", pe.Errors[0])
+	}
+	return fmt.Sprintf("processing failed with %d errors: first error: %v", pe.Count, pe.Errors[0])
 }
 
 // processDocument processes a single document through the pipeline
@@ -107,16 +142,54 @@ func NewProcessingPipeline() *ProcessingPipeline {
 
 // Process runs a document through all pipeline stages
 func (pp *ProcessingPipeline) Process(ctx context.Context, doc *Document) error {
+	// Validate document type before processing
+	if err := validateDocumentType(doc); err != nil {
+		return fmt.Errorf("document validation failed: %w", err)
+	}
+
+	// Process each stage with timeout protection
 	for _, stage := range pp.stages {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			if err := stage.Process(ctx, doc); err != nil {
+			// Create stage-specific context with timeout
+			stageCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			err := stage.Process(stageCtx, doc)
+			cancel()
+
+			if err != nil {
 				return fmt.Errorf("stage %s failed: %w", stage.Name(), err)
 			}
 		}
 	}
+	return nil
+}
+
+// validateDocumentType ensures the document has a valid type
+func validateDocumentType(doc *Document) error {
+	if doc == nil {
+		return fmt.Errorf("document is nil")
+	}
+	if doc.ID == "" {
+		return fmt.Errorf("document ID is empty")
+	}
+
+	validTypes := map[DocType]bool{
+		Tutorial:    true,
+		HowTo:       true,
+		Reference:   true,
+		Explanation: true,
+	}
+
+	if !validTypes[doc.Type] {
+		return fmt.Errorf("invalid document type: %s (must be tutorial, howto, reference, or explanation)", doc.Type)
+	}
+
+	if doc.Content == "" {
+		return fmt.Errorf("document content is empty")
+	}
+
 	return nil
 }
 
@@ -219,8 +292,9 @@ func (s *HTMLGenerationStage) Process(ctx context.Context, doc *Document) error 
 
 // BatchProcessor handles batch processing with progress tracking
 type BatchProcessor struct {
-	processor *ConcurrentProcessor
-	progress  *ProgressTracker
+	processor        *ConcurrentProcessor
+	progress         *ProgressTracker
+	externalCallback ProgressCallback
 }
 
 // NewBatchProcessor creates a new batch processor
@@ -231,10 +305,35 @@ func NewBatchProcessor(maxWorkers int) *BatchProcessor {
 	}
 }
 
+// SetProgressCallback sets an external progress callback
+func (bp *BatchProcessor) SetProgressCallback(callback ProgressCallback) {
+	bp.externalCallback = callback
+}
+
+// GetProgressTracker returns the progress tracker for real-time monitoring
+func (bp *BatchProcessor) GetProgressTracker() *ProgressTracker {
+	return bp.progress
+}
+
 // ProcessBatch processes a batch of documents with progress tracking
 func (bp *BatchProcessor) ProcessBatch(ctx context.Context, docs []*Document) (*ProcessingResult, error) {
 	startTime := time.Now()
 	bp.progress.Start(len(docs))
+
+	// Set up progress callback to update tracker and call external callback
+	bp.processor.SetProgressCallback(func(docID string, completed bool, err error) {
+		// Update internal progress tracker
+		if completed {
+			bp.progress.IncrementCompleted()
+		} else {
+			bp.progress.IncrementFailed()
+		}
+
+		// Call external callback if set
+		if bp.externalCallback != nil {
+			bp.externalCallback(docID, completed, err)
+		}
+	})
 
 	// Process documents concurrently
 	err := bp.processor.ProcessDocuments(ctx, docs)
@@ -242,12 +341,23 @@ func (bp *BatchProcessor) ProcessBatch(ctx context.Context, docs []*Document) (*
 	duration := time.Since(startTime)
 	bp.progress.Complete()
 
+	// Extract individual errors if processing failed
+	var allErrors []error
+	if err != nil {
+		if procErr, ok := err.(*ProcessingErrors); ok {
+			allErrors = procErr.Errors
+		} else {
+			allErrors = []error{err}
+		}
+	}
+
 	result := &ProcessingResult{
 		TotalDocuments:  len(docs),
 		ProcessedCount:  bp.progress.Completed(),
 		FailedCount:     bp.progress.Failed(),
 		ProcessingTime:  duration,
 		DocumentsPerSec: float64(len(docs)) / duration.Seconds(),
+		Errors:          allErrors,
 	}
 
 	return result, err
@@ -260,6 +370,7 @@ type ProcessingResult struct {
 	FailedCount     int
 	ProcessingTime  time.Duration
 	DocumentsPerSec float64
+	Errors          []error // All errors encountered during processing
 }
 
 // ProgressTracker tracks processing progress

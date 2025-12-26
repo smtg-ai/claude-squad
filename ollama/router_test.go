@@ -70,7 +70,7 @@ func TestRoundRobinRouting(t *testing.T) {
 
 	// Route tasks and verify round-robin behavior
 	for i := 0; i < 9; i++ {
-		selected, err := router.RouteTask(context.Background(),"test task")
+		selected, err := router.RouteTask(context.Background(), "test task")
 		if err != nil {
 			t.Fatalf("failed to route task: %v", err)
 		}
@@ -102,7 +102,7 @@ func TestLeastLoadedRouting(t *testing.T) {
 	}
 
 	// Next task should go to model-3 (least loaded) or model-2 (fewer failures)
-	selected, err := router.RouteTask(context.Background(),"test task")
+	selected, err := router.RouteTask(context.Background(), "test task")
 	if err != nil {
 		t.Fatalf("failed to route task: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestTaskRouterCircuitBreaker(t *testing.T) {
 
 	// Verify model is excluded from routing
 	router.RegisterModel("healthy-model", createDummyInstance("healthy-model"))
-	selected, err := router.RouteTask(context.Background(),"test task")
+	selected, err := router.RouteTask(context.Background(), "test task")
 	if err != nil {
 		t.Fatalf("failed to route task: %v", err)
 	}
@@ -258,7 +258,7 @@ func TestAffinityRouting(t *testing.T) {
 	}
 
 	// Now route a coding task - should prefer model-coding
-	_, err := router.RouteTask(context.Background(),"implement a new function")
+	_, err := router.RouteTask(context.Background(), "implement a new function")
 	if err != nil {
 		t.Fatalf("failed to route task: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestPerformanceBasedRouting(t *testing.T) {
 	}
 
 	// Route tasks - should prefer fast-model
-	selected, err := router.RouteTask(context.Background(),"implement a feature")
+	selected, err := router.RouteTask(context.Background(), "implement a feature")
 	if err != nil {
 		t.Fatalf("failed to route task: %v", err)
 	}
@@ -389,7 +389,7 @@ func TestMetricsReset(t *testing.T) {
 func TestNoModelsRegistered(t *testing.T) {
 	router := NewTaskRouter(StrategyRoundRobin)
 
-	_, err := router.RouteTask(context.Background(),"test task")
+	_, err := router.RouteTask(context.Background(), "test task")
 	if err == nil {
 		t.Errorf("expected error when no models registered, got nil")
 	}
@@ -487,7 +487,7 @@ func TestConcurrentRouting(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		go func(id int) {
-			selectedModel, err := router.RouteTask(context.Background(),"concurrent test task")
+			selectedModel, err := router.RouteTask(context.Background(), "concurrent test task")
 			if err == nil {
 				category := router.GetTaskCategory("concurrent test task")
 				router.RecordTaskResult(selectedModel, id%3 != 0, 50*time.Millisecond, category)

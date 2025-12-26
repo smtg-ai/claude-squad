@@ -47,7 +47,7 @@ func ExampleEndpointSelection() {
 
 		// Example timeout usage
 		_ = cfg.GetConnectionTimeout() // 10 seconds by default
-		_ = cfg.GetRequestTimeout()     // 60 seconds by default
+		_ = cfg.GetRequestTimeout()    // 60 seconds by default
 	}
 }
 

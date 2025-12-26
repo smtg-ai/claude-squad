@@ -4,6 +4,7 @@ import (
 	"claude-squad/config"
 	"claude-squad/log"
 	"claude-squad/session"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -24,7 +25,8 @@ func RunDaemon(cfg *config.Config) error {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
 
-	instances, err := storage.LoadInstances()
+	ctx := context.Background()
+	instances, err := storage.LoadInstances(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to load instacnes: %w", err)
 	}
@@ -94,7 +96,7 @@ func RunDaemon(cfg *config.Config) error {
 		log.WarningLog.Printf("daemon goroutine shutdown timeout exceeded")
 	}
 
-	if err := storage.SaveInstances(instances); err != nil {
+	if err := storage.SaveInstances(ctx, instances); err != nil {
 		log.ErrorLog.Printf("failed to save instances when terminating daemon: %v", err)
 	}
 	return nil
@@ -166,8 +168,26 @@ func StopDaemon() error {
 		return fmt.Errorf("failed to find daemon process: %w", err)
 	}
 
-	if err := proc.Kill(); err != nil {
-		return fmt.Errorf("failed to stop daemon process: %w", err)
+	// Send SIGTERM for graceful shutdown
+	if err := proc.Signal(syscall.SIGTERM); err != nil {
+		return fmt.Errorf("failed to send SIGTERM to daemon process: %w", err)
+	}
+
+	// Wait for graceful shutdown with timeout
+	done := make(chan struct{})
+	go func() {
+		proc.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.InfoLog.Printf("daemon process (PID: %d) stopped gracefully", pid)
+	case <-time.After(5 * time.Second):
+		log.WarningLog.Printf("daemon graceful shutdown timeout exceeded, forcing kill")
+		if err := proc.Kill(); err != nil {
+			return fmt.Errorf("failed to force kill daemon process: %w", err)
+		}
 	}
 
 	// Clean up PID file
@@ -175,6 +195,5 @@ func StopDaemon() error {
 		return fmt.Errorf("failed to remove PID file: %w", err)
 	}
 
-	log.InfoLog.Printf("daemon process (PID: %d) stopped successfully", pid)
 	return nil
 }

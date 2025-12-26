@@ -66,7 +66,7 @@ func ExampleWildcardAndFiltering() {
 		source    string
 	}{
 		{"order.created", "production"},
-		{"order.updated", "staging"},      // filtered out
+		{"order.updated", "staging"}, // filtered out
 		{"order.completed", "production"},
 		{"payment.initiated", "production"},
 		{"payment.failed", "production"},
@@ -223,8 +223,8 @@ func ExampleEventTransformation() {
 
 	// Subscriber that enriches events
 	enricher := &EnrichmentSubscriber{
-		name:        "enricher",
-		userCache:   map[string]string{"123": "John Doe", "456": "Jane Smith"},
+		name:      "enricher",
+		userCache: map[string]string{"123": "John Doe", "456": "Jane Smith"},
 		transformFn: func(e *Event) *Event {
 			if payload, ok := e.Payload.(map[string]interface{}); ok {
 				if userID, ok := payload["user_id"].(string); ok {

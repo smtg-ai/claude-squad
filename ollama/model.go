@@ -42,6 +42,9 @@ type ModelMetadata struct {
 	// Status indicates the current operational status of the model
 	Status FrameworkModelStatus
 
+	// LastHealthCheck is the timestamp of the last health check performed
+	LastHealthCheck time.Time
+
 	// Attributes contains model-specific attributes and capabilities
 	Attributes map[string]interface{}
 }

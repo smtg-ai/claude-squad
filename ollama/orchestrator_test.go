@@ -9,15 +9,15 @@ import (
 )
 
 func TestModelOrchestrator_RegisterModel(t *testing.T) {
-	mo := NewModelOrchestrator(5*time.Second, 2)
+	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 2)
 
-	err := mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
+	err := mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 
 	// Try to register same model again
-	err = mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
+	err = mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
 	if err == nil {
 		t.Fatalf("Expected error for duplicate model registration")
 	}
@@ -29,9 +29,9 @@ func TestModelOrchestrator_RegisterModel(t *testing.T) {
 }
 
 func TestModelOrchestrator_UnregisterModel(t *testing.T) {
-	mo := NewModelOrchestrator(5*time.Second, 2)
+	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 2)
 
-	err := mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
+	err := mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Failed to register model: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestModelOrchestrator_UnregisterModel(t *testing.T) {
 }
 
 func TestModelOrchestrator_Start(t *testing.T) {
-	mo := NewModelOrchestrator(5*time.Second, 2)
+	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 2)
 
 	// Should fail with no models registered
 	err := mo.Start()
@@ -61,7 +61,7 @@ func TestModelOrchestrator_Start(t *testing.T) {
 		t.Fatalf("Expected error when starting with no models")
 	}
 
-	err = mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
+	err = mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Failed to register model: %v", err)
 	}
@@ -75,8 +75,8 @@ func TestModelOrchestrator_Start(t *testing.T) {
 }
 
 func TestModelOrchestrator_Submit(t *testing.T) {
-	mo := NewModelOrchestrator(5*time.Second, 2)
-	err := mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
+	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 2)
+	err := mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Failed to register model: %v", err)
 	}
@@ -105,12 +105,12 @@ func TestModelOrchestrator_Submit(t *testing.T) {
 }
 
 func TestModelOrchestrator_SubmitBalanced(t *testing.T) {
-	mo := NewModelOrchestrator(5*time.Second, 2)
-	err := mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
+	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 2)
+	err := mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Failed to register model: %v", err)
 	}
-	err = mo.RegisterModel("mistral", "http://localhost:11435", 10*time.Second)
+	err = mo.RegisterModel(context.Background(), "mistral", "http://localhost:11435", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Failed to register model: %v", err)
 	}
@@ -136,8 +136,8 @@ func TestModelOrchestrator_SubmitBalanced(t *testing.T) {
 }
 
 func TestModelOrchestrator_GetModelStatus(t *testing.T) {
-	mo := NewModelOrchestrator(5*time.Second, 2)
-	err := mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
+	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 2)
+	err := mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Failed to register model: %v", err)
 	}
@@ -162,8 +162,8 @@ func TestModelOrchestrator_GetModelStatus(t *testing.T) {
 }
 
 func TestModelOrchestrator_GetOrchestrationMetrics(t *testing.T) {
-	mo := NewModelOrchestrator(5*time.Second, 2)
-	err := mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
+	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 2)
+	err := mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Failed to register model: %v", err)
 	}
@@ -185,8 +185,8 @@ func TestModelOrchestrator_GetOrchestrationMetrics(t *testing.T) {
 }
 
 func TestModelOrchestrator_Shutdown(t *testing.T) {
-	mo := NewModelOrchestrator(5*time.Second, 2)
-	err := mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
+	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 2)
+	err := mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Failed to register model: %v", err)
 	}
@@ -208,9 +208,12 @@ func TestModelOrchestrator_Shutdown(t *testing.T) {
 	}
 }
 
+// TestRequestBatch verifies batch processing of multiple requests.
+// This test ensures that RequestBatch can collect multiple concurrent requests
+// and wait for all results with a timeout, which is critical for throughput optimization.
 func TestRequestBatch(t *testing.T) {
-	mo := NewModelOrchestrator(5*time.Second, 2)
-	err := mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
+	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 2)
+	err := mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Failed to register model: %v", err)
 	}
@@ -261,6 +264,12 @@ func TestOrchestratorModelPool(t *testing.T) {
 	}
 }
 
+// TestCircuitBreaker validates the circuit breaker pattern implementation.
+// This test ensures proper state transitions through the circuit breaker lifecycle:
+// 1. Closed -> Open: After threshold failures (3)
+// 2. Open -> Half-Open: After reset timeout (1s)
+// 3. Half-Open -> Closed: After successful request
+// This pattern is critical for preventing cascading failures in distributed systems.
 func TestCircuitBreaker(t *testing.T) {
 	cb := NewCircuitBreaker(3, 1*time.Second)
 
@@ -293,6 +302,12 @@ func TestCircuitBreaker(t *testing.T) {
 	}
 }
 
+// TestRateLimiter validates token bucket rate limiting implementation.
+// This test verifies the rate limiter correctly:
+// - Allows requests within initial token capacity (10 tokens)
+// - Rejects requests exceeding capacity
+// - Refills tokens over time at specified rate (2 tokens/second)
+// This is essential for API rate limiting and preventing resource exhaustion.
 func TestRateLimiter(t *testing.T) {
 	rl := NewRateLimiter(10, 2)
 
@@ -355,9 +370,16 @@ func TestWorkerPool(t *testing.T) {
 	}
 }
 
+// TestConcurrentSubmissions validates thread-safety of concurrent request submissions.
+// This test simulates real-world high-load scenarios with 20 concurrent goroutines
+// submitting balanced requests to verify that:
+// - No race conditions occur during concurrent submission
+// - All requests are processed successfully
+// - Worker pool handles concurrent load correctly
+// - Atomic counters and channel operations are thread-safe
 func TestConcurrentSubmissions(t *testing.T) {
-	mo := NewModelOrchestrator(5*time.Second, 4)
-	err := mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
+	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 4)
+	err := mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
 	if err != nil {
 		t.Fatalf("Failed to register model: %v", err)
 	}
@@ -395,8 +417,8 @@ func TestConcurrentSubmissions(t *testing.T) {
 }
 
 func BenchmarkModelOrchestrator_Submit(b *testing.B) {
-	mo := NewModelOrchestrator(5*time.Second, 4)
-	mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
+	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 4)
+	mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
 	mo.Start()
 	defer mo.Shutdown(2 * time.Second)
 
@@ -413,9 +435,9 @@ func BenchmarkModelOrchestrator_Submit(b *testing.B) {
 }
 
 func BenchmarkModelOrchestrator_SubmitBalanced(b *testing.B) {
-	mo := NewModelOrchestrator(5*time.Second, 4)
-	mo.RegisterModel("llama2", "http://localhost:11434", 10*time.Second)
-	mo.RegisterModel("mistral", "http://localhost:11435", 10*time.Second)
+	mo := NewModelOrchestrator(context.Background(), 5*time.Second, 4)
+	mo.RegisterModel(context.Background(), "llama2", "http://localhost:11434", 10*time.Second)
+	mo.RegisterModel(context.Background(), "mistral", "http://localhost:11435", 10*time.Second)
 	mo.Start()
 	defer mo.Shutdown(2 * time.Second)
 

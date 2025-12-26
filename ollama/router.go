@@ -39,16 +39,19 @@ const (
 
 // RouterMetrics tracks performance metrics for a model in the router
 type RouterMetrics struct {
-	ModelID            string
-	TotalRequests      int64
-	SuccessfulTasks    int64
-	FailedTasks        int64
-	AverageLatency     time.Duration
-	LastUsed           time.Time
-	CircuitBreakerOpen bool
-	FailureCount       int32
-	SuccessCount       int32
-	FailureWindow      time.Time
+	ModelID              string
+	TotalRequests        int64
+	SuccessfulTasks      int64
+	FailedTasks          int64
+	AverageLatency       time.Duration
+	LastUsed             time.Time
+	CircuitBreakerOpen   bool
+	FailureCount         int32
+	SuccessCount         int32
+	FailureWindow        time.Time
+	CircuitBreakerOpens  int64 // Count of times circuit opened
+	CircuitBreakerCloses int64 // Count of times circuit closed
+	CircuitBreakerHalfs  int64 // Count of times circuit entered half-open state
 }
 
 // TaskAffinityMap tracks which models are best suited for task types
@@ -83,9 +86,27 @@ type TaskRouter struct {
 	roundRobinIndex        int32
 	taskCategoryDetector   TaskCategoryDetector
 	performanceWeights     map[TaskCategory]map[string]float64
+	performanceWeightsMu   sync.RWMutex
 	maxFailureRetries      int
 	lastStrategyUpdate     time.Time
 	strategyUpdateInterval time.Duration
+}
+
+// getMetricsMap returns the metrics map, lazily initializing if nil
+// This prevents panics if TaskRouter is created without using NewTaskRouter
+func (tr *TaskRouter) getMetricsMap() map[string]*RouterMetrics {
+	if tr.metrics == nil {
+		tr.metrics = make(map[string]*RouterMetrics)
+	}
+	return tr.metrics
+}
+
+// getPerformanceWeights returns the performance weights map, lazily initializing if nil
+func (tr *TaskRouter) getPerformanceWeights() map[TaskCategory]map[string]float64 {
+	if tr.performanceWeights == nil {
+		tr.performanceWeights = make(map[TaskCategory]map[string]float64)
+	}
+	return tr.performanceWeights
 }
 
 // TaskCategoryDetector defines an interface for detecting task categories
@@ -160,7 +181,8 @@ func NewTaskRouter(strategy RoutingStrategy) *TaskRouter {
 	return tr
 }
 
-// RegisterModel adds a model instance to the router
+// RegisterModel adds a model instance to the router and initializes its metrics.
+// Returns an error if modelID is empty, instance is nil, or the model is already registered.
 func (tr *TaskRouter) RegisterModel(modelID string, instance *session.Instance) error {
 	if modelID == "" {
 		return fmt.Errorf("model ID cannot be empty")
@@ -172,21 +194,25 @@ func (tr *TaskRouter) RegisterModel(modelID string, instance *session.Instance) 
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 
-	if _, exists := tr.metrics[modelID]; exists {
+	metrics := tr.getMetricsMap()
+	if _, exists := metrics[modelID]; exists {
 		return fmt.Errorf("model %s already registered", modelID)
 	}
 
-	tr.metrics[modelID] = &RouterMetrics{
-		ModelID:            modelID,
-		TotalRequests:      0,
-		SuccessfulTasks:    0,
-		FailedTasks:        0,
-		AverageLatency:     0,
-		LastUsed:           time.Now(),
-		CircuitBreakerOpen: false,
-		FailureCount:       0,
-		SuccessCount:       0,
-		FailureWindow:      time.Now(),
+	metrics[modelID] = &RouterMetrics{
+		ModelID:              modelID,
+		TotalRequests:        0,
+		SuccessfulTasks:      0,
+		FailedTasks:          0,
+		AverageLatency:       0,
+		LastUsed:             time.Now(),
+		CircuitBreakerOpen:   false,
+		FailureCount:         0,
+		SuccessCount:         0,
+		FailureWindow:        time.Now(),
+		CircuitBreakerOpens:  0,
+		CircuitBreakerCloses: 0,
+		CircuitBreakerHalfs:  0,
 	}
 
 	tr.modelPool.AddInstance(modelID, instance)
@@ -200,11 +226,12 @@ func (tr *TaskRouter) UnregisterModel(modelID string) error {
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 
-	if _, exists := tr.metrics[modelID]; !exists {
+	metrics := tr.getMetricsMap()
+	if _, exists := metrics[modelID]; !exists {
 		return fmt.Errorf("model %s not registered", modelID)
 	}
 
-	delete(tr.metrics, modelID)
+	delete(metrics, modelID)
 	tr.modelPool.RemoveInstance(modelID)
 	tr.affinityMap.ClearModel(modelID)
 	log.InfoLog.Printf("unregistered model %s", modelID)
@@ -212,7 +239,11 @@ func (tr *TaskRouter) UnregisterModel(modelID string) error {
 	return nil
 }
 
-// RouteTask determines which model should handle the given task
+// RouteTask determines which model should handle the given task.
+// The ctx parameter is used for cancellation checking.
+// The previousContext variadic parameter can contain the previously used model ID
+// for affinity-based routing (only used with StrategyAffinity or StrategyHybrid).
+// Returns the selected model ID and an error if no models are available or context is cancelled.
 func (tr *TaskRouter) RouteTask(ctx context.Context, taskPrompt string, previousContext ...string) (string, error) {
 	// Check if context is already cancelled
 	select {
@@ -224,7 +255,8 @@ func (tr *TaskRouter) RouteTask(ctx context.Context, taskPrompt string, previous
 	tr.mu.RLock()
 	defer tr.mu.RUnlock()
 
-	if len(tr.metrics) == 0 {
+	metrics := tr.getMetricsMap()
+	if len(metrics) == 0 {
 		return "", fmt.Errorf("no models registered")
 	}
 
@@ -273,7 +305,8 @@ func (tr *TaskRouter) RecordTaskResult(modelID string, success bool, latency tim
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 
-	metrics, exists := tr.metrics[modelID]
+	metricsMap := tr.getMetricsMap()
+	metrics, exists := metricsMap[modelID]
 	if !exists {
 		return fmt.Errorf("model %s not registered", modelID)
 	}
@@ -283,8 +316,23 @@ func (tr *TaskRouter) RecordTaskResult(modelID string, success bool, latency tim
 
 	if success {
 		metrics.SuccessfulTasks++
+
+		// Check if circuit was open and should transition to closed
+		wasOpen := metrics.CircuitBreakerOpen
+
 		atomic.AddInt32(&metrics.SuccessCount, 1)
-		atomic.StoreInt32(&metrics.FailureCount, 0)
+		successCount := atomic.LoadInt32(&metrics.SuccessCount)
+
+		// Close circuit after reaching success threshold
+		if wasOpen && int(successCount) >= tr.circuitBreakerConfig.SuccessThreshold {
+			metrics.CircuitBreakerOpen = false
+			atomic.StoreInt32(&metrics.FailureCount, 0)
+			atomic.StoreInt32(&metrics.SuccessCount, 0)
+			atomic.AddInt64(&metrics.CircuitBreakerCloses, 1)
+			log.InfoLog.Printf("circuit breaker closed for model %s after %d successes",
+				modelID, successCount)
+		}
+
 		metrics.FailureWindow = time.Now()
 
 		// Update affinity for successful tasks
@@ -292,11 +340,15 @@ func (tr *TaskRouter) RecordTaskResult(modelID string, success bool, latency tim
 	} else {
 		metrics.FailedTasks++
 		atomic.AddInt32(&metrics.FailureCount, 1)
+		atomic.StoreInt32(&metrics.SuccessCount, 0) // Reset success count on failure
 
 		// Check circuit breaker
 		failureCount := atomic.LoadInt32(&metrics.FailureCount)
-		if int(failureCount) >= tr.circuitBreakerConfig.FailureThreshold {
+		wasOpen := metrics.CircuitBreakerOpen
+
+		if int(failureCount) >= tr.circuitBreakerConfig.FailureThreshold && !wasOpen {
 			metrics.CircuitBreakerOpen = true
+			atomic.AddInt64(&metrics.CircuitBreakerOpens, 1)
 			log.WarningLog.Printf("circuit breaker opened for model %s after %d failures",
 				modelID, failureCount)
 		}
@@ -330,7 +382,8 @@ func (tr *TaskRouter) HealthCheck(ctx context.Context) map[string]bool {
 	health := make(map[string]bool)
 	now := time.Now()
 
-	for modelID, metrics := range tr.metrics {
+	metricsMap := tr.getMetricsMap()
+	for modelID, metrics := range metricsMap {
 		// Check context cancellation during iteration
 		select {
 		case <-ctx.Done():
@@ -344,8 +397,10 @@ func (tr *TaskRouter) HealthCheck(ctx context.Context) map[string]bool {
 		if metrics.CircuitBreakerOpen {
 			if now.Sub(metrics.FailureWindow) > tr.circuitBreakerConfig.Timeout {
 				// Try to recover (half-open state)
-				atomic.StoreInt32(&metrics.FailureCount, 0)
-				metrics.CircuitBreakerOpen = false
+				atomic.AddInt64(&metrics.CircuitBreakerHalfs, 1)
+				log.InfoLog.Printf("circuit breaker entering half-open state for model %s", modelID)
+				// Keep circuit open but allow limited test requests
+				// The RecordTaskResult will close it after SuccessThreshold successes
 				isHealthy = true
 			} else {
 				isHealthy = false
@@ -359,11 +414,15 @@ func (tr *TaskRouter) HealthCheck(ctx context.Context) map[string]bool {
 }
 
 // GetModelMetrics returns metrics for a specific model
+// Note: Returns pointer (not value) for individual metric lookups to allow nil returns.
+// This differs from orchestrator.GetOrchestrationMetrics() which returns by value
+// for aggregate metrics. The pointer return allows error handling for missing models.
 func (tr *TaskRouter) GetModelMetrics(modelID string) (*RouterMetrics, error) {
 	tr.mu.RLock()
 	defer tr.mu.RUnlock()
 
-	metrics, exists := tr.metrics[modelID]
+	metricsMap := tr.getMetricsMap()
+	metrics, exists := metricsMap[modelID]
 	if !exists {
 		return nil, fmt.Errorf("model %s not registered", modelID)
 	}
@@ -378,8 +437,9 @@ func (tr *TaskRouter) GetAllMetrics() map[string]*RouterMetrics {
 	tr.mu.RLock()
 	defer tr.mu.RUnlock()
 
+	metricsMap := tr.getMetricsMap()
 	metricsCopy := make(map[string]*RouterMetrics)
-	for modelID, metrics := range tr.metrics {
+	for modelID, metrics := range metricsMap {
 		m := *metrics
 		metricsCopy[modelID] = &m
 	}
@@ -435,9 +495,10 @@ func (tr *TaskRouter) routeLeastLoaded(availableModels []string) (string, error)
 	var leastLoadedModel string
 	minLoad := int64(math.MaxInt64)
 
+	metricsMap := tr.getMetricsMap()
 	for _, modelID := range availableModels {
-		metrics := tr.metrics[modelID]
-		if metrics == nil {
+		metrics, exists := metricsMap[modelID]
+		if !exists || metrics == nil {
 			continue // Skip models without metrics
 		}
 		// Calculate current load based on total requests vs successful tasks
@@ -447,6 +508,10 @@ func (tr *TaskRouter) routeLeastLoaded(availableModels []string) (string, error)
 			minLoad = load
 			leastLoadedModel = modelID
 		}
+	}
+
+	if leastLoadedModel == "" {
+		return "", fmt.Errorf("no models with metrics available")
 	}
 
 	return leastLoadedModel, nil
@@ -469,17 +534,27 @@ func (tr *TaskRouter) routePerformance(availableModels []string, category TaskCa
 
 	// Recalculate performance weights if cache is stale
 	now := time.Now()
-	if now.Sub(tr.lastStrategyUpdate) > tr.strategyUpdateInterval {
-		tr.calculatePerformanceWeights()
-		tr.lastStrategyUpdate = now
+	tr.performanceWeightsMu.RLock()
+	needsUpdate := now.Sub(tr.lastStrategyUpdate) > tr.strategyUpdateInterval
+	tr.performanceWeightsMu.RUnlock()
+
+	if needsUpdate {
+		tr.performanceWeightsMu.Lock()
+		// Double-check after acquiring write lock
+		if now.Sub(tr.lastStrategyUpdate) > tr.strategyUpdateInterval {
+			tr.calculatePerformanceWeights()
+			tr.lastStrategyUpdate = now
+		}
+		tr.performanceWeightsMu.Unlock()
 	}
 
 	var bestModel string
 	bestScore := float64(-1)
 
+	metricsMap := tr.getMetricsMap()
 	for _, modelID := range availableModels {
-		metrics := tr.metrics[modelID]
-		if metrics == nil {
+		metrics, exists := metricsMap[modelID]
+		if !exists || metrics == nil {
 			continue // Skip models without metrics
 		}
 
@@ -576,15 +651,16 @@ func (tr *TaskRouter) getAvailableModels() []string {
 	var available []string
 	now := time.Now()
 
-	for modelID, metrics := range tr.metrics {
+	metricsMap := tr.getMetricsMap()
+	for modelID, metrics := range metricsMap {
 		isHealthy := true
 
 		// Circuit breaker check
 		if metrics.CircuitBreakerOpen {
 			if now.Sub(metrics.FailureWindow) > tr.circuitBreakerConfig.Timeout {
-				// Try to recover
-				atomic.StoreInt32(&metrics.FailureCount, 0)
-				metrics.CircuitBreakerOpen = false
+				// Try to recover (half-open state)
+				// The half-open state tracking is done in HealthCheck
+				// Here we just allow it to be considered available
 				isHealthy = true
 			} else {
 				isHealthy = false
@@ -600,19 +676,25 @@ func (tr *TaskRouter) getAvailableModels() []string {
 }
 
 // calculatePerformanceWeights pre-calculates performance weights for all categories
+// Note: Caller must hold performanceWeightsMu write lock
 func (tr *TaskRouter) calculatePerformanceWeights() {
-	tr.performanceWeights = make(map[TaskCategory]map[string]float64)
+	perfWeights := tr.getPerformanceWeights()
+	// Clear existing weights
+	for k := range perfWeights {
+		delete(perfWeights, k)
+	}
 
 	categories := []TaskCategory{
 		TaskCoding, TaskRefactoring, TaskTesting, TaskDocumentation, TaskDebugging, TaskCodeReview,
 	}
 
+	metricsMap := tr.getMetricsMap()
 	for _, category := range categories {
 		weights := make(map[string]float64)
 
-		for modelID := range tr.metrics {
-			metrics := tr.metrics[modelID]
-			if metrics == nil {
+		for modelID := range metricsMap {
+			metrics, exists := metricsMap[modelID]
+			if !exists || metrics == nil {
 				continue // Skip models without metrics
 			}
 
@@ -625,7 +707,7 @@ func (tr *TaskRouter) calculatePerformanceWeights() {
 			weights[modelID] = (successRate * 0.7) + (latencyScore * 0.3)
 		}
 
-		tr.performanceWeights[category] = weights
+		perfWeights[category] = weights
 	}
 }
 
@@ -804,7 +886,8 @@ func (tr *TaskRouter) ResetMetrics() {
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 
-	for _, metrics := range tr.metrics {
+	metricsMap := tr.getMetricsMap()
+	for _, metrics := range metricsMap {
 		metrics.TotalRequests = 0
 		metrics.SuccessfulTasks = 0
 		metrics.FailedTasks = 0
@@ -822,7 +905,8 @@ func (tr *TaskRouter) GetCircuitBreakerStatus(modelID string) (bool, error) {
 	tr.mu.RLock()
 	defer tr.mu.RUnlock()
 
-	metrics, exists := tr.metrics[modelID]
+	metricsMap := tr.getMetricsMap()
+	metrics, exists := metricsMap[modelID]
 	if !exists {
 		return false, fmt.Errorf("model %s not registered", modelID)
 	}
@@ -835,7 +919,8 @@ func (tr *TaskRouter) ForceHealthRecovery(modelID string) error {
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 
-	metrics, exists := tr.metrics[modelID]
+	metricsMap := tr.getMetricsMap()
+	metrics, exists := metricsMap[modelID]
 	if !exists {
 		return fmt.Errorf("model %s not registered", modelID)
 	}
@@ -847,4 +932,37 @@ func (tr *TaskRouter) ForceHealthRecovery(modelID string) error {
 	log.InfoLog.Printf("forced health recovery for model %s", modelID)
 
 	return nil
+}
+
+// SetCircuitBreakerConfig updates the circuit breaker configuration
+func (tr *TaskRouter) SetCircuitBreakerConfig(config CircuitBreakerConfig) error {
+	if config.FailureThreshold <= 0 {
+		return fmt.Errorf("failure threshold must be greater than 0")
+	}
+	if config.SuccessThreshold <= 0 {
+		return fmt.Errorf("success threshold must be greater than 0")
+	}
+	if config.Timeout <= 0 {
+		return fmt.Errorf("timeout must be greater than 0")
+	}
+	if config.HalfOpenRequests <= 0 {
+		return fmt.Errorf("half-open requests must be greater than 0")
+	}
+
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+
+	tr.circuitBreakerConfig = config
+	log.InfoLog.Printf("updated circuit breaker config: failure=%d, success=%d, timeout=%v, half-open=%d",
+		config.FailureThreshold, config.SuccessThreshold, config.Timeout, config.HalfOpenRequests)
+
+	return nil
+}
+
+// GetCircuitBreakerConfig returns the current circuit breaker configuration
+func (tr *TaskRouter) GetCircuitBreakerConfig() CircuitBreakerConfig {
+	tr.mu.RLock()
+	defer tr.mu.RUnlock()
+
+	return tr.circuitBreakerConfig
 }

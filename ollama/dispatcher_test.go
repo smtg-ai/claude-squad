@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+// TestTaskDispatcherCreation validates dispatcher creation with various configurations.
+// This table-driven test ensures proper validation of:
+// - Nil agent function rejection
+// - Worker count bounds (1-10)
+// - Configuration edge cases
+// This prevents runtime panics and ensures production-ready initialization.
 func TestTaskDispatcherCreation(t *testing.T) {
 	ctx := context.Background()
 
@@ -287,6 +293,13 @@ func TestErrorHandling(t *testing.T) {
 	}
 }
 
+// TestContextCancellation validates graceful shutdown on context cancellation.
+// This test ensures that:
+// - Workers respect context cancellation signals
+// - In-flight tasks handle cancellation properly
+// - Wait() returns promptly after cancellation
+// - No goroutine leaks occur during forced shutdown
+// This is critical for graceful service shutdown and resource cleanup.
 func TestContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 

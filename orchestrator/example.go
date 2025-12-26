@@ -47,7 +47,7 @@ func ExampleUsage() error {
 	}
 
 	// Submit a task with dependency
-	task2, err := pool.SubmitTask(&Task{
+	_, err = pool.SubmitTask(&Task{
 		Description:  "Refactor based on analysis",
 		Priority:     8,
 		Dependencies: []string{task1},
@@ -156,7 +156,7 @@ func AdvancedExample() error {
 	})
 
 	// Independent task that can run immediately
-	t6, _ := pool.SubmitTask(&Task{
+	_, _ = pool.SubmitTask(&Task{
 		Description: "Run background health checks",
 		Priority:    3,
 		Metadata:    map[string]string{"type": "monitor"},

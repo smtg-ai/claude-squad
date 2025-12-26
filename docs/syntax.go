@@ -14,8 +14,9 @@ import (
 
 // SyntaxHighlighter handles syntax highlighting for code blocks
 type SyntaxHighlighter struct {
-	formatter *html.Formatter
-	style     *chroma.Style
+	formatter       *html.Formatter
+	style           *chroma.Style
+	languageAliases map[string]string
 }
 
 // NewSyntaxHighlighter creates a new syntax highlighter
@@ -28,31 +29,63 @@ func NewSyntaxHighlighter() *SyntaxHighlighter {
 			html.TabWidth(4),              // Tab width
 		),
 		style: styles.Get("monokai"), // Use monokai style
+		languageAliases: map[string]string{
+			// Common aliases for supported languages
+			"js":         "javascript",
+			"ts":         "typescript",
+			"py":         "python",
+			"sh":         "bash",
+			"shell":      "bash",
+			"yml":        "yaml",
+			"golang":     "go",
+			"md":         "markdown",
+			"makefile":   "make",
+			"dockerfile": "docker",
+		},
 	}
 }
 
 // Highlight applies syntax highlighting to HTML content
 func (sh *SyntaxHighlighter) Highlight(content string) (string, error) {
-	// Find all code blocks in HTML
-	re := regexp.MustCompile(`(?s)<code class="language-(\w+)">(.*?)</code>`)
+	// Find code blocks with explicit language
+	reLang := regexp.MustCompile(`(?s)<code class="language-(\w+)">(.*?)</code>`)
+	// Find code blocks without explicit language
+	rePlain := regexp.MustCompile(`(?s)<code>(.*?)</code>`)
 
-	result := re.ReplaceAllStringFunc(content, func(match string) string {
-		// Extract language and code
-		matches := re.FindStringSubmatch(match)
+	// First, handle code blocks with explicit language
+	result := reLang.ReplaceAllStringFunc(content, func(match string) string {
+		matches := reLang.FindStringSubmatch(match)
 		if len(matches) != 3 {
 			return match
 		}
 
-		language := matches[1]
-		code := matches[2]
+		language := sh.normalizeLanguage(matches[1])
+		code := unescapeHTML(matches[2])
 
-		// Unescape HTML entities
-		code = unescapeHTML(code)
-
-		// Highlight the code
 		highlighted, err := sh.highlightCode(code, language)
 		if err != nil {
-			return match // Return original on error
+			// Return original on error
+			return match
+		}
+
+		return highlighted
+	})
+
+	// Then, handle plain code blocks with auto-detection
+	result = rePlain.ReplaceAllStringFunc(result, func(match string) string {
+		matches := rePlain.FindStringSubmatch(match)
+		if len(matches) != 2 {
+			return match
+		}
+
+		code := unescapeHTML(matches[1])
+
+		// Try to detect language
+		language := sh.detectLanguage(code)
+
+		highlighted, err := sh.highlightCode(code, language)
+		if err != nil {
+			return match
 		}
 
 		return highlighted
@@ -61,10 +94,57 @@ func (sh *SyntaxHighlighter) Highlight(content string) (string, error) {
 	return result, nil
 }
 
+// normalizeLanguage converts language aliases to canonical names
+func (sh *SyntaxHighlighter) normalizeLanguage(language string) string {
+	// Convert to lowercase for case-insensitive matching
+	language = strings.ToLower(language)
+
+	// Check if there's an alias
+	if canonical, exists := sh.languageAliases[language]; exists {
+		return canonical
+	}
+
+	return language
+}
+
+// detectLanguage attempts to detect the programming language from code content
+func (sh *SyntaxHighlighter) detectLanguage(code string) string {
+	code = strings.TrimSpace(code)
+
+	// Simple heuristics for common languages
+	switch {
+	case strings.HasPrefix(code, "package ") && strings.Contains(code, "func "):
+		return "go"
+	case strings.HasPrefix(code, "#!/bin/bash") || strings.HasPrefix(code, "#!/bin/sh"):
+		return "bash"
+	case strings.Contains(code, "def ") && strings.Contains(code, ":"):
+		return "python"
+	case strings.Contains(code, "function ") || strings.Contains(code, "const ") || strings.Contains(code, "let "):
+		return "javascript"
+	case strings.Contains(code, "interface ") && strings.Contains(code, "{"):
+		return "typescript"
+	case strings.HasPrefix(code, "{") && strings.Contains(code, "\""):
+		return "json"
+	case strings.Contains(code, "apiVersion:") || strings.Contains(code, "kind:"):
+		return "yaml"
+	case strings.HasPrefix(code, "# ") || strings.Contains(code, "## "):
+		return "markdown"
+	default:
+		return "" // Use fallback lexer
+	}
+}
+
 // highlightCode highlights a single code block
 func (sh *SyntaxHighlighter) highlightCode(code, language string) (string, error) {
+	// Normalize language
+	language = sh.normalizeLanguage(language)
+
 	// Get lexer for language
 	lexer := lexers.Get(language)
+	if lexer == nil {
+		// Try auto-detection
+		lexer = lexers.Analyse(code)
+	}
 	if lexer == nil {
 		lexer = lexers.Fallback // Use fallback if language not found
 	}
@@ -89,6 +169,23 @@ func (sh *SyntaxHighlighter) highlightCode(code, language string) (string, error
 // HighlightCodeBlock highlights a standalone code block
 func (sh *SyntaxHighlighter) HighlightCodeBlock(code, language string) (string, error) {
 	return sh.highlightCode(code, language)
+}
+
+// GetSupportedLanguages returns a list of commonly supported languages
+func (sh *SyntaxHighlighter) GetSupportedLanguages() []string {
+	return []string{
+		"go", "python", "javascript", "typescript",
+		"bash", "yaml", "json", "markdown",
+		"java", "c", "cpp", "rust", "ruby",
+		"php", "html", "css", "sql", "xml",
+	}
+}
+
+// IsSupportedLanguage checks if a language is explicitly supported
+func (sh *SyntaxHighlighter) IsSupportedLanguage(language string) bool {
+	language = sh.normalizeLanguage(language)
+	lexer := lexers.Get(language)
+	return lexer != nil
 }
 
 // GenerateCSS generates CSS for syntax highlighting
@@ -121,7 +218,8 @@ type CodeExtractor struct {
 // NewCodeExtractor creates a new code extractor
 func NewCodeExtractor() *CodeExtractor {
 	return &CodeExtractor{
-		codeBlockRe: regexp.MustCompile("(?s)```(\\w+)\\n(.*?)```"),
+		// Match code blocks with optional language: ```[language]\n...\n```
+		codeBlockRe: regexp.MustCompile("(?s)```(\\w*)\\n(.*?)```"),
 	}
 }
 
@@ -132,8 +230,12 @@ func (ce *CodeExtractor) Extract(content string) []CodeExample {
 	examples := make([]CodeExample, 0, len(matches))
 	for _, match := range matches {
 		if len(match) == 3 {
+			language := match[1]
+			if language == "" {
+				language = "text" // Default for code blocks without language
+			}
 			examples = append(examples, CodeExample{
-				Language: match[1],
+				Language: language,
 				Code:     strings.TrimSpace(match[2]),
 			})
 		}
@@ -272,7 +374,13 @@ func (qc *QualityCalculator) Calculate(doc *Document) float64 {
 
 // countCodeBlocks counts the number of code blocks in content
 func (qc *QualityCalculator) countCodeBlocks(content string) int {
-	return strings.Count(content, "```")
+	// Count triple backticks and divide by 2 (opening and closing)
+	// This assumes properly formatted markdown
+	count := strings.Count(content, "```")
+	if count > 0 {
+		return count / 2
+	}
+	return 0
 }
 
 // countHeadings counts the number of headings in content

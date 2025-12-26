@@ -423,7 +423,12 @@ func (rp *ResourcePool) SetCapacity(newCapacity int64) error {
 	}
 
 	// Transfer current usage to new semaphore
-	newSem.Acquire(context.Background(), int(rp.allocated))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := newSem.Acquire(ctx, int(rp.allocated)); err != nil {
+		rp.capacity = oldCapacity
+		return fmt.Errorf("failed to transfer usage to new semaphore: %w", err)
+	}
 	rp.semaphore = newSem
 
 	return nil
@@ -753,7 +758,8 @@ func DefaultResourceManagerConfig() *Config {
 	}
 }
 
-// NewResourceManager creates a new resource manager
+// NewResourceManager creates a new resource manager.
+// This function is thread-safe and can be called concurrently.
 func NewResourceManager(config *Config) (*ResourceManager, error) {
 	if config == nil {
 		config = DefaultResourceManagerConfig()
@@ -808,7 +814,9 @@ func NewResourceManager(config *Config) (*ResourceManager, error) {
 	return rm, nil
 }
 
-// Acquire acquires resources for an agent
+// Acquire acquires resources for an agent.
+// This method is thread-safe and can be called concurrently from multiple goroutines.
+// It blocks until resources are available or the context is cancelled.
 func (rm *ResourceManager) Acquire(ctx context.Context, agentID string, resourceType ResourceType, amount int64) error {
 	// Check quota first
 	if err := rm.quota.CheckQuota(agentID, resourceType, amount); err != nil {
@@ -848,7 +856,9 @@ func (rm *ResourceManager) Acquire(ctx context.Context, agentID string, resource
 	return nil
 }
 
-// TryAcquire attempts to acquire resources without blocking
+// TryAcquire attempts to acquire resources without blocking.
+// This method is thread-safe and can be called concurrently from multiple goroutines.
+// Returns true if resources were acquired, false otherwise.
 func (rm *ResourceManager) TryAcquire(agentID string, resourceType ResourceType, amount int64) (bool, error) {
 	// Check quota first
 	if err := rm.quota.CheckQuota(agentID, resourceType, amount); err != nil {
@@ -879,7 +889,8 @@ func (rm *ResourceManager) TryAcquire(agentID string, resourceType ResourceType,
 	return false, nil
 }
 
-// Release releases resources for an agent
+// Release releases resources for an agent.
+// This method is thread-safe and can be called concurrently from multiple goroutines.
 func (rm *ResourceManager) Release(agentID string, resourceType ResourceType, amount int64) error {
 	rm.mu.Lock()
 	if rm.acquisitionRecord[agentID] == nil || rm.acquisitionRecord[agentID][resourceType] < amount {
@@ -904,17 +915,20 @@ func (rm *ResourceManager) Release(agentID string, resourceType ResourceType, am
 	return nil
 }
 
-// SetQuota sets a quota for an agent
+// SetQuota sets a quota for an agent.
+// This method is thread-safe and can be called concurrently.
 func (rm *ResourceManager) SetQuota(agentID string, resourceType ResourceType, limit int64) {
 	rm.quota.SetQuota(agentID, resourceType, limit)
 }
 
-// GetUsage returns current usage for an agent
+// GetUsage returns current usage for an agent.
+// This method is thread-safe and can be called concurrently.
 func (rm *ResourceManager) GetUsage(agentID string, resourceType ResourceType) int64 {
 	return rm.quota.GetUsage(agentID, resourceType)
 }
 
-// GetPoolUsage returns pool usage percentage
+// GetPoolUsage returns pool usage percentage (0-100).
+// This method is thread-safe and can be called concurrently.
 func (rm *ResourceManager) GetPoolUsage(resourceType ResourceType) (float64, error) {
 	rm.mu.RLock()
 	pool, exists := rm.pools[resourceType]
@@ -927,7 +941,8 @@ func (rm *ResourceManager) GetPoolUsage(resourceType ResourceType) (float64, err
 	return pool.Usage(), nil
 }
 
-// GetPoolStats returns detailed pool statistics
+// GetPoolStats returns detailed pool statistics.
+// This method is thread-safe and can be called concurrently.
 func (rm *ResourceManager) GetPoolStats(resourceType ResourceType) (current, peak, acquisitions, failures int64, avgWait time.Duration, err error) {
 	rm.mu.RLock()
 	pool, exists := rm.pools[resourceType]
@@ -941,7 +956,8 @@ func (rm *ResourceManager) GetPoolStats(resourceType ResourceType) (current, pea
 	return current, peak, acquisitions, failures, avgWait, nil
 }
 
-// SetPoolCapacity dynamically adjusts pool capacity
+// SetPoolCapacity dynamically adjusts pool capacity.
+// This method is thread-safe and can be called concurrently.
 func (rm *ResourceManager) SetPoolCapacity(resourceType ResourceType, newCapacity int64) error {
 	rm.mu.RLock()
 	pool, exists := rm.pools[resourceType]
@@ -954,12 +970,14 @@ func (rm *ResourceManager) SetPoolCapacity(resourceType ResourceType, newCapacit
 	return pool.SetCapacity(newCapacity)
 }
 
-// RegisterLoadCallback registers a callback for load changes
+// RegisterLoadCallback registers a callback for load changes.
+// This method is thread-safe and can be called concurrently.
 func (rm *ResourceManager) RegisterLoadCallback(cb func(ResourceType, float64)) {
 	rm.loadMonitor.RegisterCallback(cb)
 }
 
-// Stop stops the resource manager
+// Stop stops the resource manager and all background goroutines.
+// This method is thread-safe but should only be called once.
 func (rm *ResourceManager) Stop() {
 	rm.loadMonitor.Stop()
 

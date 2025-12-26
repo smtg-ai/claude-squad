@@ -285,6 +285,7 @@ type WorkerPool struct {
 }
 
 // NewWorkerPool creates a new worker pool with the given configuration.
+// This function is thread-safe and can be called concurrently.
 func NewWorkerPool(config WorkerPoolConfig) *WorkerPool {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -329,6 +330,8 @@ func NewWorkerPool(config WorkerPoolConfig) *WorkerPool {
 }
 
 // Start begins processing jobs with the worker pool.
+// This method is thread-safe but should only be called once.
+// Returns an error if the pool is already started.
 func (wp *WorkerPool) Start() error {
 	if !wp.started.CompareAndSwap(false, true) {
 		return fmt.Errorf("worker pool already started")
@@ -353,6 +356,7 @@ func (wp *WorkerPool) Start() error {
 
 // Submit adds a job to the worker pool for execution.
 // Returns an error if the pool is shut down or the queue is full.
+// This method is thread-safe and can be called concurrently from multiple goroutines.
 func (wp *WorkerPool) Submit(ctx context.Context, job Job) error {
 	if !wp.started.Load() {
 		return fmt.Errorf("worker pool not started")
@@ -382,12 +386,14 @@ func (wp *WorkerPool) Submit(ctx context.Context, job Job) error {
 
 // Results returns a channel that receives job results.
 // The channel will be closed when the worker pool shuts down.
+// This method is thread-safe and can be called concurrently.
 func (wp *WorkerPool) Results() <-chan JobResult {
 	return wp.results
 }
 
 // Shutdown gracefully stops the worker pool, waiting for all jobs to complete.
 // It returns when all workers have finished or the context is cancelled.
+// This method is thread-safe but should only be called once.
 func (wp *WorkerPool) Shutdown(ctx context.Context) error {
 	if !wp.started.Load() {
 		return fmt.Errorf("worker pool not started")
@@ -397,15 +403,35 @@ func (wp *WorkerPool) Shutdown(ctx context.Context) error {
 	wp.cancel()
 
 	// Wait for workers to finish with timeout
-	done := make(chan struct{})
+	type shutdownResult struct {
+		timedOut bool
+		err      error
+	}
+	resultCh := make(chan shutdownResult, 1)
+
 	go func() {
-		wp.wg.Wait()
-		close(done)
+		// Get timeout from context if available
+		deadline, hasDeadline := ctx.Deadline()
+		var timeout time.Duration
+		if hasDeadline {
+			timeout = time.Until(deadline)
+		} else {
+			timeout = 30 * time.Second // Default timeout
+		}
+
+		if waitWithTimeout(&wp.wg, timeout) {
+			resultCh <- shutdownResult{timedOut: false, err: nil}
+		} else {
+			resultCh <- shutdownResult{timedOut: true, err: fmt.Errorf("shutdown timeout exceeded")}
+		}
 	}()
 
 	select {
-	case <-done:
+	case result := <-resultCh:
 		close(wp.results)
+		if result.timedOut {
+			return result.err
+		}
 		return nil
 	case <-ctx.Done():
 		close(wp.results)
@@ -414,11 +440,14 @@ func (wp *WorkerPool) Shutdown(ctx context.Context) error {
 }
 
 // Metrics returns the current pool metrics.
+// This method is thread-safe. The returned Metrics object uses atomic operations
+// for all fields, ensuring safe concurrent access.
 func (wp *WorkerPool) Metrics() *Metrics {
 	return wp.metrics
 }
 
 // Workers returns information about all workers in the pool.
+// This method is thread-safe and returns a copy of the worker slice.
 func (wp *WorkerPool) Workers() []*Worker {
 	wp.mu.RLock()
 	defer wp.mu.RUnlock()
@@ -639,6 +668,24 @@ func CollectResults(results <-chan JobResult) ([]JobResult, error) {
 	}
 
 	return allResults, combineWorkerPoolErrors(errors)
+}
+
+// waitWithTimeout waits for a WaitGroup with a timeout.
+// Returns true if all goroutines finished before timeout, false if timeout occurred.
+// This helper prevents goroutine leaks and implements production-ready shutdown patterns.
+func waitWithTimeout(wg *sync.WaitGroup, timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 // combineErrors combines multiple errors into a single error.
