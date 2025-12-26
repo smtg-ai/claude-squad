@@ -121,12 +121,28 @@ func (sb *SiteBuilder) Build(ctx context.Context, docs []*Document) error {
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("build failed with %d errors: %v", len(errs), errs[0])
+		// Build comprehensive error message
+		var errMsg strings.Builder
+		fmt.Fprintf(&errMsg, "build failed with %d error(s):", len(errs))
+		for i, err := range errs {
+			if i < 5 { // Show first 5 errors in detail
+				fmt.Fprintf(&errMsg, "\n  %d. %v", i+1, err)
+			}
+		}
+		if len(errs) > 5 {
+			fmt.Fprintf(&errMsg, "\n  ... and %d more errors", len(errs)-5)
+		}
+		return fmt.Errorf("%s", errMsg.String())
 	}
 
 	// Build index page
 	if err := sb.buildIndexPage(docs); err != nil {
 		return fmt.Errorf("failed to build index page: %w", err)
+	}
+
+	// Build type-specific index pages
+	if err := sb.buildTypeIndexPages(docs); err != nil {
+		return fmt.Errorf("failed to build type index pages: %w", err)
 	}
 
 	// Copy static assets
@@ -178,6 +194,52 @@ func (sb *SiteBuilder) buildIndexPage(docs []*Document) error {
 	filename := filepath.Join(sb.outputDir, "index.html")
 	if err := os.WriteFile(filename, []byte(html), 0644); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// buildTypeIndexPages builds index pages for each document type
+func (sb *SiteBuilder) buildTypeIndexPages(docs []*Document) error {
+	// Group documents by type
+	docsByType := make(map[DocType][]*Document)
+	for _, doc := range docs {
+		docsByType[doc.Type] = append(docsByType[doc.Type], doc)
+	}
+
+	// Build index page for each type
+	types := []DocType{Tutorial, HowTo, Reference, Explanation}
+	typeNames := map[DocType]string{
+		Tutorial:    "Tutorials",
+		HowTo:       "How-To Guides",
+		Reference:   "Reference",
+		Explanation: "Explanation",
+	}
+
+	for _, docType := range types {
+		docs := docsByType[docType]
+		if len(docs) == 0 {
+			// Skip empty types
+			continue
+		}
+
+		// Create type directory
+		typeDir := filepath.Join(sb.outputDir, string(docType))
+		if err := os.MkdirAll(typeDir, 0755); err != nil {
+			return err
+		}
+
+		// Generate HTML for type index
+		html, err := sb.templateEngine.RenderTypeIndex(docType, typeNames[docType], docs)
+		if err != nil {
+			return err
+		}
+
+		// Write to file
+		filename := filepath.Join(typeDir, "index.html")
+		if err := os.WriteFile(filename, []byte(html), 0644); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -268,7 +330,8 @@ func (te *TemplateEngine) RenderIndex(docsByType map[DocType][]*Document) (strin
 			continue
 		}
 
-		fmt.Fprintf(&sectionsBuilder, "<section class=\"doc-section %s\">\n", docType)
+		// Add ID anchor for direct navigation
+		fmt.Fprintf(&sectionsBuilder, "<section id=\"%s\" class=\"doc-section %s\">\n", docType, docType)
 		fmt.Fprintf(&sectionsBuilder, "<h2>%s</h2>\n", typeNames[docType])
 		sectionsBuilder.WriteString("<ul class=\"doc-list\">\n")
 
@@ -285,27 +348,32 @@ func (te *TemplateEngine) RenderIndex(docsByType map[DocType][]*Document) (strin
 	return html, nil
 }
 
-// Helper function to replace all occurrences
-func replaceAll(s, old, new string) string {
-	result := ""
-	for {
-		i := indexOf(s, old)
-		if i == -1 {
-			return result + s
-		}
-		result += s[:i] + new
-		s = s[i+len(old):]
+// RenderTypeIndex renders a type-specific index page
+func (te *TemplateEngine) RenderTypeIndex(docType DocType, typeName string, docs []*Document) (string, error) {
+	// Use built-in template
+	template := typeIndexHTMLTemplate
+
+	// Build document list
+	var docsBuilder strings.Builder
+	docsBuilder.WriteString("<ul class=\"doc-list\">\n")
+	for _, doc := range docs {
+		fmt.Fprintf(&docsBuilder, "<li><a href=\"%s.html\">%s</a> - %s</li>\n",
+			doc.ID, doc.Title, doc.Description)
 	}
+	docsBuilder.WriteString("</ul>\n")
+
+	// Replace placeholders
+	html := template
+	html = replaceAll(html, "{{type}}", string(docType))
+	html = replaceAll(html, "{{typeName}}", typeName)
+	html = replaceAll(html, "{{docList}}", docsBuilder.String())
+
+	return html, nil
 }
 
-// Helper function to find index of substring
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
+// Helper function to replace all occurrences (uses stdlib for efficiency)
+func replaceAll(s, old, new string) string {
+	return strings.ReplaceAll(s, old, new)
 }
 
 // HTML Templates
@@ -372,25 +440,59 @@ const indexHTMLTemplate = `<!DOCTYPE html>
     </header>
     <main class="container">
         <div class="diataxis-grid">
-            <div class="quadrant tutorial">
+            <a href="#tutorial" class="quadrant tutorial">
                 <h2>Tutorials</h2>
                 <p>Learning-oriented guides to help you get started</p>
-            </div>
-            <div class="quadrant howto">
+            </a>
+            <a href="#howto" class="quadrant howto">
                 <h2>How-To Guides</h2>
                 <p>Task-oriented guides to solve specific problems</p>
-            </div>
-            <div class="quadrant explanation">
+            </a>
+            <a href="#explanation" class="quadrant explanation">
                 <h2>Explanation</h2>
                 <p>Understanding-oriented discussions of key topics</p>
-            </div>
-            <div class="quadrant reference">
+            </a>
+            <a href="#reference" class="quadrant reference">
                 <h2>Reference</h2>
                 <p>Information-oriented technical descriptions</p>
-            </div>
+            </a>
         </div>
         <div class="documentation">
             {{sections}}
+        </div>
+    </main>
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 Claude Squad - Diataxis Documentation Framework</p>
+        </div>
+    </footer>
+</body>
+</html>`
+
+const typeIndexHTMLTemplate = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{typeName}} | Claude Squad Documentation</title>
+    <link rel="stylesheet" href="../assets/main.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1><a href="../index.html">Claude Squad Docs</a></h1>
+            <nav>
+                <a href="../tutorial/index.html">Tutorials</a>
+                <a href="../howto/index.html">How-To</a>
+                <a href="../reference/index.html">Reference</a>
+                <a href="../explanation/index.html">Explanation</a>
+            </nav>
+        </div>
+    </header>
+    <main class="container">
+        <div class="doc-section {{type}}">
+            <h1>{{typeName}}</h1>
+            {{docList}}
         </div>
     </main>
     <footer>
@@ -438,9 +540,17 @@ main { padding: 40px 0; min-height: calc(100vh - 200px); }
 }
 
 .quadrant {
+    display: block;
     padding: 30px;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    text-decoration: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.quadrant:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
 .quadrant.tutorial { background: #e3f2fd; border-left: 4px solid #2196f3; }

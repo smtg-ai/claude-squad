@@ -12,16 +12,323 @@ This is a **hyper-advanced** implementation of the Diataxis documentation framew
 - 📊 **Real-time metrics** and analytics
 - 🌐 **Interactive web frontend** built with Next.js
 
+## Diataxis Documentation Types
+
+The Diataxis framework organizes documentation into **four distinct types**, each serving a different user need:
+
+### 1. Tutorial (Learning-Oriented)
+
+**Purpose**: Guide newcomers through their first steps with hands-on learning.
+
+**Characteristics**:
+- Step-by-step instructions that guarantee success
+- Learning by doing - practical, concrete examples
+- Minimum explanation - focus on achieving a goal
+- Repeatable outcomes for building confidence
+
+**When to use**: Onboarding new users, teaching fundamental concepts, building foundational skills.
+
+**Example topics**: "Your First Agent", "Building a Simple Squad", "Getting Started with Claude Code"
+
+### 2. How-To Guide (Task-Oriented)
+
+**Purpose**: Help users solve specific problems or accomplish particular tasks.
+
+**Characteristics**:
+- Focused on achieving a practical goal
+- Assumes existing knowledge
+- Provides steps to solve a real-world problem
+- Direct and to-the-point
+
+**When to use**: Solving common problems, accomplishing specific tasks, addressing user questions like "How do I...?"
+
+**Example topics**: "How to Deploy a Squad to Production", "How to Debug Agent Errors", "How to Optimize Performance"
+
+### 3. Reference (Information-Oriented)
+
+**Purpose**: Provide technical descriptions of the system's machinery and operation.
+
+**Characteristics**:
+- Accurate, comprehensive technical information
+- Structured like an encyclopedia or dictionary
+- Describes the system as it is
+- Austere and to-the-point
+
+**When to use**: API documentation, configuration options, command-line flags, data structures.
+
+**Example topics**: "Agent API Reference", "Configuration File Schema", "CLI Command Reference"
+
+### 4. Explanation (Understanding-Oriented)
+
+**Purpose**: Clarify and illuminate topics to deepen understanding.
+
+**Characteristics**:
+- Discusses topics from a higher perspective
+- Explains design decisions, alternatives, and context
+- Connects concepts and provides background
+- More discursive in tone
+
+**When to use**: Architecture decisions, design patterns, conceptual overviews, "why" questions.
+
+**Example topics**: "Why Use the Squad Pattern?", "Understanding Agent Concurrency", "Design Philosophy"
+
+---
+
+## Creating Documents
+
+### Document Structure
+
+All Diataxis documents follow this structure:
+
+```markdown
+---
+id: unique-doc-id
+type: tutorial  # or: howto, reference, explanation
+title: Document Title
+description: Brief description
+version: 1.0
+tags:
+  - relevant-tag
+author: Your Name
+---
+
+# Document Title
+
+Content here...
+```
+
+### Creating a Tutorial
+
+```bash
+# Create tutorials/getting-started.md
+cat > documentation/tutorials/getting-started.md << 'EOF'
+---
+id: getting-started
+type: tutorial
+title: Getting Started with Claude Squad
+description: Your first steps with the Claude Squad framework
+version: 1.0
+tags:
+  - beginner
+  - tutorial
+  - getting-started
+author: Your Team
+---
+
+# Getting Started with Claude Squad
+
+## What You'll Learn
+
+By the end of this tutorial, you'll have created your first agent squad.
+
+## Prerequisites
+
+- Go 1.21 or later installed
+- Basic command-line knowledge
+
+## Step 1: Install Claude Squad
+
+First, install the CLI tool:
+
+```bash
+go install github.com/your-org/claude-squad@latest
+```
+
+## Step 2: Initialize Your Project
+
+Create a new project directory:
+
+```bash
+mkdir my-first-squad
+cd my-first-squad
+claude-squad init
+```
+
+## Step 3: Create Your First Agent
+
+[Continue with clear, numbered steps...]
+
+## Next Steps
+
+Now that you've created your first agent, try:
+- [Building a Multi-Agent Squad](multi-agent-tutorial.md)
+- [Understanding Agent Communication](agent-communication-explanation.md)
+EOF
+```
+
+### Creating a How-To Guide
+
+```bash
+# Create howtos/debug-agent-errors.md
+cat > documentation/howtos/debug-agent-errors.md << 'EOF'
+---
+id: debug-agent-errors
+type: howto
+title: How to Debug Agent Errors
+description: Troubleshoot and fix common agent errors
+version: 1.0
+tags:
+  - debugging
+  - troubleshooting
+  - errors
+related:
+  - agent-api-reference
+  - logging-guide
+---
+
+# How to Debug Agent Errors
+
+## Problem
+
+Your agent is failing with cryptic error messages.
+
+## Solution
+
+### Check Agent Logs
+
+First, enable debug logging:
+
+```bash
+export CLAUDE_SQUAD_LOG_LEVEL=debug
+claude-squad run
+```
+
+### Verify Agent Configuration
+
+Check that your agent config is valid:
+
+```bash
+claude-squad validate config.yaml
+```
+
+### Common Error Patterns
+
+**Error: "context deadline exceeded"**
+
+This means the agent timed out. Increase the timeout:
+
+```yaml
+agent:
+  timeout: 60s  # Increase from default
+```
+
+[Continue with more specific solutions...]
+EOF
+```
+
+### Creating a Reference Document
+
+```bash
+# Create reference/agent-api.md
+cat > documentation/reference/agent-api.md << 'EOF'
+---
+id: agent-api-reference
+type: reference
+title: Agent API Reference
+description: Complete API reference for the Agent interface
+version: 1.0
+tags:
+  - api
+  - reference
+  - agent
+---
+
+# Agent API Reference
+
+## Agent Interface
+
+```go
+type Agent interface {
+    Execute(ctx context.Context, input *Input) (*Output, error)
+    Name() string
+    Version() string
+}
+```
+
+### Execute
+
+Executes the agent with the given input.
+
+**Parameters:**
+- `ctx` (context.Context): Execution context with timeout/cancellation
+- `input` (*Input): Agent input parameters
+
+**Returns:**
+- `*Output`: Execution results
+- `error`: Error if execution fails
+
+**Example:**
+
+```go
+ctx := context.WithTimeout(context.Background(), 30*time.Second)
+output, err := agent.Execute(ctx, &Input{Task: "analyze code"})
+```
+
+[Continue with complete API documentation...]
+EOF
+```
+
+### Creating an Explanation Document
+
+```bash
+# Create explanations/squad-pattern.md
+cat > documentation/explanations/squad-pattern.md << 'EOF'
+---
+id: squad-pattern-explanation
+type: explanation
+title: Understanding the Squad Pattern
+description: Design philosophy and rationale behind the Squad pattern
+version: 1.0
+tags:
+  - architecture
+  - design
+  - concepts
+---
+
+# Understanding the Squad Pattern
+
+## What is a Squad?
+
+A squad is a coordinated group of specialized agents working together to solve complex problems.
+
+## Why Use Squads?
+
+### Specialization Benefits
+
+Rather than creating one monolithic agent that tries to do everything, the squad pattern enables:
+
+1. **Domain Expertise**: Each agent focuses on one area (e.g., code review, testing, documentation)
+2. **Parallel Execution**: Multiple agents work concurrently, reducing total time
+3. **Maintainability**: Easier to update/replace individual agents
+4. **Resilience**: Failure of one agent doesn't crash the entire system
+
+### The 10-Agent Concurrency Model
+
+Claude Code supports up to 10 concurrent agents, which aligns with:
+
+- **Comprehensive Coverage**: 10 specialized domains cover most use cases
+- **Resource Efficiency**: Balances parallelism with system constraints
+- **Cognitive Load**: Manageable number of agents for orchestration
+
+## When NOT to Use Squads
+
+Squads add complexity. Use a single agent when:
+- Task is simple and focused
+- No parallelization benefit
+- Coordination overhead exceeds gains
+
+[Continue with deeper conceptual discussion...]
+EOF
+```
+
+---
+
 ## Architecture
 
 ### Core Components
 
 #### 1. Diataxis Framework (`diataxis.go`)
-The main framework managing all four documentation types:
-- **Tutorials**: Learning-oriented, step-by-step guides
-- **How-To Guides**: Task-oriented problem-solving
-- **Reference**: Technical information and API docs
-- **Explanation**: Understanding-oriented discussions
+The main framework managing all four documentation types with specialized processing for each.
 
 #### 2. Concurrent Processor (`processor.go`)
 High-performance document processing with:

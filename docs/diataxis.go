@@ -7,13 +7,34 @@ import (
 	"time"
 )
 
-// DocType represents the four Diataxis documentation types
+// DocType represents the four Diataxis documentation types.
+// The Diataxis framework categorizes documentation into four distinct types,
+// each serving a different purpose and audience need:
+// - Tutorial: Learning-oriented, takes the reader through a series of steps
+// - HowTo: Goal-oriented, guides the reader through solving a specific problem
+// - Reference: Information-oriented, technical descriptions of how it works
+// - Explanation: Understanding-oriented, clarifies and illuminates a particular topic
 type DocType string
 
 const (
-	Tutorial    DocType = "tutorial"
-	HowTo       DocType = "howto"
-	Reference   DocType = "reference"
+	// Tutorial represents learning-oriented documentation that takes the reader
+	// through a series of steps to complete a project. Tutorials are lessons
+	// that teach by doing, helping newcomers get started.
+	Tutorial DocType = "tutorial"
+
+	// HowTo represents goal-oriented documentation that guides the reader through
+	// solving a specific real-world problem. How-to guides are directions that
+	// take the reader through steps to achieve a specific end.
+	HowTo DocType = "howto"
+
+	// Reference represents information-oriented documentation that provides
+	// technical descriptions of the machinery and how to operate it.
+	// Reference guides are technical descriptions of APIs, functions, and features.
+	Reference DocType = "reference"
+
+	// Explanation represents understanding-oriented documentation that clarifies
+	// and illuminates a particular topic. Explanations are discussions that
+	// deepen the reader's understanding of a subject.
 	Explanation DocType = "explanation"
 )
 
@@ -225,6 +246,74 @@ func (doc *Document) Validate() []ValidationIssue {
 	}
 
 	return issues
+}
+
+// NewTutorial creates a new Tutorial document with default settings.
+// Tutorials are learning-oriented and take the reader through a series of steps.
+func NewTutorial(id, title string) *Document {
+	return &Document{
+		ID:               id,
+		Type:             Tutorial,
+		Title:            title,
+		Metadata:         make(map[string]interface{}),
+		Tags:             make([]string, 0),
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+		ValidationStatus: ValidationPending,
+		RelatedDocs:      make([]string, 0),
+		Prerequisites:    make([]string, 0),
+	}
+}
+
+// NewHowTo creates a new HowTo document with default settings.
+// HowTo guides are goal-oriented and help readers solve specific problems.
+func NewHowTo(id, title string) *Document {
+	return &Document{
+		ID:               id,
+		Type:             HowTo,
+		Title:            title,
+		Metadata:         make(map[string]interface{}),
+		Tags:             make([]string, 0),
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+		ValidationStatus: ValidationPending,
+		RelatedDocs:      make([]string, 0),
+		Prerequisites:    make([]string, 0),
+	}
+}
+
+// NewReference creates a new Reference document with default settings.
+// Reference guides are information-oriented technical descriptions.
+func NewReference(id, title string) *Document {
+	return &Document{
+		ID:               id,
+		Type:             Reference,
+		Title:            title,
+		Metadata:         make(map[string]interface{}),
+		Tags:             make([]string, 0),
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+		ValidationStatus: ValidationPending,
+		RelatedDocs:      make([]string, 0),
+		Prerequisites:    make([]string, 0),
+	}
+}
+
+// NewExplanation creates a new Explanation document with default settings.
+// Explanations are understanding-oriented and deepen comprehension of topics.
+func NewExplanation(id, title string) *Document {
+	return &Document{
+		ID:               id,
+		Type:             Explanation,
+		Title:            title,
+		Metadata:         make(map[string]interface{}),
+		Tags:             make([]string, 0),
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+		ValidationStatus: ValidationPending,
+		RelatedDocs:      make([]string, 0),
+		Prerequisites:    make([]string, 0),
+	}
 }
 
 // GetStatistics returns statistics about the documentation

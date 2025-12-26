@@ -59,7 +59,20 @@ func docsGenerateCommand() *cobra.Command {
 		Short: "Generate documentation site from markdown files",
 		Long: `Process all markdown files and generate a complete documentation site
 using the Diataxis framework with concurrent processing.`,
+		Example: `  # Generate docs from default input directory to default output
+  claude-squad docs generate
+
+  # Specify custom input and output directories
+  claude-squad docs generate -i ./my-docs -o ./site
+
+  # Use 20 concurrent workers for faster processing
+  claude-squad docs generate -w 20 -i ./docs -o ./public`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Validate input directory exists
+			if _, err := os.Stat(inputDir); os.IsNotExist(err) {
+				return fmt.Errorf("input directory '%s' does not exist\n\nTo create documentation structure, run:\n  claude-squad docs init -o %s", inputDir, inputDir)
+			}
+
 			config := &docs.FrameworkConfig{
 				MaxConcurrentWorkers:     workers,
 				EnableSyntaxHighlight:    true,
@@ -73,13 +86,13 @@ using the Diataxis framework with concurrent processing.`,
 
 			// Load documents from input directory
 			if err := loadDocumentsFromDirectory(framework, inputDir); err != nil {
-				return fmt.Errorf("failed to load documents: %w", err)
+				return fmt.Errorf("failed to load documents from '%s': %w", inputDir, err)
 			}
 
 			// Generate documentation
 			ctx := context.Background()
 			if err := framework.GenerateDocumentation(ctx); err != nil {
-				return fmt.Errorf("failed to generate documentation: %w", err)
+				return fmt.Errorf("failed to generate documentation: %w\n\nCheck that your documents have valid frontmatter and content", err)
 			}
 
 			fmt.Printf("✓ Documentation generated successfully at %s\n", outputDir)
@@ -103,7 +116,20 @@ func docsValidateCommand() *cobra.Command {
 		Use:   "validate",
 		Short: "Validate documentation files",
 		Long:  `Validate all documentation files for correctness, structure, and Diataxis compliance.`,
+		Example: `  # Validate all documentation files
+  claude-squad docs validate
+
+  # Validate with JSON output for CI/CD integration
+  claude-squad docs validate --json
+
+  # Validate docs in a specific directory
+  claude-squad docs validate -i ./my-docs`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Validate input directory exists
+			if _, err := os.Stat(inputDir); os.IsNotExist(err) {
+				return fmt.Errorf("input directory '%s' does not exist\n\nTo create documentation structure, run:\n  claude-squad docs init -o %s", inputDir, inputDir)
+			}
+
 			config := &docs.FrameworkConfig{
 				MaxConcurrentWorkers:     10,
 				EnableCrossRefValidation: true,
@@ -113,14 +139,14 @@ func docsValidateCommand() *cobra.Command {
 
 			// Load documents
 			if err := loadDocumentsFromDirectory(framework, inputDir); err != nil {
-				return fmt.Errorf("failed to load documents: %w", err)
+				return fmt.Errorf("failed to load documents from '%s': %w", inputDir, err)
 			}
 
 			// Validate
 			ctx := context.Background()
 			report, err := framework.ValidateAllDocuments(ctx)
 			if err != nil {
-				return fmt.Errorf("validation failed: %w", err)
+				return fmt.Errorf("validation error: %w\n\nThis may indicate malformed markdown or invalid frontmatter", err)
 			}
 
 			// Output results
@@ -134,7 +160,7 @@ func docsValidateCommand() *cobra.Command {
 
 			// Exit with error code if validation failed
 			if report.FailedCount > 0 {
-				return fmt.Errorf("validation failed: %d documents have errors", report.FailedCount)
+				return fmt.Errorf("validation failed: %d document(s) have errors\n\nReview the report above for details. Common issues:\n  - Missing required frontmatter fields (id, type, title)\n  - Invalid document type (must be: tutorial, howto, reference, explanation)\n  - Broken cross-references", report.FailedCount)
 			}
 
 			fmt.Printf("\n✓ All documents validated successfully\n")
@@ -156,14 +182,30 @@ func docsInitCommand() *cobra.Command {
 		Use:   "init",
 		Short: "Initialize Diataxis documentation structure",
 		Long:  `Create a new documentation structure with example files for all four Diataxis types.`,
+		Example: `  # Initialize docs in default ./documentation directory
+  claude-squad docs init
+
+  # Initialize in a custom directory
+  claude-squad docs init -o ./my-docs
+
+  # Initialize and then generate
+  claude-squad docs init && claude-squad docs generate`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Check if output directory already exists and has content
+			if stat, err := os.Stat(outputDir); err == nil && stat.IsDir() {
+				entries, err := os.ReadDir(outputDir)
+				if err == nil && len(entries) > 0 {
+					return fmt.Errorf("directory '%s' already exists and is not empty\n\nOptions:\n  1. Use a different directory: claude-squad docs init -o ./new-docs\n  2. Remove existing directory: rm -rf %s\n  3. Manually backup and clear the directory", outputDir, outputDir)
+				}
+			}
+
 			// Create directory structure
 			types := []string{"tutorials", "howto", "reference", "explanation"}
 
 			for _, docType := range types {
 				dir := filepath.Join(outputDir, docType)
 				if err := os.MkdirAll(dir, 0755); err != nil {
-					return fmt.Errorf("failed to create directory %s: %w", dir, err)
+					return fmt.Errorf("failed to create directory '%s': %w\n\nCheck that you have write permissions to this location", dir, err)
 				}
 
 				// Create example file
@@ -171,7 +213,7 @@ func docsInitCommand() *cobra.Command {
 				example := getExampleContent(docType)
 
 				if err := os.WriteFile(examplePath, []byte(example), 0644); err != nil {
-					return fmt.Errorf("failed to write example file: %w", err)
+					return fmt.Errorf("failed to write example file '%s': %w\n\nCheck file permissions and available disk space", examplePath, err)
 				}
 
 				fmt.Printf("✓ Created %s\n", examplePath)
@@ -181,7 +223,7 @@ func docsInitCommand() *cobra.Command {
 			readmePath := filepath.Join(outputDir, "README.md")
 			readme := getDiataxisREADME()
 			if err := os.WriteFile(readmePath, []byte(readme), 0644); err != nil {
-				return fmt.Errorf("failed to write README: %w", err)
+				return fmt.Errorf("failed to write README to '%s': %w\n\nCheck file permissions", readmePath, err)
 			}
 
 			fmt.Printf("\n✓ Documentation structure initialized at %s\n", outputDir)
@@ -207,7 +249,20 @@ func docsStatsCommand() *cobra.Command {
 		Use:   "stats",
 		Short: "Show documentation statistics",
 		Long:  `Display statistics about the documentation including counts by type and quality scores.`,
+		Example: `  # Show stats for default documentation directory
+  claude-squad docs stats
+
+  # Show stats for custom directory
+  claude-squad docs stats -i ./my-docs
+
+  # Combine with other commands for workflow
+  claude-squad docs validate && claude-squad docs stats`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Validate input directory exists
+			if _, err := os.Stat(inputDir); os.IsNotExist(err) {
+				return fmt.Errorf("input directory '%s' does not exist\n\nTo create documentation structure, run:\n  claude-squad docs init -o %s", inputDir, inputDir)
+			}
+
 			config := &docs.FrameworkConfig{
 				MaxConcurrentWorkers: 10,
 			}
@@ -216,13 +271,13 @@ func docsStatsCommand() *cobra.Command {
 
 			// Load documents
 			if err := loadDocumentsFromDirectory(framework, inputDir); err != nil {
-				return fmt.Errorf("failed to load documents: %w", err)
+				return fmt.Errorf("failed to load documents from '%s': %w", inputDir, err)
 			}
 
 			// Process documents to calculate quality scores
 			ctx := context.Background()
 			if err := framework.ProcessAllDocuments(ctx); err != nil {
-				return fmt.Errorf("failed to process documents: %w", err)
+				return fmt.Errorf("failed to process documents: %w\n\nCheck that documents have valid structure", err)
 			}
 
 			// Get statistics
@@ -308,10 +363,12 @@ func runDocsGeneration(inputDir, outputDir string, validateOnly, statsOnly bool)
 }
 
 func loadDocumentsFromDirectory(framework *docs.DiataxisFramework, dir string) error {
+	fileCount := 0
+
 	// Walk through directory and load markdown files
-	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			return fmt.Errorf("error accessing path '%s': %w", path, err)
 		}
 
 		// Skip non-markdown files
@@ -319,17 +376,19 @@ func loadDocumentsFromDirectory(framework *docs.DiataxisFramework, dir string) e
 			return nil
 		}
 
+		fileCount++
+
 		// Read file
 		content, err := os.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("failed to read %s: %w", path, err)
+			return fmt.Errorf("failed to read '%s': %w\n\nCheck file permissions", path, err)
 		}
 
 		// Parse frontmatter
 		parser := docs.NewMarkdownParser()
 		metadata, body, err := parser.ParseWithFrontmatter(string(content))
 		if err != nil {
-			return fmt.Errorf("failed to parse %s: %w", path, err)
+			return fmt.Errorf("failed to parse frontmatter in '%s': %w\n\nEnsure file has valid YAML frontmatter between '---' markers", path, err)
 		}
 
 		// Create document
@@ -349,8 +408,22 @@ func loadDocumentsFromDirectory(framework *docs.DiataxisFramework, dir string) e
 		}
 
 		// Add to framework
-		return framework.AddDocument(doc)
+		if err := framework.AddDocument(doc); err != nil {
+			return fmt.Errorf("failed to add document '%s': %w", path, err)
+		}
+
+		return nil
 	})
+
+	if err != nil {
+		return err
+	}
+
+	if fileCount == 0 {
+		return fmt.Errorf("no markdown (.md) files found in '%s'\n\nMake sure your documentation files have the .md extension", dir)
+	}
+
+	return nil
 }
 
 func getDocID(metadata map[string]interface{}, path string) string {
