@@ -1,0 +1,29 @@
+{
+  "version": "1.0.0",
+  "report": {
+    "workload_name": "sha256_hash_chain_1000",
+    "runs_ns": [
+      125370,
+      122742,
+      124084,
+      120462,
+      118953,
+      120920,
+      125735,
+      138831,
+      121536,
+      117914
+    ],
+    "mean_ns": 123654,
+    "min_ns": 117914,
+    "max_ns": 138831,
+    "stddev_ns": 5619.873042160297,
+    "environment": {
+      "goos": "linux",
+      "goarch": "amd64",
+      "go_version": "go1.24.7",
+      "num_cpu": 16
+    },
+    "timestamp": 1766796029973960819
+  }
+}

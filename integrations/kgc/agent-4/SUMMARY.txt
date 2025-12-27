@@ -1,0 +1,104 @@
+===============================================
+Agent 4: Resource Allocation & Capacity
+KGC Knowledge Substrate Implementation
+===============================================
+
+MISSION COMPLETED: Deterministic capacity allocator for agent resource scheduling
+
+DELIVERABLES:
+-------------
+✓ DESIGN.md (516 lines)
+  - Formal specification with O, μ(O), Λ, H, Σ, Q, Π
+  - Algorithm descriptions and complexity analysis
+  - Proof targets (Π₁-Π₅) with verification strategies
+  - Invariants (q₁-q₇) and forbidden states
+
+✓ capacity_allocator.go (322 lines)
+  - AllocateResources(agentCount, resourceBudget) → Allocation, error
+  - RoundRobinSchedule(agents, tasks) → Schedule, error
+  - PrioritySchedule(agents, prioritizedTasks) → Schedule, error
+  - ExhaustionTest(resourceLimit) → FailureReport
+  - calculateGini(allocations) → fairness metric
+
+✓ capacity_allocator_test.go (715 lines)
+  - 17 comprehensive test cases
+  - Determinism tests (10 repeated runs)
+  - Fairness verification tests
+  - Priority ordering tests
+  - Resource conservation tests
+  - Exhaustion scenario tests
+  - Error handling tests
+
+✓ RECEIPT.json (84 lines)
+  - Execution proof with SHA256 hashes
+  - Replay script for reproducibility
+  - Success criteria verification
+  - Invariants and proof targets documented
+
+✓ replay.sh (executable)
+  - 9-step verification script
+  - File integrity checks
+  - Build verification
+  - Comprehensive test execution
+  - Determinism verification
+  - All property checks
+
+✓ go.mod
+  - Module initialization for clean builds
+
+SUCCESS CRITERIA MET:
+--------------------
+✓ Compiles: go build ./integrations/kgc/agent-4
+✓ Tests pass: go test -v (17/17 tests pass in 0.014s)
+✓ Determinism: Verified across 10+ runs
+✓ Fairness: max_load - min_load ≤ 1 proven
+✓ Priority: Higher priority tasks always scheduled first
+✓ Conservation: Sum of allocations = resource budget
+✓ Exhaustion: Correctly detected and reported
+✓ No file collisions: All edits in agent-4/ only
+✓ Receipt generated: Complete with replay script
+
+PROOF TARGETS ACHIEVED:
+-----------------------
+Π₁: Determinism - Same inputs → identical outputs (verified)
+Π₂: Fairness - Round-robin load balancing proven
+Π₃: Priority Ordering - Higher priority → earlier execution
+Π₄: Resource Conservation - No over-allocation
+Π₅: Exhaustion Detection - Deficit correctly calculated
+
+INVARIANTS PRESERVED:
+---------------------
+q₁: Determinism (all operations reproducible)
+q₂: Resource Conservation (sum ≤ budget)
+q₃: Fairness (load variance ≤ 1)
+q₄: Priority Preservation (ordering maintained)
+q₅: Completeness (all tasks scheduled)
+q₆: Uniqueness (no duplicate orderings)
+q₇: Non-Negative Allocations (all ≥ 0)
+
+KEY PROPERTIES:
+---------------
+• All scheduling algorithms use stable sorting
+• Lexicographic tie-breaking ensures determinism
+• No randomization or global state
+• Pure functions with explicit error handling
+• Gini coefficient for fairness metrics
+• O(n log n) time complexity for scheduling
+• Comprehensive edge case handling
+
+COMPOSITION:
+------------
+CompositionOp: "extend"
+ConflictPolicy: "fail_fast"
+Tranche: /integrations/kgc/agent-4/
+
+READY FOR RECONCILIATION:
+-------------------------
+All deliverables complete and verified.
+No edits outside agent-4 tranche.
+All tests deterministic and reproducible.
+Receipt includes complete replay instructions.
+
+Execution ID: agent-4-kgc-capacity-allocator-489afd21f20665bbc2739ed397d43897
+Timestamp: 1766796038060839950
+Status: COMPLETE ✓

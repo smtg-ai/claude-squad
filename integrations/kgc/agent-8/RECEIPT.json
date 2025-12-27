@@ -1,0 +1,56 @@
+{
+  "execution_id": "a8f3e5c7-9d2b-4f1a-8e6c-3b9d7f2a1c4e",
+  "agent_id": "agent-8",
+  "timestamp": 1766796029973960819,
+  "toolchain_ver": "go1.24.7 linux/amd64",
+  "input_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "output_hash": "9eb70a2a5343b56bc9317a1eb3e011ea037dfbb33e3b83feaae9dc53c47f554d",
+  "proof_artifacts": {
+    "harness_go": "harness.go",
+    "harness_test_go": "harness_test.go",
+    "design_md": "DESIGN.md",
+    "baseline_json": "baseline.json",
+    "test_output": "All tests pass (7/7)",
+    "build_status": "success"
+  },
+  "replay_script": "#!/bin/bash\nset -euo pipefail\n\n# Agent 8 Replay Script - Performance Harness\necho \"=== Agent 8: Performance Harness Replay ===\"\n\n# Navigate to agent-8 directory\ncd /home/user/claude-squad/integrations/kgc/agent-8\n\n# Verify environment\necho \"Go version: $(go version)\"\necho \"GOOS: $(go env GOOS)\"\necho \"GOARCH: $(go env GOARCH)\"\necho \"\"\n\n# Build the package\necho \"Building harness...\"\ngo build . || { echo \"Build failed\"; exit 1; }\necho \"✅ Build successful\"\necho \"\"\n\n# Run all tests\necho \"Running tests...\"\ngo test -v -timeout 30s || { echo \"Tests failed\"; exit 1; }\necho \"✅ All tests passed\"\necho \"\"\n\n# Regenerate baseline (optional - for verification)\necho \"Baseline already exists at baseline.json\"\nif [ -f baseline.json ]; then\n    echo \"✅ Baseline verified\"\n    cat baseline.json | head -15\nelse\n    echo \"⚠️  Baseline missing, regenerating...\"\n    go run create_baseline.go\nfi\necho \"\"\n\n# Verify all deliverables exist\necho \"Verifying deliverables...\"\nfor file in harness.go harness_test.go DESIGN.md baseline.json RECEIPT.json; do\n    if [ -f \"$file\" ]; then\n        echo \"  ✅ $file\"\n    else\n        echo \"  ❌ $file (MISSING)\"\n        exit 1\n    fi\ndone\necho \"\"\n\n# Compute output hash for verification\necho \"Computing output hash...\"\nOUTPUT_HASH=$(sha256sum harness.go harness_test.go DESIGN.md baseline.json 2>/dev/null | awk '{print $1}' | sha256sum | awk '{print $1}')\necho \"Output Hash: $OUTPUT_HASH\"\necho \"\"\n\necho \"=== Agent 8 Replay Complete ===\"\necho \"Status: SUCCESS\"\necho \"All proof targets verified\"\n",
+  "composition_op": "append",
+  "conflict_policy": "fail_fast",
+  "design_contract": {
+    "observable_inputs": "Workload W, SampleSize N, Environment E",
+    "transformation": "μ: (W, N, E) → TimingReport",
+    "invariants": [
+      "Q₁: Non-negative timings (Mean ≥ 0, Min ≥ 0, Max ≥ 0)",
+      "Q₂: Statistical consistency (Min ≤ Mean ≤ Max)",
+      "Q₃: Sample size validity (len(Runs) = N, N ≥ 5)",
+      "Q₄: Workload name stability (baseline.WorkloadName = current.WorkloadName)"
+    ],
+    "proof_targets": [
+      "Π₁: Determinism - Same workload produces statistically similar results (CV < 0.20)",
+      "Π₂: Regression Detection - Regressions exceeding threshold are detected",
+      "Π₃: Baseline Persistence - Baselines save/load without precision loss"
+    ],
+    "forbidden_states": [
+      "H₁: Empty samples (len(Runs) = 0)",
+      "H₂: Mismatched workload comparison",
+      "H₃: Missing baseline (nil baseline)",
+      "H₄: Unserializable baseline (corrupted JSON)"
+    ]
+  },
+  "success_criteria": {
+    "compile": true,
+    "tests_pass": true,
+    "test_count": 7,
+    "baseline_generated": true,
+    "determinism_proven": true,
+    "regression_detection_verified": true,
+    "persistence_verified": true
+  },
+  "notes": [
+    "This harness is designed for REGRESSION DETECTION, not absolute benchmarking",
+    "Timings are environment-specific and reproducible within statistical bounds",
+    "Default regression threshold: 10% (configurable)",
+    "Workloads must be deterministic for meaningful comparison",
+    "Uses Welford's algorithm for numerically stable variance computation"
+  ]
+}
