@@ -1,0 +1,21 @@
+KGC Documentation Index
+Generated: 2025-12-27 00:51:47 UTC
+===============================================
+
+Directory Structure:
+  explanation/composition_laws.md
+  explanation/receipt_chaining.md
+  explanation/why_determinism.md
+  how_to/create_knowledge_store.md
+  how_to/run_multi_agent_demo.md
+  how_to/verify_receipts.md
+  index.md
+  reference/api.md
+  reference/cli.md
+  reference/substrate_interfaces.md
+  tutorial/getting_started.md
+
+Statistics:
+  Total files: 11
+  Total links: 69
+  Broken links: 0
