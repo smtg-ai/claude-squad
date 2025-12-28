@@ -67,6 +67,12 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 		return fmt.Errorf("failed to sync changes: %s (%w)", output, err)
 	}
 
+	// Try to create a pull request if environment is available
+	if err := g.createPullRequestIfPossible(); err != nil {
+		// Just log the error but don't fail the push operation
+		log.ErrorLog.Printf("failed to create pull request: %v", err)
+	}
+
 	// Open the branch in the browser
 	if open {
 		if err := g.OpenBranchURL(); err != nil {
@@ -133,5 +139,65 @@ func (g *GitWorktree) OpenBranchURL() error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to open branch URL: %w", err)
 	}
+	return nil
+}
+
+// createPullRequestIfPossible attempts to create a pull request to main branch
+// Returns nil if successful or if PR already exists, error only for unexpected failures
+func (g *GitWorktree) createPullRequestIfPossible() error {
+	// Check if GitHub CLI is available
+	if err := checkGHCLI(); err != nil {
+		// Skip PR creation if gh is not available
+		return nil
+	}
+
+	// Check if current branch is main/master (can't create PR from main to main)
+	if g.branchName == "main" || g.branchName == "master" {
+		return nil
+	}
+
+	// Check if we're in a GitHub repository
+	checkCmd := exec.Command("gh", "repo", "view")
+	checkCmd.Dir = g.worktreePath
+	if err := checkCmd.Run(); err != nil {
+		// Not a GitHub repo or not authenticated, skip PR creation
+		return nil
+	}
+
+	// Get the last commit message to use as PR title
+	titleCmd := exec.Command("git", "log", "-1", "--pretty=format:%s")
+	titleCmd.Dir = g.worktreePath
+	titleOutput, err := titleCmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to get last commit message: %w", err)
+	}
+	prTitle := strings.TrimSpace(string(titleOutput))
+
+	// Create pull request with --fill flag for non-interactive mode
+	// Target main branch as base
+	prCmd := exec.Command("gh", "pr", "create",
+		"--base", "main",
+		"--head", g.branchName,
+		"--title", prTitle,
+		"--body", fmt.Sprintf("Pull request created automatically by Claude Squad\n\nBranch: %s", g.branchName),
+		"--fill")
+	prCmd.Dir = g.worktreePath
+
+	output, err := prCmd.CombinedOutput()
+	if err != nil {
+		outputStr := string(output)
+		// Check if PR already exists - this is not an error
+		if strings.Contains(outputStr, "already exists") ||
+			strings.Contains(outputStr, "pull request for branch") {
+			log.InfoLog.Printf("Pull request already exists for branch %s", g.branchName)
+			return nil
+		}
+		return fmt.Errorf("failed to create pull request: %s", outputStr)
+	}
+
+	// Extract PR URL from output and log it
+	prURL := strings.TrimSpace(string(output))
+	log.InfoLog.Printf("Successfully created pull request: %s", prURL)
+
 	return nil
 }
