@@ -92,6 +92,8 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// toastOverlay displays temporary notification messages
+	toastOverlay *overlay.ToastOverlay
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -120,6 +122,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		autoYes:      autoYes,
 		state:        stateDefault,
 		appState:     appState,
+		toastOverlay: overlay.NewToastOverlay(),
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 
@@ -188,6 +191,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case hideErrMsg:
 		m.errBox.Clear()
+	case hideToastMsg:
+		m.toastOverlay.Clear()
+	case toastMsg:
+		return m, m.showToast(msg.message, msg.toastType)
 	case previewTickMsg:
 		cmd := m.instanceChanged()
 		return m, tea.Batch(
@@ -532,6 +539,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		// Create the kill action as a tea.Cmd
+		killTitle := selected.Title
 		killAction := func() tea.Msg {
 			// Get worktree and check if branch is checked out
 			worktree, err := selected.GetGitWorktree()
@@ -545,17 +553,20 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 
 			if checkedOut {
-				return fmt.Errorf("instance %s is currently checked out", selected.Title)
+				return fmt.Errorf("instance %s is currently checked out", killTitle)
 			}
 
 			// Delete from storage first
-			if err := m.storage.DeleteInstance(selected.Title); err != nil {
+			if err := m.storage.DeleteInstance(killTitle); err != nil {
 				return err
 			}
 
 			// Then kill the instance
 			m.list.Kill()
-			return instanceChangedMsg{}
+			return toastMsg{
+				message:   fmt.Sprintf("Session '%s' killed", killTitle),
+				toastType: overlay.ToastTypeSuccess,
+			}
 		}
 
 		// Show confirmation modal
@@ -578,7 +589,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if err = worktree.PushChanges(commitMsg, true); err != nil {
 				return err
 			}
-			return nil
+			return toastMsg{
+				message:   fmt.Sprintf("Changes pushed from '%s'", selected.Title),
+				toastType: overlay.ToastTypeSuccess,
+			}
 		}
 
 		// Show confirmation modal
@@ -590,23 +604,26 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 
+		checkoutTitle := selected.Title
 		// Show help screen before pausing
 		m.showHelpScreen(helpTypeInstanceCheckout{}, func() {
 			if err := selected.Pause(); err != nil {
 				m.handleError(err)
+				return
 			}
 			m.instanceChanged()
 		})
-		return m, nil
+		return m, m.showToast(fmt.Sprintf("Session '%s' checked out", checkoutTitle), overlay.ToastTypeSuccess)
 	case keys.KeyResume:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
 			return m, nil
 		}
+		resumeTitle := selected.Title
 		if err := selected.Resume(); err != nil {
 			return m, m.handleError(err)
 		}
-		return m, tea.WindowSize()
+		return m, tea.Batch(tea.WindowSize(), m.showToast(fmt.Sprintf("Session '%s' resumed", resumeTitle), overlay.ToastTypeSuccess))
 	case keys.KeyEnter:
 		if m.list.NumInstances() == 0 {
 			return m, nil
@@ -667,12 +684,21 @@ func (m *home) keydownCallback(name keys.KeyName) tea.Cmd {
 // hideErrMsg implements tea.Msg and clears the error text from the screen.
 type hideErrMsg struct{}
 
+// hideToastMsg implements tea.Msg and clears the toast from the screen.
+type hideToastMsg struct{}
+
 // previewTickMsg implements tea.Msg and triggers a preview update
 type previewTickMsg struct{}
 
 type tickUpdateMetadataMessage struct{}
 
 type instanceChangedMsg struct{}
+
+// toastMsg is sent when a toast notification should be displayed
+type toastMsg struct {
+	message   string
+	toastType overlay.ToastType
+}
 
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
 // overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.
@@ -693,6 +719,32 @@ func (m *home) handleError(err error) tea.Cmd {
 		}
 
 		return hideErrMsg{}
+	}
+}
+
+// showToast displays a toast notification and returns a command to hide it after the duration
+func (m *home) showToast(message string, toastType overlay.ToastType) tea.Cmd {
+	var duration time.Duration
+	switch toastType {
+	case overlay.ToastTypeSuccess:
+		m.toastOverlay.ShowSuccess(message)
+		duration = 3 * time.Second
+	case overlay.ToastTypeError:
+		m.toastOverlay.ShowError(message)
+		duration = 5 * time.Second
+	case overlay.ToastTypeInfo:
+		m.toastOverlay.ShowInfo(message)
+		duration = 3 * time.Second
+	default:
+		m.toastOverlay.ShowInfo(message)
+		duration = 3 * time.Second
+	}
+	return func() tea.Msg {
+		select {
+		case <-m.ctx.Done():
+		case <-time.After(duration):
+		}
+		return hideToastMsg{}
 	}
 }
 
@@ -732,6 +784,11 @@ func (m *home) View() string {
 		m.menu.String(),
 		m.errBox.String(),
 	)
+
+	// Overlay toast notification if visible (non-blocking, shown at top center)
+	if m.toastOverlay.IsVisible() {
+		mainView = overlay.PlaceOverlay(0, 1, m.toastOverlay.Render(), mainView, false, false)
+	}
 
 	if m.state == statePrompt {
 		if m.textInputOverlay == nil {
