@@ -181,6 +181,15 @@ func (i *Instance) RepoName() (string, error) {
 	return i.gitWorktree.GetRepoName(), nil
 }
 
+// RepoNameFromPath returns the repository name from the instance's Path.
+// This can be used even when the instance has not been started.
+func (i *Instance) RepoNameFromPath() string {
+	if i.Path == "" {
+		return ""
+	}
+	return filepath.Base(i.Path)
+}
+
 func (i *Instance) SetStatus(status Status) {
 	i.Status = status
 }
