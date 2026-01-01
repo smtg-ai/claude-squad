@@ -125,7 +125,7 @@ underlying program (ex. `claude`) to the latest version.
 
 ### License
 
-[AGPL-3.0](LICENSE.md)
+[Commons Clause + Apache 2.0](LICENSE.md)
 
 ### Star History
 
