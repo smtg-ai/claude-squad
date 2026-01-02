@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 )
 
 const GlobalInstanceLimit = 10
@@ -363,17 +364,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 		case tea.KeyRunes:
-			if len(instance.Title) >= 32 {
+			if runewidth.StringWidth(instance.Title) >= 32 {
 				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
 			}
 			if err := instance.SetTitle(instance.Title + string(msg.Runes)); err != nil {
 				return m, m.handleError(err)
 			}
 		case tea.KeyBackspace:
-			if len(instance.Title) == 0 {
+			runes := []rune(instance.Title)
+			if len(runes) == 0 {
 				return m, nil
 			}
-			if err := instance.SetTitle(instance.Title[:len(instance.Title)-1]); err != nil {
+			if err := instance.SetTitle(string(runes[:len(runes)-1])); err != nil {
 				return m, m.handleError(err)
 			}
 		case tea.KeySpace:

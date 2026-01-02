@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 )
 
 const readyIcon = "● "
@@ -139,9 +140,9 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 
 	// Cut the title if it's too long
 	titleText := i.Title
-	widthAvail := r.width - 3 - len(prefix) - 1
-	if widthAvail > 0 && widthAvail < len(titleText) && len(titleText) >= widthAvail-3 {
-		titleText = titleText[:widthAvail-3] + "..."
+	widthAvail := r.width - 3 - runewidth.StringWidth(prefix) - 1
+	if widthAvail > 0 && runewidth.StringWidth(titleText) > widthAvail {
+		titleText = runewidth.Truncate(titleText, widthAvail-3, "...")
 	}
 	title := titleS.Render(lipgloss.JoinHorizontal(
 		lipgloss.Left,
@@ -171,10 +172,10 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	}
 
 	remainingWidth := r.width
-	remainingWidth -= len(prefix)
-	remainingWidth -= len(branchIcon)
+	remainingWidth -= runewidth.StringWidth(prefix)
+	remainingWidth -= runewidth.StringWidth(branchIcon)
 
-	diffWidth := len(addedDiff) + len(removedDiff)
+	diffWidth := runewidth.StringWidth(addedDiff) + runewidth.StringWidth(removedDiff)
 	if diffWidth > 0 {
 		diffWidth += 1
 	}
@@ -192,17 +193,18 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		}
 	}
 	// Don't show branch if there's no space for it. Or show ellipsis if it's too long.
+	branchWidth := runewidth.StringWidth(branch)
 	if remainingWidth < 0 {
 		branch = ""
-	} else if remainingWidth < len(branch) {
+	} else if remainingWidth < branchWidth {
 		if remainingWidth < 3 {
 			branch = ""
 		} else {
 			// We know the remainingWidth is at least 4 and branch is longer than that, so this is safe.
-			branch = branch[:remainingWidth-3] + "..."
+			branch = runewidth.Truncate(branch, remainingWidth-3, "...")
 		}
 	}
-	remainingWidth -= len(branch)
+	remainingWidth -= runewidth.StringWidth(branch)
 
 	// Add spaces to fill the remaining width.
 	spaces := ""
