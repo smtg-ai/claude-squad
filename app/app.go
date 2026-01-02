@@ -98,6 +98,9 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	// Load application config
 	appConfig := config.LoadConfig()
 
+	// Initialize key mappings from config
+	keys.UpdateKeyMappings(appConfig.KeyMappings)
+
 	// Load application state
 	appState := config.LoadState()
 
@@ -455,8 +458,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 	}
 
-	// Handle quit commands first
-	if msg.String() == "ctrl+c" || msg.String() == "q" {
+	// Handle ctrl+c as emergency quit (bypasses key mappings)
+	if msg.String() == "ctrl+c" {
 		return m.handleQuit()
 	}
 
@@ -466,6 +469,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	}
 
 	switch name {
+	case keys.KeyQuit:
+		return m.handleQuit()
 	case keys.KeyHelp:
 		return m.showHelpScreen(helpTypeGeneral{}, nil)
 	case keys.KeyPrompt:
