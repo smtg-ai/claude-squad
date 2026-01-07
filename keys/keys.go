@@ -22,8 +22,9 @@ const (
 
 	KeyCheckout
 	KeyResume
-	KeyPrompt // New key for entering a prompt
-	KeyHelp   // Key for showing help screen
+	KeyPrompt  // New key for entering a prompt
+	KeyHelp    // Key for showing help screen
+	KeyOpenIDE // Key for opening workspace in IDE
 
 	// Diff keybindings
 	KeyShiftUp
@@ -49,6 +50,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"r":          KeyResume,
 	"p":          KeySubmit,
 	"?":          KeyHelp,
+	"e":          KeyOpenIDE,
 }
 
 // GlobalkeyBindings is a configurable map of KeyName to keybinding.
@@ -109,6 +111,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithKeys("r"),
 		key.WithHelp("r", "resume"),
 	),
+	KeyOpenIDE: key.NewBinding(
+		key.WithKeys("e"),
+		key.WithHelp("e", "open in IDE"),
+	),
 
 	// -- Special keybindings --
 
@@ -143,6 +149,7 @@ func UpdateKeyMappings(userMappings map[string][]string) {
 		"r":          KeyResume,
 		"p":          KeySubmit,
 		"?":          KeyHelp,
+		"e":          KeyOpenIDE,
 	}
 
 	// Override with user-configured mappings
@@ -192,6 +199,9 @@ func UpdateKeyMappings(userMappings map[string][]string) {
 		case "help":
 			keyName = KeyHelp
 			defaultKeys = []string{"?"}
+		case "openide":
+			keyName = KeyOpenIDE
+			defaultKeys = []string{"e"}
 		default:
 			continue // Skip unknown actions
 		}
@@ -308,6 +318,13 @@ func updateKeyBindings(userMappings map[string][]string) {
 		GlobalkeyBindings[KeyHelp] = key.NewBinding(
 			key.WithKeys(keys...),
 			key.WithHelp(getHelpKey(keys), "help"),
+		)
+	}
+
+	if keys, ok := userMappings["openide"]; ok {
+		GlobalkeyBindings[KeyOpenIDE] = key.NewBinding(
+			key.WithKeys(keys...),
+			key.WithHelp(getHelpKey(keys), "open in IDE"),
 		)
 	}
 }

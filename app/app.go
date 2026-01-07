@@ -10,6 +10,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -636,6 +638,19 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(err)
 		}
 		return m, tea.Batch(tea.WindowSize(), m.showToast(fmt.Sprintf("Session '%s' resumed", resumeTitle), overlay.ToastTypeSuccess))
+	case keys.KeyOpenIDE:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		worktree, err := selected.GetGitWorktree()
+		if err != nil {
+			return m, m.handleError(err)
+		}
+		if err := m.openInIDE(worktree.GetWorktreePath()); err != nil {
+			return m, m.handleError(err)
+		}
+		return m, m.showToast(fmt.Sprintf("Opening '%s' in IDE", selected.Title), overlay.ToastTypeInfo)
 	case keys.KeyEnter:
 		if m.list.NumInstances() == 0 {
 			return m, nil
@@ -676,6 +691,34 @@ func (m *home) instanceChanged() tea.Cmd {
 		return m.handleError(err)
 	}
 	return nil
+}
+
+// openInIDE opens the given path in the configured IDE
+func (m *home) openInIDE(path string) error {
+	ideCmd := m.appConfig.IDECommand
+	if ideCmd == "" {
+		ideCmd = "code ." // Default to VS Code
+	}
+
+	// Parse the command and arguments
+	parts := strings.Fields(ideCmd)
+	if len(parts) == 0 {
+		return fmt.Errorf("invalid IDE command: %s", ideCmd)
+	}
+
+	// Replace "." with the actual path if present
+	args := make([]string, len(parts)-1)
+	for i, part := range parts[1:] {
+		if part == "." {
+			args[i] = path
+		} else {
+			args[i] = part
+		}
+	}
+
+	cmd := exec.Command(parts[0], args...)
+	cmd.Dir = path
+	return cmd.Start()
 }
 
 type keyupMsg struct{}

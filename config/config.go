@@ -44,6 +44,9 @@ type Config struct {
 	// Supports variables: {repo_root}, {repo_name}, {issue_number}, {title}, {timestamp}
 	// Example: "{repo_root}/worktree/{issue_number}-{title}"
 	WorktreePattern string `json:"worktree_pattern"`
+	// IDECommand is the command used to open the workspace in an IDE.
+	// Default: "code ." (VS Code)
+	IDECommand string `json:"ide_command"`
 }
 
 // DefaultConfig returns the default configuration
@@ -66,7 +69,8 @@ func DefaultConfig() *Config {
 			}
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
-		KeyMappings: nil, // Will be merged with defaults in LoadConfig
+		KeyMappings: nil,        // Will be merged with defaults in LoadConfig
+		IDECommand:  "code .",   // VS Code by default
 	}
 }
 
@@ -202,6 +206,7 @@ func getDefaultKeyMappings() map[string][]string {
 		"submit":     {"p"},
 		"prompt":     {"N"},
 		"help":       {"?"},
+		"openide":    {"e"},
 	}
 }
 

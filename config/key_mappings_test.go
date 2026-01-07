@@ -23,6 +23,7 @@ func TestGetDefaultKeyMappings(t *testing.T) {
 		"submit":     {"p"},
 		"prompt":     {"N"},
 		"help":       {"?"},
+		"openide":    {"e"},
 	}
 
 	if !reflect.DeepEqual(defaults, expected) {

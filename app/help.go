@@ -56,6 +56,7 @@ func (h helpTypeGeneral) toContent() string {
 		headerStyle.Render("Other:"),
 		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyTab].Help().Key)+descStyle.Render("       - Switch between preview and diff tabs"),
 		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyShiftUp].Help().Key + "/" + keys.GlobalkeyBindings[keys.KeyShiftDown].Help().Key)+descStyle.Render(" - Scroll in diff view"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyOpenIDE].Help().Key)+descStyle.Render("         - Open workspace in IDE"),
 		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyQuit].Help().Key)+descStyle.Render("         - Quit the application"),
 	)
 	return content
@@ -74,6 +75,7 @@ func (h helpTypeInstanceStart) toContent() string {
 		headerStyle.Render("Managing:"),
 		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyEnter].Help().Key)+descStyle.Render("   - Attach to the session to interact with it directly"),
 		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyTab].Help().Key)+descStyle.Render("   - Switch preview panes to view session diff"),
+		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyOpenIDE].Help().Key)+descStyle.Render("     - Open workspace in IDE"),
 		keyStyle.Render(keys.GlobalkeyBindings[keys.KeyKill].Help().Key)+descStyle.Render("     - Kill (delete) the selected session"),
 		"",
 		headerStyle.Render("Handoff:"),
