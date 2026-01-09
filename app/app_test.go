@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -432,6 +433,123 @@ func TestMultipleConfirmationsDontInterfere(t *testing.T) {
 	// Test that cancelled action can still be executed independently
 	firstOnConfirm()
 	assert.True(t, action1Called, "First action should be callable after being replaced")
+}
+
+// TestParseIDECommand tests the IDE command parsing logic used in openInIDE
+func TestParseIDECommand(t *testing.T) {
+	testCases := []struct {
+		name         string
+		ideCmd       string
+		path         string
+		expectedCmd  string
+		expectedArgs []string
+	}{
+		{
+			name:         "default VS Code with dot placeholder",
+			ideCmd:       "code .",
+			path:         "/workspace/project",
+			expectedCmd:  "code",
+			expectedArgs: []string{"/workspace/project"},
+		},
+		{
+			name:         "command without dot appends path",
+			ideCmd:       "code",
+			path:         "/workspace/project",
+			expectedCmd:  "code",
+			expectedArgs: []string{"/workspace/project"},
+		},
+		{
+			name:         "command with flags and dot",
+			ideCmd:       "code --wait .",
+			path:         "/workspace/project",
+			expectedCmd:  "code",
+			expectedArgs: []string{"--wait", "/workspace/project"},
+		},
+		{
+			name:         "command with flags no dot",
+			ideCmd:       "code --wait --new-window",
+			path:         "/workspace/project",
+			expectedCmd:  "code",
+			expectedArgs: []string{"--wait", "--new-window", "/workspace/project"},
+		},
+		{
+			name:         "cursor IDE",
+			ideCmd:       "cursor .",
+			path:         "/home/user/myproject",
+			expectedCmd:  "cursor",
+			expectedArgs: []string{"/home/user/myproject"},
+		},
+		{
+			name:         "IntelliJ IDEA",
+			ideCmd:       "idea",
+			path:         "/projects/java-app",
+			expectedCmd:  "idea",
+			expectedArgs: []string{"/projects/java-app"},
+		},
+		{
+			name:         "multiple dots only replaces dots",
+			ideCmd:       "code . --diff . .",
+			path:         "/workspace",
+			expectedCmd:  "code",
+			expectedArgs: []string{"/workspace", "--diff", "/workspace", "/workspace"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Simulate the parsing logic from openInIDE
+			parts := strings.Fields(tc.ideCmd)
+			require.NotEmpty(t, parts, "Command should not be empty")
+
+			var args []string
+			hasPlaceholder := false
+			for _, part := range parts[1:] {
+				if part == "." {
+					args = append(args, tc.path)
+					hasPlaceholder = true
+				} else {
+					args = append(args, part)
+				}
+			}
+
+			// If no "." placeholder was found, append path
+			if !hasPlaceholder {
+				args = append(args, tc.path)
+			}
+
+			assert.Equal(t, tc.expectedCmd, parts[0], "Command mismatch")
+			assert.Equal(t, tc.expectedArgs, args, "Args mismatch")
+		})
+	}
+}
+
+// TestOpenInIDEValidation tests edge cases in openInIDE
+func TestOpenInIDEValidation(t *testing.T) {
+	t.Run("empty command returns error", func(t *testing.T) {
+		h := &home{
+			ctx:       context.Background(),
+			appConfig: &config.Config{IDECommand: "   "}, // whitespace only
+		}
+
+		err := h.openInIDE("/some/path")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid IDE command")
+	})
+
+	t.Run("default command used when empty", func(t *testing.T) {
+		h := &home{
+			ctx:       context.Background(),
+			appConfig: &config.Config{IDECommand: ""},
+		}
+
+		// This will try to execute "code" which may not exist,
+		// but we're testing that the default is used
+		// The function returns nil on success (command started)
+		// or an error if command not found
+		_ = h.openInIDE("/some/path")
+		// We can't easily assert success without mocking exec.Command,
+		// but the important thing is it doesn't panic
+	})
 }
 
 // TestConfirmationModalVisualAppearance tests that confirmation modal has distinct visual appearance

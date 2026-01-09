@@ -693,27 +693,37 @@ func (m *home) instanceChanged() tea.Cmd {
 	return nil
 }
 
-// openInIDE opens the given path in the configured IDE
+// openInIDE opens the given path in the configured IDE.
+// The ide_command config supports a "." placeholder for the workspace path.
+// If no "." is present, the path is appended as the last argument.
+// Note: Quoted arguments are not supported (e.g., "my ide" won't work).
 func (m *home) openInIDE(path string) error {
 	ideCmd := m.appConfig.IDECommand
 	if ideCmd == "" {
 		ideCmd = "code ." // Default to VS Code
 	}
 
-	// Parse the command and arguments
+	// Parse the command and arguments (note: doesn't handle quoted args)
 	parts := strings.Fields(ideCmd)
 	if len(parts) == 0 {
 		return fmt.Errorf("invalid IDE command: %s", ideCmd)
 	}
 
-	// Replace "." with the actual path if present
-	args := make([]string, len(parts)-1)
-	for i, part := range parts[1:] {
+	// Replace "." with the actual path, or append path if no placeholder
+	var args []string
+	hasPlaceholder := false
+	for _, part := range parts[1:] {
 		if part == "." {
-			args[i] = path
+			args = append(args, path)
+			hasPlaceholder = true
 		} else {
-			args[i] = part
+			args = append(args, part)
 		}
+	}
+
+	// If no "." placeholder was found, append path as final argument
+	if !hasPlaceholder {
+		args = append(args, path)
 	}
 
 	cmd := exec.Command(parts[0], args...)
