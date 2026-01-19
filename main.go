@@ -1,3 +1,4 @@
+// claude-squad - manage multiple AI agents in isolated workspaces
 package main
 
 import (
