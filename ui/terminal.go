@@ -237,7 +237,6 @@ func (t *TerminalPane) CloseForInstance(title string) {
 	}
 }
 
-
 func (t *TerminalPane) String() string {
 	t.mu.Lock()
 	width := t.width
