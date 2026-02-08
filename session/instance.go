@@ -341,6 +341,14 @@ func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {
 	return i.gitWorktree, nil
 }
 
+// GetWorktreePath returns the worktree path for the instance, or empty string if unavailable
+func (i *Instance) GetWorktreePath() string {
+	if i.gitWorktree == nil {
+		return ""
+	}
+	return i.gitWorktree.GetWorktreePath()
+}
+
 func (i *Instance) Started() bool {
 	return i.started
 }
