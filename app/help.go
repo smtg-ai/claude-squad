@@ -67,7 +67,7 @@ func (h helpTypeInstanceStart) toContent() string {
 		descStyle.Render("New session created:"),
 		descStyle.Render(fmt.Sprintf("• Git branch: %s (isolated worktree)",
 			lipgloss.NewStyle().Bold(true).Render(h.instance.Branch))),
-		descStyle.Render(fmt.Sprintf("• %s running in background tmux session",
+		descStyle.Render(fmt.Sprintf("• %s running in background terminal session",
 			lipgloss.NewStyle().Bold(true).Render(h.instance.Program))),
 		"",
 		headerStyle.Render("Managing:"),

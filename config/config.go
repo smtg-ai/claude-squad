@@ -9,6 +9,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -61,13 +62,43 @@ func DefaultConfig() *Config {
 	}
 }
 
-// GetClaudeCommand attempts to find the "claude" command in the user's shell
-// It checks in the following order:
-// 1. Shell alias resolution: using "which" command
-// 2. PATH lookup
+// GetClaudeCommand attempts to find the "claude" command in the user's environment.
+// On Unix it checks shell aliases (via "which") then PATH lookup.
+// On Windows it uses "where" then PATH lookup.
 //
-// If both fail, it returns an error.
+// If all methods fail, it returns an error.
 func GetClaudeCommand() (string, error) {
+	if runtime.GOOS == "windows" {
+		return getClaudeCommandWindows()
+	}
+	return getClaudeCommandUnix()
+}
+
+// getClaudeCommandWindows finds the claude command on Windows using "where" and PATH lookup.
+func getClaudeCommandWindows() (string, error) {
+	// Try "where claude" which searches PATH on Windows
+	cmd := exec.Command("cmd", "/c", "where claude")
+	output, err := cmd.Output()
+	if err == nil && len(output) > 0 {
+		// "where" may return multiple lines; use the first match
+		path := strings.TrimSpace(strings.SplitN(string(output), "\n", 2)[0])
+		path = strings.TrimRight(path, "\r")
+		if path != "" {
+			return path, nil
+		}
+	}
+
+	// Fallback to PATH lookup
+	claudePath, err := exec.LookPath("claude")
+	if err == nil {
+		return claudePath, nil
+	}
+
+	return "", fmt.Errorf("claude command not found in PATH")
+}
+
+// getClaudeCommandUnix finds the claude command on Unix by checking shell aliases then PATH.
+func getClaudeCommandUnix() (string, error) {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/bash" // Default to bash if SHELL is not set

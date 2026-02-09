@@ -3,7 +3,6 @@ package session
 import (
 	"claude-squad/log"
 	"claude-squad/session/git"
-	"claude-squad/session/tmux"
 	"path/filepath"
 
 	"fmt"
@@ -17,9 +16,9 @@ import (
 type Status int
 
 const (
-	// Running is the status when the instance is running and claude is working.
+	// Running is the status when the instance is running and the agent is working.
 	Running Status = iota
-	// Ready is if the claude instance is ready to be interacted with (waiting for user input).
+	// Ready is if the agent instance is ready to be interacted with (waiting for user input).
 	Ready
 	// Loading is if the instance is loading (if we are starting it up or something).
 	Loading
@@ -58,8 +57,8 @@ type Instance struct {
 	// The below fields are initialized upon calling Start().
 
 	started bool
-	// tmuxSession is the tmux session for the instance.
-	tmuxSession *tmux.TmuxSession
+	// termSession is the terminal session for the instance (tmux on Unix, Windows Terminal on Windows).
+	termSession TerminalSession
 	// gitWorktree is the git worktree for the instance.
 	gitWorktree *git.GitWorktree
 }
@@ -130,7 +129,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 
 	if instance.Paused() {
 		instance.started = true
-		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program)
+		instance.termSession = NewTerminalSession(instance.Title, instance.Program)
 	} else {
 		if err := instance.Start(false); err != nil {
 			return nil, err
@@ -191,15 +190,15 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		return fmt.Errorf("instance title cannot be empty")
 	}
 
-	var tmuxSession *tmux.TmuxSession
-	if i.tmuxSession != nil {
-		// Use existing tmux session (useful for testing)
-		tmuxSession = i.tmuxSession
+	var termSession TerminalSession
+	if i.termSession != nil {
+		// Use existing terminal session (useful for testing)
+		termSession = i.termSession
 	} else {
-		// Create new tmux session
-		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program)
+		// Create new terminal session
+		termSession = NewTerminalSession(i.Title, i.Program)
 	}
-	i.tmuxSession = tmuxSession
+	i.termSession = termSession
 
 	if firstTimeSetup {
 		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
@@ -224,7 +223,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 
 	if !firstTimeSetup {
 		// Reuse existing session
-		if err := tmuxSession.Restore(); err != nil {
+		if err := termSession.Restore(); err != nil {
 			setupErr = fmt.Errorf("failed to restore existing session: %w", err)
 			return setupErr
 		}
@@ -236,8 +235,8 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 
 		// Create new session
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
-			// Cleanup git worktree if tmux session creation fails
+		if err := i.termSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+			// Cleanup git worktree if session creation fails
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
 			}
@@ -261,10 +260,10 @@ func (i *Instance) Kill() error {
 	var errs []error
 
 	// Always try to cleanup both resources, even if one fails
-	// Clean up tmux session first since it's using the git worktree
-	if i.tmuxSession != nil {
-		if err := i.tmuxSession.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close tmux session: %w", err))
+	// Clean up terminal session first since it's using the git worktree
+	if i.termSession != nil {
+		if err := i.termSession.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close terminal session: %w", err))
 		}
 	}
 
@@ -298,22 +297,22 @@ func (i *Instance) Preview() (string, error) {
 	if !i.started || i.Status == Paused {
 		return "", nil
 	}
-	return i.tmuxSession.CapturePaneContent()
+	return i.termSession.CapturePaneContent()
 }
 
 func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
 	if !i.started {
 		return false, false
 	}
-	return i.tmuxSession.HasUpdated()
+	return i.termSession.HasUpdated()
 }
 
-// TapEnter sends an enter key press to the tmux session if AutoYes is enabled.
+// TapEnter sends an enter key press to the terminal session if AutoYes is enabled.
 func (i *Instance) TapEnter() {
 	if !i.started || !i.AutoYes {
 		return
 	}
-	if err := i.tmuxSession.TapEnter(); err != nil {
+	if err := i.termSession.TapEnter(); err != nil {
 		log.ErrorLog.Printf("error tapping enter: %v", err)
 	}
 }
@@ -322,7 +321,7 @@ func (i *Instance) Attach() (chan struct{}, error) {
 	if !i.started {
 		return nil, fmt.Errorf("cannot attach instance that has not been started")
 	}
-	return i.tmuxSession.Attach()
+	return i.termSession.Attach()
 }
 
 func (i *Instance) SetPreviewSize(width, height int) error {
@@ -330,7 +329,7 @@ func (i *Instance) SetPreviewSize(width, height int) error {
 		return fmt.Errorf("cannot set preview size for instance that has not been started or " +
 			"is paused")
 	}
-	return i.tmuxSession.SetDetachedSize(width, height)
+	return i.termSession.SetDetachedSize(width, height)
 }
 
 // GetGitWorktree returns the git worktree for the instance
@@ -346,7 +345,7 @@ func (i *Instance) Started() bool {
 }
 
 // SetTitle sets the title of the instance. Returns an error if the instance has started.
-// We cant change the title once it's been used for a tmux session etc.
+// We cant change the title once it's been used for a terminal session etc.
 func (i *Instance) SetTitle(title string) error {
 	if i.started {
 		return fmt.Errorf("cannot change title of a started instance")
@@ -359,12 +358,12 @@ func (i *Instance) Paused() bool {
 	return i.Status == Paused
 }
 
-// TmuxAlive returns true if the tmux session is alive. This is a sanity check before attaching.
-func (i *Instance) TmuxAlive() bool {
-	return i.tmuxSession.DoesSessionExist()
+// SessionAlive returns true if the terminal session is alive. This is a sanity check before attaching.
+func (i *Instance) SessionAlive() bool {
+	return i.termSession.DoesSessionExist()
 }
 
-// Pause stops the tmux session and removes the worktree, preserving the branch
+// Pause stops the terminal session and removes the worktree, preserving the branch
 func (i *Instance) Pause() error {
 	if !i.started {
 		return fmt.Errorf("cannot pause instance that has not been started")
@@ -390,9 +389,9 @@ func (i *Instance) Pause() error {
 		}
 	}
 
-	// Detach from tmux session instead of closing to preserve session output
-	if err := i.tmuxSession.DetachSafely(); err != nil {
-		errs = append(errs, fmt.Errorf("failed to detach tmux session: %w", err))
+	// Detach from terminal session instead of closing to preserve session output
+	if err := i.termSession.DetachSafely(); err != nil {
+		errs = append(errs, fmt.Errorf("failed to detach terminal session: %w", err))
 		log.ErrorLog.Print(err)
 		// Continue with pause process even if detach fails
 	}
@@ -424,7 +423,7 @@ func (i *Instance) Pause() error {
 	return nil
 }
 
-// Resume recreates the worktree and restarts the tmux session
+// Resume recreates the worktree and restarts the terminal session
 func (i *Instance) Resume() error {
 	if !i.started {
 		return fmt.Errorf("cannot resume instance that has not been started")
@@ -447,15 +446,15 @@ func (i *Instance) Resume() error {
 		return fmt.Errorf("failed to setup git worktree: %w", err)
 	}
 
-	// Check if tmux session still exists from pause, otherwise create new one
-	if i.tmuxSession.DoesSessionExist() {
-		// Session exists, just restore PTY connection to it
-		if err := i.tmuxSession.Restore(); err != nil {
+	// Check if terminal session still exists from pause, otherwise create new one
+	if i.termSession.DoesSessionExist() {
+		// Session exists, just restore connection to it
+		if err := i.termSession.Restore(); err != nil {
 			log.ErrorLog.Print(err)
 			// If restore fails, fall back to creating new session
-			if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+			if err := i.termSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 				log.ErrorLog.Print(err)
-				// Cleanup git worktree if tmux session creation fails
+				// Cleanup git worktree if session creation fails
 				if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 					err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
 					log.ErrorLog.Print(err)
@@ -464,10 +463,10 @@ func (i *Instance) Resume() error {
 			}
 		}
 	} else {
-		// Create new tmux session
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+		// Create new terminal session
+		if err := i.termSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 			log.ErrorLog.Print(err)
-			// Cleanup git worktree if tmux session creation fails
+			// Cleanup git worktree if session creation fails
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
 				log.ErrorLog.Print(err)
@@ -511,44 +510,44 @@ func (i *Instance) GetDiffStats() *git.DiffStats {
 	return i.diffStats
 }
 
-// SendPrompt sends a prompt to the tmux session
+// SendPrompt sends a prompt to the terminal session
 func (i *Instance) SendPrompt(prompt string) error {
 	if !i.started {
 		return fmt.Errorf("instance not started")
 	}
-	if i.tmuxSession == nil {
-		return fmt.Errorf("tmux session not initialized")
+	if i.termSession == nil {
+		return fmt.Errorf("terminal session not initialized")
 	}
-	if err := i.tmuxSession.SendKeys(prompt); err != nil {
-		return fmt.Errorf("error sending keys to tmux session: %w", err)
+	if err := i.termSession.SendKeys(prompt); err != nil {
+		return fmt.Errorf("error sending keys to terminal session: %w", err)
 	}
 
 	// Brief pause to prevent carriage return from being interpreted as newline
 	time.Sleep(100 * time.Millisecond)
-	if err := i.tmuxSession.TapEnter(); err != nil {
+	if err := i.termSession.TapEnter(); err != nil {
 		return fmt.Errorf("error tapping enter: %w", err)
 	}
 
 	return nil
 }
 
-// PreviewFullHistory captures the entire tmux pane output including full scrollback history
+// PreviewFullHistory captures the entire terminal pane output including full scrollback history
 func (i *Instance) PreviewFullHistory() (string, error) {
 	if !i.started || i.Status == Paused {
 		return "", nil
 	}
-	return i.tmuxSession.CapturePaneContentWithOptions("-", "-")
+	return i.termSession.CapturePaneContentWithOptions("-", "-")
 }
 
-// SetTmuxSession sets the tmux session for testing purposes
-func (i *Instance) SetTmuxSession(session *tmux.TmuxSession) {
-	i.tmuxSession = session
+// SetTerminalSession sets the terminal session for testing purposes
+func (i *Instance) SetTerminalSession(session TerminalSession) {
+	i.termSession = session
 }
 
-// SendKeys sends keys to the tmux session
+// SendKeys sends keys to the terminal session
 func (i *Instance) SendKeys(keys string) error {
 	if !i.started || i.Status == Paused {
 		return fmt.Errorf("cannot send keys to instance that has not been started or is paused")
 	}
-	return i.tmuxSession.SendKeys(keys)
+	return i.termSession.SendKeys(keys)
 }

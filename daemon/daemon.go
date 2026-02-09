@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -71,9 +70,9 @@ func RunDaemon(cfg *config.Config) error {
 		}
 	}()
 
-	// Notify on SIGINT (Ctrl+C) and SIGTERM. Save instances before
+	// Notify on interrupt (Ctrl+C). Save instances before exiting.
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigChan, os.Interrupt)
 	sig := <-sigChan
 	log.InfoLog.Printf("received signal %s", sig.String())
 

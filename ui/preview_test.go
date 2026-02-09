@@ -1,3 +1,5 @@
+//go:build !windows
+
 package ui
 
 import (
@@ -62,7 +64,7 @@ func setupTestEnvironment(t *testing.T, cmdExec cmd_test.MockCmdExec) *testSetup
 
 	// Set up tmux session with mocks
 	tmuxSession := tmux.NewTmuxSessionWithDeps(sessionName, "bash", ptyFactory, cmdExec)
-	instance.SetTmuxSession(tmuxSession)
+	instance.SetTerminalSession(tmuxSession)
 
 	// Start the tmux session
 	err = instance.Start(true)

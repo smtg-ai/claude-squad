@@ -3,3 +3,8 @@
 claude-squad
 **.DS_Store
 cs
+
+# Windows
+*.exe
+Thumbs.db
+Desktop.ini
