@@ -116,6 +116,15 @@ func (w *TabbedWindow) UpdatePreview(instance *session.Instance) error {
 	return w.preview.UpdateContent(instance)
 }
 
+// SetPreviewContent sets pre-captured content directly on the preview pane,
+// bypassing the subprocess call. Used by the async preview path.
+func (w *TabbedWindow) SetPreviewContent(content string) {
+	if w.activeTab != PreviewTab {
+		return
+	}
+	w.preview.SetPreviewContent(content)
+}
+
 func (w *TabbedWindow) UpdateDiff(instance *session.Instance) {
 	if w.activeTab != DiffTab {
 		return

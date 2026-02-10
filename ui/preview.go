@@ -112,6 +112,18 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 	return nil
 }
 
+// SetPreviewContent sets the preview pane content directly from pre-captured
+// content, avoiding a redundant subprocess call. Used by the async preview path.
+func (p *PreviewPane) SetPreviewContent(content string) {
+	if p.isScrolling {
+		return
+	}
+	p.previewState = previewState{
+		fallback: false,
+		text:     content,
+	}
+}
+
 // Returns the preview pane content as a string.
 func (p *PreviewPane) String() string {
 	if p.width == 0 || p.height == 0 {

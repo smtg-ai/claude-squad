@@ -159,33 +159,31 @@ func (t *TmuxSession) Start(workDir string) error {
 			maxWaitTime = 45 * time.Second // Aider/Gemini take longer to start
 		}
 
-		// Deal with "do you trust the files" screen by sending an enter keystroke.
-		// Use exponential backoff with longer timeout for reliability on slow systems
-		startTime := time.Now()
-		sleepDuration := 100 * time.Millisecond
-		attempt := 0
+		// Handle the trust screen asynchronously so Start() returns immediately
+		// and the TUI stays responsive during session creation.
+		go func() {
+			startTime := time.Now()
+			sleepDuration := 100 * time.Millisecond
 
-		for time.Since(startTime) < maxWaitTime {
-			attempt++
-			time.Sleep(sleepDuration)
-			content, err := t.CapturePaneContent()
-			if err != nil {
-				// Session might not be ready yet, continue waiting
-			} else {
-				if strings.Contains(content, searchString) {
-					if err := tapFunc(); err != nil {
-						log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
+			for time.Since(startTime) < maxWaitTime {
+				time.Sleep(sleepDuration)
+				content, err := t.CapturePaneContent()
+				if err == nil {
+					if strings.Contains(content, searchString) {
+						if err := tapFunc(); err != nil {
+							log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
+						}
+						return
 					}
-					break
+				}
+
+				// Exponential backoff with cap at 1 second
+				sleepDuration = time.Duration(float64(sleepDuration) * 1.2)
+				if sleepDuration > time.Second {
+					sleepDuration = time.Second
 				}
 			}
-
-			// Exponential backoff with cap at 1 second
-			sleepDuration = time.Duration(float64(sleepDuration) * 1.2)
-			if sleepDuration > time.Second {
-				sleepDuration = time.Second
-			}
-		}
+		}()
 	}
 	return nil
 }
