@@ -506,6 +506,11 @@ func (i *Instance) UpdateDiffStats() error {
 	return nil
 }
 
+// SetDiffStats sets the diff stats (used by the async metadata update path).
+func (i *Instance) SetDiffStats(stats *git.DiffStats) {
+	i.diffStats = stats
+}
+
 // GetDiffStats returns the current git diff statistics
 func (i *Instance) GetDiffStats() *git.DiffStats {
 	return i.diffStats

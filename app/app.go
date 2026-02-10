@@ -5,11 +5,13 @@ import (
 	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/session"
+	"claude-squad/session/git"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -189,34 +191,105 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case hideErrMsg:
 		m.errBox.Clear()
 	case previewTickMsg:
-		cmd := m.instanceChanged()
-		return m, tea.Batch(
-			cmd,
-			func() tea.Msg {
-				time.Sleep(100 * time.Millisecond)
+		selected := m.list.GetSelectedInstance()
+		// Cheap synchronous updates (no subprocesses).
+		m.tabbedWindow.UpdateDiff(selected)
+		m.tabbedWindow.SetInstance(selected)
+		m.menu.SetInstance(selected)
+
+		// For nil/paused/unstarted instances or non-preview tabs, update
+		// synchronously (no subprocess involved) and schedule next tick.
+		if selected == nil || !selected.Started() || selected.Paused() || m.tabbedWindow.IsInDiffTab() {
+			_ = m.tabbedWindow.UpdatePreview(selected)
+			return m, func() tea.Msg {
+				time.Sleep(200 * time.Millisecond)
 				return previewTickMsg{}
-			},
-		)
+			}
+		}
+
+		// Capture pane content asynchronously via goroutine.
+		return m, func() tea.Msg {
+			content, err := selected.Preview()
+			return previewResultMsg{
+				instance: selected,
+				content:  content,
+				err:      err,
+			}
+		}
+	case previewResultMsg:
+		if msg.err != nil {
+			return m, tea.Batch(
+				m.handleError(msg.err),
+				func() tea.Msg {
+					time.Sleep(200 * time.Millisecond)
+					return previewTickMsg{}
+				},
+			)
+		}
+		// Apply captured content to preview pane on main thread.
+		selected := m.list.GetSelectedInstance()
+		if selected == msg.instance {
+			m.tabbedWindow.SetPreviewContent(msg.content)
+		}
+		return m, func() tea.Msg {
+			time.Sleep(200 * time.Millisecond)
+			return previewTickMsg{}
+		}
 	case keyupMsg:
 		m.menu.ClearKeydown()
 		return m, nil
 	case tickUpdateMetadataMessage:
+		// Collect instances to check on the main thread (safe reads).
+		var instancesToCheck []*session.Instance
 		for _, instance := range m.list.GetInstances() {
 			if !instance.Started() || instance.Paused() {
 				continue
 			}
-			updated, prompt := instance.HasUpdated()
-			if updated {
-				instance.SetStatus(session.Running)
+			instancesToCheck = append(instancesToCheck, instance)
+		}
+		if len(instancesToCheck) == 0 {
+			return m, tickUpdateMetadataCmd
+		}
+		// Run expensive subprocess calls (tmux capture-pane, git diff) in a
+		// background goroutine so the event loop stays responsive.
+		return m, func() tea.Msg {
+			var results []metadataUpdateResult
+			for _, inst := range instancesToCheck {
+				updated, prompt := inst.HasUpdated()
+				var stats *git.DiffStats
+				if wt, err := inst.GetGitWorktree(); err == nil {
+					stats = wt.Diff()
+				}
+				results = append(results, metadataUpdateResult{
+					instance:  inst,
+					updated:   updated,
+					hasPrompt: prompt,
+					diffStats: stats,
+				})
+			}
+			return metadataResultMsg{results: results}
+		}
+	case metadataResultMsg:
+		// Apply results on the main thread (safe writes).
+		for _, r := range msg.results {
+			if r.updated {
+				r.instance.SetStatus(session.Running)
 			} else {
-				if prompt {
-					instance.TapEnter()
+				if r.hasPrompt {
+					r.instance.TapEnter()
 				} else {
-					instance.SetStatus(session.Ready)
+					r.instance.SetStatus(session.Ready)
 				}
 			}
-			if err := instance.UpdateDiffStats(); err != nil {
-				log.WarningLog.Printf("could not update diff stats: %v", err)
+			if r.diffStats != nil {
+				if r.diffStats.Error != nil {
+					if !strings.Contains(r.diffStats.Error.Error(), "base commit SHA not set") {
+						log.WarningLog.Printf("could not update diff stats: %v", r.diffStats.Error)
+					}
+					r.instance.SetDiffStats(nil)
+				} else {
+					r.instance.SetDiffStats(r.diffStats)
+				}
 			}
 		}
 		return m, tickUpdateMetadataCmd
@@ -673,6 +746,27 @@ type previewTickMsg struct{}
 type tickUpdateMetadataMessage struct{}
 
 type instanceChangedMsg struct{}
+
+// metadataUpdateResult holds the result of checking one instance's metadata
+// in a background goroutine.
+type metadataUpdateResult struct {
+	instance  *session.Instance
+	updated   bool
+	hasPrompt bool
+	diffStats *git.DiffStats
+}
+
+// metadataResultMsg carries metadata check results back to the event loop.
+type metadataResultMsg struct {
+	results []metadataUpdateResult
+}
+
+// previewResultMsg carries async preview capture results back to the event loop.
+type previewResultMsg struct {
+	instance *session.Instance
+	content  string
+	err      error
+}
 
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
 // overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.
