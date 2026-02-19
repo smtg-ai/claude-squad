@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -302,12 +301,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.autoYes {
 			msg.instance.AutoYes = true
-		}
-		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
-	case editorExitMsg:
-		// Editor closed, resume TUI
-		if msg.err != nil {
-			return m, m.handleError(msg.err)
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 	case spinner.TickMsg:
@@ -1158,25 +1151,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.state = stateDefault
 		})
 		return m, nil
-	case keys.KeyEditor:
-		selected := m.list.GetSelectedInstance()
-		if selected == nil || !selected.Started() || selected.Paused() {
-			return m, nil
-		}
-		worktree, err := selected.GetGitWorktree()
-		if err != nil {
-			return m, m.handleError(err)
-		}
-		// Find nvim in PATH
-		editor := "nvim"
-		if envEditor := os.Getenv("EDITOR"); envEditor != "" {
-			editor = envEditor
-		}
-		cmd := exec.Command(editor, ".")
-		cmd.Dir = worktree.GetWorktreePath()
-		return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
-			return editorExitMsg{err: err}
-		})
 	case keys.KeyLeft:
 		m.setFocus(0)
 		return m, nil
@@ -1347,8 +1321,6 @@ type previewTickMsg struct{}
 type tickUpdateMetadataMessage struct{}
 
 type instanceChangedMsg struct{}
-
-type editorExitMsg struct{ err error }
 
 // instanceStartedMsg is sent when an async instance startup completes.
 type instanceStartedMsg struct {

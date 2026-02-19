@@ -31,7 +31,6 @@ const (
 	KeySearch             // Key for activating search
 	KeyLeft               // Key for switching focus left (to sidebar)
 	KeyRight              // Key for switching focus right (to instance list)
-	KeyEditor             // Key for opening editor in instance worktree
 
 	// Diff keybindings
 	KeyShiftUp
@@ -65,7 +64,6 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"h":     KeyLeft,
 	"right": KeyRight,
 	"l":     KeyRight,
-	"e":     KeyEditor,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -149,10 +147,6 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyRight: key.NewBinding(
 		key.WithKeys("right", "l"),
 		key.WithHelp("→/l", "instances"),
-	),
-	KeyEditor: key.NewBinding(
-		key.WithKeys("e"),
-		key.WithHelp("e", "editor"),
 	),
 
 	// -- Special keybindings --

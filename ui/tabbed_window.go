@@ -40,7 +40,6 @@ var (
 const (
 	PreviewTab int = iota
 	DiffTab
-	EditorTab
 )
 
 type Tab struct {
@@ -67,7 +66,6 @@ func NewTabbedWindow(preview *PreviewPane, diff *DiffPane) *TabbedWindow {
 		tabs: []string{
 			"Preview",
 			"Diff",
-			"Editor",
 		},
 		preview: preview,
 		diff:    diff,
@@ -162,12 +160,7 @@ func (w *TabbedWindow) ScrollDown() {
 
 // IsInDiffTab returns true if the diff tab is currently active
 func (w *TabbedWindow) IsInDiffTab() bool {
-	return w.activeTab == DiffTab
-}
-
-// IsInEditorTab returns true if the editor tab is currently active
-func (w *TabbedWindow) IsInEditorTab() bool {
-	return w.activeTab == EditorTab
+	return w.activeTab == 1
 }
 
 // IsPreviewInScrollMode returns true if the preview pane is in scroll mode
@@ -216,22 +209,10 @@ func (w *TabbedWindow) String() string {
 
 	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
 	var content string
-	switch w.activeTab {
-	case PreviewTab:
+	if w.activeTab == 0 {
 		content = w.preview.String()
-	case DiffTab:
+	} else {
 		content = w.diff.String()
-	case EditorTab:
-		editorHint := lipgloss.JoinVertical(lipgloss.Center,
-			"",
-			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("Editor"),
-			"",
-			lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#808080", Dark: "#808080"}).Render("Press 'e' to open nvim in this instance's worktree"),
-			"",
-			lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#aaaaaa", Dark: "#555555"}).Render("nvim will get full terminal control"),
-			lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#aaaaaa", Dark: "#555555"}).Render("Exit nvim (:q) to return here"),
-		)
-		content = editorHint
 	}
 	window := windowStyle.Render(
 		lipgloss.Place(
