@@ -58,10 +58,12 @@ type Instance struct {
 
 	// sharedWorktree is true if this instance uses a topic's shared worktree (should not clean it up).
 	sharedWorktree bool
-	// LoadingStage tracks the current startup progress (0-4). Exported so the UI can read it.
+	// LoadingStage tracks the current startup progress. Exported so the UI can read it.
 	LoadingStage int
 	// LoadingTotal is the total number of startup stages.
 	LoadingTotal int
+	// LoadingMessage describes the current loading step.
+	LoadingMessage string
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
@@ -206,6 +208,11 @@ func (i *Instance) SetStatus(status Status) {
 	i.Status = status
 }
 
+func (i *Instance) setLoadingProgress(stage int, message string) {
+	i.LoadingStage = stage
+	i.LoadingMessage = message
+}
+
 // firstTimeSetup is true if this is a new instance. Otherwise, it's one loaded from storage.
 func (i *Instance) Start(firstTimeSetup bool) error {
 	if i.Title == "" {
@@ -213,23 +220,32 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	}
 
 	if firstTimeSetup {
-		i.LoadingTotal = 4
+		i.LoadingTotal = 7
 	} else {
-		i.LoadingTotal = 2
+		i.LoadingTotal = 5
 	}
 	i.LoadingStage = 0
+	i.LoadingMessage = "Initializing..."
 
-	i.LoadingStage = 1 // Stage 1: Creating tmux session
+	i.setLoadingProgress(1, "Preparing session...")
 	var tmuxSession *tmux.TmuxSession
 	if i.tmuxSession != nil {
 		tmuxSession = i.tmuxSession
 	} else {
 		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
 	}
+	// Wire up tmux progress to instance loading progress
+	tmuxStageOffset := 3 // tmux stages start at 4 for first-time, 2 for reload
+	if !firstTimeSetup {
+		tmuxStageOffset = 1
+	}
+	tmuxSession.ProgressFunc = func(stage int, desc string) {
+		i.setLoadingProgress(tmuxStageOffset+stage, desc)
+	}
 	i.tmuxSession = tmuxSession
 
 	if firstTimeSetup {
-		i.LoadingStage = 2 // Stage 2: Creating git worktree
+		i.setLoadingProgress(2, "Creating git worktree...")
 		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
 		if err != nil {
 			return fmt.Errorf("failed to create git worktree: %w", err)
@@ -251,21 +267,21 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	}()
 
 	if !firstTimeSetup {
-		i.LoadingStage = 2 // Stage 2: Restoring session
+		i.setLoadingProgress(2, "Restoring session...")
 		// Reuse existing session
 		if err := tmuxSession.Restore(); err != nil {
 			setupErr = fmt.Errorf("failed to restore existing session: %w", err)
 			return setupErr
 		}
 	} else {
-		i.LoadingStage = 3 // Stage 3: Setting up git worktree
+		i.setLoadingProgress(3, "Setting up git worktree...")
 		// Setup git worktree first
 		if err := i.gitWorktree.Setup(); err != nil {
 			setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
 			return setupErr
 		}
 
-		i.LoadingStage = 4 // Stage 4: Starting tmux session
+		i.setLoadingProgress(4, "Starting tmux session...")
 		// Create new session
 		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 			// Cleanup git worktree if tmux session creation fails
@@ -289,8 +305,8 @@ func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch strin
 		return fmt.Errorf("instance title cannot be empty")
 	}
 
-	i.LoadingTotal = 2
-	i.LoadingStage = 1 // Stage 1: Connecting to shared worktree
+	i.LoadingTotal = 5
+	i.setLoadingProgress(1, "Connecting to shared worktree...")
 
 	i.gitWorktree = worktree
 	i.Branch = branch
@@ -302,9 +318,12 @@ func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch strin
 	} else {
 		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
 	}
+	tmuxSession.ProgressFunc = func(stage int, desc string) {
+		i.setLoadingProgress(1+stage, desc)
+	}
 	i.tmuxSession = tmuxSession
 
-	i.LoadingStage = 2 // Stage 2: Starting tmux session
+	i.setLoadingProgress(2, "Starting tmux session...")
 
 	if err := i.tmuxSession.Start(worktree.GetWorktreePath()); err != nil {
 		return fmt.Errorf("failed to start session in shared worktree: %w", err)

@@ -286,7 +286,11 @@ func (s *Sidebar) String() string {
 		b.WriteString("\n")
 	}
 
-	// Wrap content in the subtle rounded border
-	bordered := sidebarBorderStyle.Width(innerWidth).Render(b.String())
+	// Wrap content in the subtle rounded border — use full available height
+	borderHeight := s.height - 2 // account for top border + bottom border
+	if borderHeight < 4 {
+		borderHeight = 4
+	}
+	bordered := sidebarBorderStyle.Width(innerWidth).Height(borderHeight).Render(b.String())
 	return lipgloss.Place(s.width, s.height, lipgloss.Left, lipgloss.Top, bordered)
 }

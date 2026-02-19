@@ -61,7 +61,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		stage := instance.LoadingStage
 		total := instance.LoadingTotal
 		if total == 0 {
-			total = 4
+			total = 7
 		}
 
 		// Progress bar based on actual stage
@@ -72,15 +72,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		}
 		bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
 
-		// Stage descriptions matching actual Instance.Start() stages
-		stageNames := map[int]string{
-			0: "Initializing...",
-			1: "Preparing session...",
-			2: "Creating git worktree...",
-			3: "Setting up worktree...",
-			4: "Starting tmux session...",
-		}
-		stepText := stageNames[stage]
+		stepText := instance.LoadingMessage
 		if stepText == "" {
 			stepText = "Starting..."
 		}

@@ -37,6 +37,8 @@ type TmuxSession struct {
 	cmdExec cmd.Executor
 	// skipPermissions appends --dangerously-skip-permissions to Claude commands
 	skipPermissions bool
+	// ProgressFunc is called with (stage, description) during Start() to report progress.
+	ProgressFunc func(stage int, desc string)
 
 	// Initialized by Start or Restore
 	//
@@ -89,6 +91,12 @@ func newTmuxSession(name string, program string, skipPermissions bool, ptyFactor
 	}
 }
 
+func (t *TmuxSession) reportProgress(stage int, desc string) {
+	if t.ProgressFunc != nil {
+		t.ProgressFunc(stage, desc)
+	}
+}
+
 // isClaudeProgram returns true if the program string refers to Claude Code.
 func isClaudeProgram(program string) bool {
 	return strings.HasSuffix(program, ProgramClaude)
@@ -108,6 +116,8 @@ func (t *TmuxSession) Start(workDir string) error {
 		program = program + " --dangerously-skip-permissions"
 	}
 
+	t.reportProgress(1, "Creating tmux session...")
+
 	// Create a new detached tmux session and start claude in it
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, program)
 
@@ -122,6 +132,8 @@ func (t *TmuxSession) Start(workDir string) error {
 		}
 		return fmt.Errorf("error starting tmux session: %w", err)
 	}
+
+	t.reportProgress(2, "Waiting for session to start...")
 
 	// Poll for session existence with exponential backoff
 	timeout := time.After(2 * time.Second)
@@ -155,6 +167,8 @@ func (t *TmuxSession) Start(workDir string) error {
 		log.InfoLog.Printf("Warning: failed to enable mouse scrolling for session %s: %v", t.sanitizedName, err)
 	}
 
+	t.reportProgress(3, "Configuring session...")
+
 	err = t.Restore()
 	if err != nil {
 		if cleanupErr := t.Close(); cleanupErr != nil {
@@ -164,6 +178,7 @@ func (t *TmuxSession) Start(workDir string) error {
 	}
 
 	if strings.HasSuffix(t.program, ProgramClaude) || strings.HasSuffix(t.program, ProgramAider) || strings.HasSuffix(t.program, ProgramGemini) {
+		t.reportProgress(4, "Waiting for program to start...")
 		searchString := "Do you trust the files in this folder?"
 		tapFunc := t.TapEnter
 		maxWaitTime := 30 * time.Second // Much longer timeout for slower systems
