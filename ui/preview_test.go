@@ -61,7 +61,7 @@ func setupTestEnvironment(t *testing.T, cmdExec cmd_test.MockCmdExec) *testSetup
 	}
 
 	// Set up tmux session with mocks
-	tmuxSession := tmux.NewTmuxSessionWithDeps(sessionName, "bash", ptyFactory, cmdExec)
+	tmuxSession := tmux.NewTmuxSessionWithDeps(sessionName, "bash", false, ptyFactory, cmdExec)
 	instance.SetTmuxSession(tmuxSession)
 
 	// Start the tmux session

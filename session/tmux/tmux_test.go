@@ -42,10 +42,10 @@ func NewMockPtyFactory(t *testing.T) *MockPtyFactory {
 }
 
 func TestSanitizeName(t *testing.T) {
-	session := NewTmuxSession("asdf", "program")
+	session := NewTmuxSession("asdf", "program", false)
 	require.Equal(t, TmuxPrefix+"asdf", session.sanitizedName)
 
-	session = NewTmuxSession("a sd f . . asdf", "program")
+	session = NewTmuxSession("a sd f . . asdf", "program", false)
 	require.Equal(t, TmuxPrefix+"asdf__asdf", session.sanitizedName)
 }
 
@@ -67,7 +67,7 @@ func TestStartTmuxSession(t *testing.T) {
 	}
 
 	workdir := t.TempDir()
-	session := newTmuxSession("test-session", "claude", ptyFactory, cmdExec)
+	session := newTmuxSession("test-session", "claude", false, ptyFactory, cmdExec)
 
 	err := session.Start(workdir)
 	require.NoError(t, err)
@@ -85,4 +85,58 @@ func TestStartTmuxSession(t *testing.T) {
 	// File should be open
 	_, err = ptyFactory.files[1].Stat()
 	require.NoError(t, err)
+}
+
+func TestStartTmuxSessionWithSkipPermissions(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	created := false
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "has-session") && !created {
+				created = true
+				return fmt.Errorf("session already exists")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte("output"), nil
+		},
+	}
+
+	workdir := t.TempDir()
+	session := newTmuxSession("test-session", "claude", true, ptyFactory, cmdExec)
+
+	err := session.Start(workdir)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(ptyFactory.cmds))
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s claudesquad_test-session -c %s claude --dangerously-skip-permissions", workdir),
+		cmd2.ToString(ptyFactory.cmds[0]))
+}
+
+func TestStartTmuxSessionSkipPermissionsNotAppliedToAider(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	created := false
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "has-session") && !created {
+				created = true
+				return fmt.Errorf("session already exists")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte("output"), nil
+		},
+	}
+
+	workdir := t.TempDir()
+	session := newTmuxSession("test-session", "aider --model gpt-4", true, ptyFactory, cmdExec)
+
+	err := session.Start(workdir)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(ptyFactory.cmds))
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s claudesquad_test-session -c %s aider --model gpt-4", workdir),
+		cmd2.ToString(ptyFactory.cmds[0]))
 }
