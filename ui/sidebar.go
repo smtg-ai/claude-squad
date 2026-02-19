@@ -3,12 +3,14 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 )
 
 var sidebarTitleStyle = lipgloss.NewStyle().
-	Background(lipgloss.Color("62")).
+	Background(lipgloss.Color("216")).
 	Foreground(lipgloss.Color("230"))
 
 // sidebarBorderStyle wraps the entire sidebar content in a subtle rounded border
@@ -39,12 +41,12 @@ var sectionHeaderStyle = lipgloss.NewStyle().
 
 var searchBarStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
-	BorderForeground(lipgloss.Color("62")).
+	BorderForeground(lipgloss.Color("216")).
 	Padding(0, 1)
 
 var searchActiveBarStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
-	BorderForeground(lipgloss.Color("205")).
+	BorderForeground(lipgloss.Color("#7EC8D8")).
 	Padding(0, 1)
 
 const (
@@ -57,6 +59,15 @@ var dimmedTopicStyle = lipgloss.NewStyle().
 	Padding(0, 1).
 	Foreground(lipgloss.AdaptiveColor{Light: "#c0c0c0", Dark: "#444444"})
 
+var sidebarRunningStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#51bd73"))
+
+var sidebarReadyStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#51bd73"))
+
+var sidebarNotifyStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#F0A868"))
+
 // SidebarItem represents a selectable item in the sidebar.
 type SidebarItem struct {
 	Name            string
@@ -65,6 +76,8 @@ type SidebarItem struct {
 	Count           int
 	MatchCount      int  // search match count (-1 = not searching)
 	SharedWorktree  bool // true if this topic has a shared worktree
+	HasRunning      bool // true if this topic has running instances
+	HasNotification bool // true if this topic has recently-finished instances
 }
 
 // Sidebar is the left-most panel showing topics and search.
@@ -76,6 +89,8 @@ type Sidebar struct {
 
 	searchActive bool
 	searchQuery  string
+
+	repoName string // current repo name shown at bottom
 }
 
 func NewSidebar() *Sidebar {
@@ -101,29 +116,62 @@ func (s *Sidebar) IsFocused() bool {
 	return s.focused
 }
 
+// SetRepoName sets the current repo name displayed at the bottom of the sidebar.
+func (s *Sidebar) SetRepoName(name string) {
+	s.repoName = name
+}
+
+// TopicStatus holds status flags for a topic's instances.
+type TopicStatus struct {
+	HasRunning      bool
+	HasNotification bool
+}
+
 // SetItems updates the sidebar items from the current topics.
 // sharedTopics maps topic name → whether it has a shared worktree.
-func (s *Sidebar) SetItems(topicNames []string, instanceCountByTopic map[string]int, ungroupedCount int, sharedTopics map[string]bool) {
+// topicStatuses maps topic name → running/notification status.
+func (s *Sidebar) SetItems(topicNames []string, instanceCountByTopic map[string]int, ungroupedCount int, sharedTopics map[string]bool, topicStatuses map[string]TopicStatus) {
 	totalCount := ungroupedCount
 	for _, c := range instanceCountByTopic {
 		totalCount += c
 	}
 
+	// Aggregate statuses for "All"
+	anyRunning := false
+	anyNotification := false
+	for _, st := range topicStatuses {
+		if st.HasRunning {
+			anyRunning = true
+		}
+		if st.HasNotification {
+			anyNotification = true
+		}
+	}
+
 	items := []SidebarItem{
-		{Name: "All", ID: SidebarAll, Count: totalCount},
+		{Name: "All", ID: SidebarAll, Count: totalCount, HasRunning: anyRunning, HasNotification: anyNotification},
 	}
 
 	if len(topicNames) > 0 {
 		items = append(items, SidebarItem{Name: "Topics", IsSection: true})
 		for _, name := range topicNames {
 			count := instanceCountByTopic[name]
-			items = append(items, SidebarItem{Name: name, ID: name, Count: count, SharedWorktree: sharedTopics[name]})
+			st := topicStatuses[name]
+			items = append(items, SidebarItem{
+				Name: name, ID: name, Count: count,
+				SharedWorktree: sharedTopics[name],
+				HasRunning: st.HasRunning, HasNotification: st.HasNotification,
+			})
 		}
 	}
 
 	if ungroupedCount > 0 {
+		ungroupedSt := topicStatuses[""]
 		items = append(items, SidebarItem{Name: "Ungrouped", IsSection: true})
-		items = append(items, SidebarItem{Name: "Ungrouped", ID: SidebarUngrouped, Count: ungroupedCount})
+		items = append(items, SidebarItem{
+			Name: "Ungrouped", ID: SidebarUngrouped, Count: ungroupedCount,
+			HasRunning: ungroupedSt.HasRunning, HasNotification: ungroupedSt.HasNotification,
+		})
 	}
 
 	s.items = items
@@ -133,6 +181,11 @@ func (s *Sidebar) SetItems(topicNames []string, instanceCountByTopic map[string]
 	if s.selectedIdx < 0 {
 		s.selectedIdx = 0
 	}
+}
+
+// GetSelectedIdx returns the index of the currently selected item in the sidebar.
+func (s *Sidebar) GetSelectedIdx() int {
+	return s.selectedIdx
 }
 
 func (s *Sidebar) GetSelectedID() string {
@@ -214,6 +267,13 @@ func (s *Sidebar) GetSearchQuery() string { return s.searchQuery }
 func (s *Sidebar) SetSearchQuery(q string) { s.searchQuery = q }
 
 func (s *Sidebar) String() string {
+	borderStyle := sidebarBorderStyle
+	if s.focused {
+		borderStyle = borderStyle.BorderForeground(lipgloss.Color("#F0A868"))
+	} else {
+		borderStyle = borderStyle.BorderForeground(lipgloss.AdaptiveColor{Light: "#d0d0d0", Dark: "#333333"})
+	}
+
 	// Inner width accounts for border (2) + border padding (2)
 	innerWidth := s.width - 6
 	if innerWidth < 8 {
@@ -234,7 +294,7 @@ func (s *Sidebar) String() string {
 		}
 		b.WriteString(searchActiveBarStyle.Width(searchWidth).Render(searchText))
 	} else {
-		b.WriteString(searchBarStyle.Width(searchWidth).Render("/ search"))
+		b.WriteString(searchBarStyle.Width(searchWidth).Render("\uf002 search"))
 	}
 	b.WriteString("\n\n")
 
@@ -260,37 +320,97 @@ func (s *Sidebar) String() string {
 			continue
 		}
 
-		// Shared worktree icon — use fixed-width prefix so text stays aligned
-		icon := " "
+		// Build trailing indicators: shared worktree icon + status dot
+		var trailingIcons string
+		trailingWidth := 0
+
 		if item.SharedWorktree {
-			icon = "⚙"
+			trailingIcons += " \ue727"
+			trailingWidth += 2
 		}
 
-		display := item.Name
-		// Show match count during search, otherwise total count
+		if item.HasNotification {
+			trailingIcons += " ●"
+			trailingWidth += 2
+		} else if item.HasRunning {
+			trailingIcons += " ●"
+			trailingWidth += 2
+		}
+
+		// Build count suffix
 		displayCount := item.Count
 		if s.searchActive && item.MatchCount >= 0 {
 			displayCount = item.MatchCount
 		}
+		countSuffix := ""
 		if displayCount > 0 {
-			display = fmt.Sprintf("%s (%d)", display, displayCount)
+			countSuffix = fmt.Sprintf(" (%d)", displayCount)
+		}
+
+		// Truncate topic name to fit: itemWidth - prefix(1) - countSuffix - trailing
+		nameText := item.Name
+		maxNameWidth := itemWidth - 1 - runewidth.StringWidth(countSuffix) - trailingWidth
+		if maxNameWidth < 3 {
+			maxNameWidth = 3
+		}
+		if runewidth.StringWidth(nameText) > maxNameWidth {
+			nameText = runewidth.Truncate(nameText, maxNameWidth-1, "…")
+		}
+
+		// Assemble plain text (no styled parts yet)
+		plainText := nameText + countSuffix
+
+		// Style the trailing icons
+		var styledTrailing string
+		if item.SharedWorktree {
+			styledTrailing += " \ue727"
+		}
+		if item.HasNotification {
+			if time.Now().UnixMilli()/500%2 == 0 {
+				styledTrailing += " " + sidebarReadyStyle.Render("●")
+			} else {
+				styledTrailing += " " + sidebarNotifyStyle.Render("●")
+			}
+		} else if item.HasRunning {
+			styledTrailing += " " + sidebarRunningStyle.Render("●")
 		}
 
 		if i == s.selectedIdx && s.focused {
-			b.WriteString(selectedTopicStyle.Width(itemWidth).Render("▸" + icon + display))
+			b.WriteString(selectedTopicStyle.Width(itemWidth).MaxWidth(itemWidth).Render("▸" + plainText + styledTrailing))
 		} else if i == s.selectedIdx && !s.focused {
-			b.WriteString(activeTopicStyle.Width(itemWidth).Render("▸" + icon + display))
+			b.WriteString(activeTopicStyle.Width(itemWidth).MaxWidth(itemWidth).Render("▸" + plainText + styledTrailing))
 		} else {
-			b.WriteString(topicItemStyle.Width(itemWidth).Render(" " + icon + display))
+			b.WriteString(topicItemStyle.Width(itemWidth).MaxWidth(itemWidth).Render(" " + plainText + styledTrailing))
 		}
 		b.WriteString("\n")
 	}
+
+	// Build repo indicator for the bottom
+	var repoSection string
+	if s.repoName != "" {
+		repoSection = sectionHeaderStyle.Render("── Repo ──") + "\n" +
+			topicItemStyle.Width(itemWidth).MaxWidth(itemWidth).Render("\uf1d3 " + s.repoName)
+	}
+
+	topContent := b.String()
 
 	// Wrap content in the subtle rounded border — use full available height
 	borderHeight := s.height - 2 // account for top border + bottom border
 	if borderHeight < 4 {
 		borderHeight = 4
 	}
-	bordered := sidebarBorderStyle.Width(innerWidth).Height(borderHeight).Render(b.String())
+
+	innerContent := topContent
+	if repoSection != "" {
+		topLines := strings.Count(topContent, "\n") + 1
+		repoLines := strings.Count(repoSection, "\n") + 1
+		gap := borderHeight - topLines - repoLines
+		if gap < 1 {
+			gap = 1
+		}
+		innerContent = topContent + strings.Repeat("\n", gap) + repoSection
+	}
+
+	bordered := borderStyle.Width(innerWidth).Height(borderHeight).Render(innerContent)
 	return lipgloss.Place(s.width, s.height, lipgloss.Left, lipgloss.Top, bordered)
 }

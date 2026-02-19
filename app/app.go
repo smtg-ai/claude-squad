@@ -182,6 +182,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 	h.sidebar = ui.NewSidebar()
+	h.sidebar.SetRepoName(filepath.Base(activeRepoPath))
 	h.setFocus(1) // Start with instance list focused
 
 	// Load saved instances
