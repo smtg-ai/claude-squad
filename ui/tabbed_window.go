@@ -25,9 +25,16 @@ var (
 	activeTabStyle = inactiveTabStyle.
 			Border(activeTabBorder, true).
 			AlignHorizontal(lipgloss.Center)
+	windowBorder = func() lipgloss.Border {
+		b := lipgloss.RoundedBorder()
+		// Top corners don't matter (top border is disabled), but set bottom corners rounded
+		b.BottomLeft = "╰"
+		b.BottomRight = "╯"
+		return b
+	}()
 	windowStyle = lipgloss.NewStyle().
 			BorderForeground(highlightColor).
-			Border(lipgloss.NormalBorder(), false, true, true, true)
+			Border(windowBorder, false, true, true, true)
 )
 
 const (
