@@ -1,10 +1,12 @@
 package session
 
 import (
-	"claude-squad/log"
-	"claude-squad/session/git"
-	"claude-squad/session/tmux"
+	"hivemind/log"
+	"hivemind/session/git"
+	"hivemind/session/tmux"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 
 	"fmt"
 	"os"
@@ -64,6 +66,23 @@ type Instance struct {
 	LoadingTotal int
 	// LoadingMessage describes the current loading step.
 	LoadingMessage string
+
+	// Notified is true when the instance finished (Running→Ready) and the user
+	// hasn't selected it yet. Cleared when the user selects this instance.
+	Notified bool
+
+	// LastActiveAt is set whenever the instance is marked as Running.
+	LastActiveAt time.Time
+
+	// PromptDetected is true when the instance's program is waiting for user input.
+	// Reset to false when the instance resumes running. Used by the sidebar to
+	// persistently show a running indicator without flickering.
+	PromptDetected bool
+
+	// CPUPercent is the current CPU usage of the instance's process.
+	CPUPercent float64
+	// MemMB is the current memory usage in megabytes.
+	MemMB float64
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
@@ -205,6 +224,15 @@ func (i *Instance) RepoName() (string, error) {
 }
 
 func (i *Instance) SetStatus(status Status) {
+	if i.Status == Running && status == Ready {
+		i.Notified = true
+		SendNotification("Hivemind", fmt.Sprintf("'%s' has finished", i.Title))
+	}
+	if status == Running || status == Loading {
+		i.LastActiveAt = time.Now()
+		i.PromptDetected = false
+		i.Notified = false
+	}
 	i.Status = status
 }
 
@@ -465,7 +493,7 @@ func (i *Instance) Pause() error {
 			log.ErrorLog.Print(err)
 		} else if dirty {
 			// Commit changes locally (without pushing to GitHub)
-			commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s (paused)", i.Title, time.Now().Format(time.RFC822))
+			commitMsg := fmt.Sprintf("[hivemind] update from '%s' on %s (paused)", i.Title, time.Now().Format(time.RFC822))
 			if err := i.gitWorktree.CommitChanges(commitMsg); err != nil {
 				errs = append(errs, fmt.Errorf("failed to commit changes: %w", err))
 				log.ErrorLog.Print(err)
@@ -591,6 +619,55 @@ func (i *Instance) UpdateDiffStats() error {
 
 	i.diffStats = stats
 	return nil
+}
+
+// UpdateResourceUsage queries the process tree for CPU and memory usage.
+// Values are kept from the previous tick if the query fails, so the UI
+// doesn't flicker between showing and hiding the resource bar.
+func (i *Instance) UpdateResourceUsage() {
+	if !i.started || i.tmuxSession == nil {
+		i.CPUPercent = 0
+		i.MemMB = 0
+		return
+	}
+
+	pid, err := i.tmuxSession.GetPanePID()
+	if err != nil {
+		return
+	}
+
+	// The pane PID is the shell process (e.g., zsh). The actual program
+	// (claude, aider, etc.) runs as a child. Find it with pgrep.
+	targetPid := strconv.Itoa(pid)
+	childCmd := exec.Command("pgrep", "-P", strconv.Itoa(pid))
+	if childOutput, err := childCmd.Output(); err == nil {
+		if children := strings.Fields(strings.TrimSpace(string(childOutput))); len(children) > 0 {
+			targetPid = children[0]
+		}
+	}
+
+	// Get CPU and RSS for the target process
+	psCmd := exec.Command("ps", "-o", "%cpu=,rss=", "-p", targetPid)
+	output, err := psCmd.Output()
+	if err != nil {
+		return
+	}
+
+	fields := strings.Fields(strings.TrimSpace(string(output)))
+	if len(fields) < 2 {
+		return
+	}
+
+	cpu, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return
+	}
+	rssKB, err := strconv.ParseFloat(fields[1], 64)
+	if err != nil {
+		return
+	}
+	i.CPUPercent = cpu
+	i.MemMB = rssKB / 1024
 }
 
 // GetDiffStats returns the current git diff statistics

@@ -1,7 +1,7 @@
 package config
 
 import (
-	"claude-squad/log"
+	"hivemind/log"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -23,7 +23,7 @@ func GetConfigDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get config home directory: %w", err)
 	}
-	return filepath.Join(homeDir, ".claude-squad"), nil
+	return filepath.Join(homeDir, ".hivemind"), nil
 }
 
 // Config represents the application configuration
@@ -36,6 +36,9 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// NotificationsEnabled controls whether macOS/Linux desktop notifications
+	// are sent when an agent finishes (Running -> Ready).
+	NotificationsEnabled *bool `json:"notifications_enabled,omitempty"`
 }
 
 // DefaultConfig returns the default configuration
@@ -46,6 +49,7 @@ func DefaultConfig() *Config {
 		program = defaultProgram
 	}
 
+	trueVal := true
 	return &Config{
 		DefaultProgram:     program,
 		AutoYes:            false,
@@ -58,7 +62,17 @@ func DefaultConfig() *Config {
 			}
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
+		NotificationsEnabled: &trueVal,
 	}
+}
+
+// AreNotificationsEnabled returns whether desktop notifications are enabled.
+// Defaults to true when the field is not set.
+func (c *Config) AreNotificationsEnabled() bool {
+	if c.NotificationsEnabled == nil {
+		return true
+	}
+	return *c.NotificationsEnabled
 }
 
 // GetClaudeCommand attempts to find the "claude" command in the user's shell
