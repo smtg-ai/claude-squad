@@ -44,11 +44,11 @@ type DiffStatsData struct {
 
 // Storage handles saving and loading instances using the state interface
 type Storage struct {
-	state config.InstanceStorage
+	state config.StateManager
 }
 
 // NewStorage creates a new storage instance
-func NewStorage(state config.InstanceStorage) (*Storage, error) {
+func NewStorage(state config.StateManager) (*Storage, error) {
 	return &Storage{
 		state: state,
 	}, nil
@@ -147,4 +147,34 @@ func (s *Storage) UpdateInstance(instance *Instance) error {
 // DeleteAllInstances removes all stored instances
 func (s *Storage) DeleteAllInstances() error {
 	return s.state.DeleteAllInstances()
+}
+
+// SaveTopics saves the list of topics to disk
+func (s *Storage) SaveTopics(topics []*Topic) error {
+	data := make([]TopicData, 0)
+	for _, topic := range topics {
+		data = append(data, topic.ToTopicData())
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal topics: %w", err)
+	}
+	return s.state.SaveTopics(jsonData)
+}
+
+// LoadTopics loads the list of topics from disk
+func (s *Storage) LoadTopics() ([]*Topic, error) {
+	jsonData := s.state.GetTopics()
+	if jsonData == nil || string(jsonData) == "" || string(jsonData) == "null" {
+		return []*Topic{}, nil
+	}
+	var topicsData []TopicData
+	if err := json.Unmarshal(jsonData, &topicsData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal topics: %w", err)
+	}
+	topics := make([]*Topic, len(topicsData))
+	for i, data := range topicsData {
+		topics[i] = FromTopicData(data)
+	}
+	return topics, nil
 }
