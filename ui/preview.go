@@ -57,20 +57,35 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		p.setFallbackState("No agents running yet. Spin up a new instance with 'n' to get started!")
 		return nil
 	case instance.Status == session.Loading:
-		p.loadingTick++
-		// Animated progress bar
+		// Real progress from instance startup stages
+		stage := instance.LoadingStage
+		total := instance.LoadingTotal
+		if total == 0 {
+			total = 4
+		}
+
+		// Progress bar based on actual stage
 		barWidth := 20
-		filled := p.loadingTick % (barWidth + 1)
+		filled := (stage * barWidth) / total
+		if filled > barWidth {
+			filled = barWidth
+		}
 		bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
 
-		// Cycling status messages
-		steps := []string{
-			"Creating git worktree...",
-			"Setting up branch...",
-			"Spawning tmux session...",
-			"Waiting for process...",
+		// Stage descriptions matching actual Instance.Start() stages
+		stageNames := map[int]string{
+			0: "Initializing...",
+			1: "Preparing session...",
+			2: "Creating git worktree...",
+			3: "Setting up worktree...",
+			4: "Starting tmux session...",
 		}
-		step := steps[(p.loadingTick/2)%len(steps)]
+		stepText := stageNames[stage]
+		if stepText == "" {
+			stepText = "Starting..."
+		}
+
+		progressText := fmt.Sprintf("Step %d of %d", stage, total)
 
 		p.setFallbackState(lipgloss.JoinVertical(lipgloss.Center,
 			"",
@@ -85,7 +100,10 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 			"",
 			lipgloss.NewStyle().
 				Foreground(lipgloss.AdaptiveColor{Light: "#808080", Dark: "#808080"}).
-				Render(step),
+				Render(stepText),
+			lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#aaaaaa", Dark: "#555555"}).
+				Render(progressText),
 		))
 		return nil
 	case instance.Status == session.Paused:
