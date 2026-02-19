@@ -67,6 +67,8 @@ const (
 	stateSendPrompt
 	// stateFocusAgent is the state when the user is typing directly into the agent pane.
 	stateFocusAgent
+	// stateFocusGit is the state when the user is typing directly into the lazygit pane.
+	stateFocusGit
 	// stateContextMenu is the state when a right-click context menu is shown.
 	stateContextMenu
 	// stateRepoSwitch is the state when the user is switching repos via picker.
@@ -438,7 +440,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateFocusGit || m.state == stateRepoSwitch {
 		return nil, false
 	}
 	// Skip menu highlighting when git tab is active and lazygit is running
@@ -1232,8 +1234,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 
-		// ESC exits focus mode
-		if msg.Type == tea.KeyEsc {
+		// Ctrl+Space exits focus mode
+		if msg.Type == tea.KeyCtrlAt {
 			m.exitFocusMode()
 			return m, tea.WindowSize()
 		}
@@ -1248,24 +1250,39 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
-	// Handle git tab — forward keys directly to lazygit's PTY
+	// Handle lazygit focus mode — all keys go to lazygit, Ctrl+Space exits
+	if m.state == stateFocusGit {
+		gitPane := m.tabbedWindow.GetGitPane()
+		if gitPane == nil || !gitPane.IsRunning() {
+			m.exitGitFocusMode()
+			return m, nil
+		}
+
+		// Ctrl+Space exits lazygit focus mode
+		if msg.Type == tea.KeyCtrlAt {
+			m.exitGitFocusMode()
+			return m, tea.WindowSize()
+		}
+
+		data := keyToBytes(msg)
+		if data == nil {
+			return m, nil
+		}
+		if err := gitPane.SendKey(data); err != nil {
+			return m, m.handleError(err)
+		}
+		return m, nil
+	}
+
+	// When git tab is active, auto-enter focus mode so lazygit gets all input
 	if m.state == stateDefault && m.tabbedWindow.IsInGitTab() {
 		gitPane := m.tabbedWindow.GetGitPane()
-		if gitPane.IsRunning() {
-			// ESC exits git tab back to preview
-			if msg.Type == tea.KeyEsc {
-				m.killGitTab()
-				m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-				m.menu.SetInDiffTab(false)
-				return m, m.instanceChanged()
-			}
-
+		if gitPane != nil && gitPane.IsRunning() {
+			m.enterGitFocusMode()
+			// Forward this key to lazygit too
 			data := keyToBytes(msg)
-			if data == nil {
-				return m, nil
-			}
-			if err := gitPane.SendKey(data); err != nil {
-				return m, m.handleError(err)
+			if data != nil {
+				gitPane.SendKey(data)
 			}
 			return m, nil
 		}
@@ -1912,6 +1929,18 @@ func (m *home) exitFocusMode() {
 	m.tabbedWindow.SetFocusMode(false)
 }
 
+// enterGitFocusMode enters focus mode for the lazygit git pane.
+func (m *home) enterGitFocusMode() {
+	m.state = stateFocusGit
+	m.tabbedWindow.SetFocusMode(true)
+}
+
+// exitGitFocusMode exits lazygit focus mode back to normal state.
+func (m *home) exitGitFocusMode() {
+	m.state = stateDefault
+	m.tabbedWindow.SetFocusMode(false)
+}
+
 func (m *home) filterInstancesByTopic() {
 	selectedID := m.sidebar.GetSelectedID()
 	switch selectedID {
@@ -2306,6 +2335,10 @@ func keyToBytes(msg tea.KeyMsg) []byte {
 		return []byte{0x17}
 	case tea.KeyDelete:
 		return []byte("\x1b[3~")
+	case tea.KeyEsc:
+		return []byte{0x1b}
+	case tea.KeyShiftTab:
+		return []byte("\x1b[Z")
 	default:
 		return nil
 	}
