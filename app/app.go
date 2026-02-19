@@ -46,8 +46,12 @@ const (
 	stateConfirm
 	// stateNewTopic is the state when the user is creating a new topic.
 	stateNewTopic
+	// stateNewTopicConfirm is the state when confirming shared worktree for a new topic.
+	stateNewTopicConfirm
 	// stateSearch is the state when the user is searching topics/instances.
 	stateSearch
+	// stateMoveTo is the state when the user is moving an instance to a topic.
+	stateMoveTo
 )
 
 type home struct {
@@ -306,7 +310,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateSearch {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -505,20 +509,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.pendingTopicName == "" {
 				return m, m.handleError(fmt.Errorf("topic name cannot be empty"))
 			}
-			topic := session.NewTopic(session.TopicOptions{
-				Name: m.pendingTopicName,
-				Path: ".",
-			})
-			topic.Setup()
-			m.topics = append(m.topics, topic)
-			m.updateSidebarItems()
-			if err := m.storage.SaveTopics(m.topics); err != nil {
-				return m, m.handleError(err)
-			}
-			m.pendingTopicName = ""
-			m.state = stateDefault
-			m.menu.SetState(ui.StateDefault)
-			return m, tea.WindowSize()
+			// Show shared worktree confirmation
+			m.confirmationOverlay = overlay.NewConfirmationOverlay(
+				fmt.Sprintf("Create shared worktree for topic '%s'?\nAll instances will share one branch and directory.", m.pendingTopicName),
+			)
+			m.confirmationOverlay.SetWidth(60)
+			m.state = stateNewTopicConfirm
+			return m, nil
 		case tea.KeyRunes:
 			m.pendingTopicName += string(msg.Runes)
 		case tea.KeyBackspace:
@@ -528,6 +525,89 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 		case tea.KeySpace:
 			m.pendingTopicName += " "
+		}
+		return m, nil
+	}
+
+	// Handle new topic shared worktree confirmation state
+	if m.state == stateNewTopicConfirm {
+		if m.confirmationOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		shouldClose := m.confirmationOverlay.HandleKeyPress(msg)
+		if !shouldClose {
+			return m, nil // No decision yet
+		}
+
+		// Determine if confirmed (y) or cancelled (n/esc) based on which key was pressed
+		shared := msg.String() == m.confirmationOverlay.ConfirmKey
+		topic := session.NewTopic(session.TopicOptions{
+			Name:           m.pendingTopicName,
+			SharedWorktree: shared,
+			Path:           ".",
+		})
+		if err := topic.Setup(); err != nil {
+			m.pendingTopicName = ""
+			m.confirmationOverlay = nil
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, m.handleError(err)
+		}
+		m.topics = append(m.topics, topic)
+		m.updateSidebarItems()
+		if err := m.storage.SaveTopics(m.topics); err != nil {
+			return m, m.handleError(err)
+		}
+		m.pendingTopicName = ""
+		m.confirmationOverlay = nil
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		return m, tea.WindowSize()
+	}
+
+	// Handle move-to-topic state
+	if m.state == stateMoveTo {
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			selected := m.list.GetSelectedInstance()
+			if selected != nil && m.textInputOverlay.IsSubmitted() {
+				newTopic := m.textInputOverlay.GetValue()
+				// Validate the topic exists (if non-empty)
+				if newTopic != "" {
+					found := false
+					for _, t := range m.topics {
+						if t.Name == newTopic {
+							if t.SharedWorktree {
+								m.state = stateDefault
+								m.menu.SetState(ui.StateDefault)
+								m.textInputOverlay = nil
+								return m, m.handleError(fmt.Errorf("cannot move into shared-worktree topics"))
+							}
+							found = true
+							break
+						}
+					}
+					if !found {
+						m.state = stateDefault
+						m.menu.SetState(ui.StateDefault)
+						m.textInputOverlay = nil
+						return m, m.handleError(fmt.Errorf("topic '%s' not found", newTopic))
+					}
+				}
+				selected.TopicName = newTopic
+				m.updateSidebarItems()
+				if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+					m.state = stateDefault
+					m.menu.SetState(ui.StateDefault)
+					m.textInputOverlay = nil
+					return m, m.handleError(err)
+				}
+			}
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			m.textInputOverlay = nil
+			return m, tea.WindowSize()
 		}
 		return m, nil
 	}
@@ -814,6 +894,22 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.state = stateNewTopic
 		m.menu.SetState(ui.StateNewInstance)
 		return m, nil
+	case keys.KeyMoveTo:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		// Can't move shared-worktree instances (they're tied to their topic's worktree)
+		if selected.TopicName != "" {
+			for _, t := range m.topics {
+				if t.Name == selected.TopicName && t.SharedWorktree {
+					return m, m.handleError(fmt.Errorf("cannot move instances in shared-worktree topics"))
+				}
+			}
+		}
+		m.state = stateMoveTo
+		m.textInputOverlay = overlay.NewTextInputOverlay("Move to topic (empty to ungroup)", selected.TopicName)
+		return m, nil
 	case keys.KeySearch:
 		m.sidebar.ActivateSearch()
 		m.state = stateSearch
@@ -969,7 +1065,7 @@ func (m *home) View() string {
 		m.errBox.String(),
 	)
 
-	if m.state == statePrompt {
+	if m.state == statePrompt || m.state == stateMoveTo {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
@@ -979,7 +1075,7 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("text overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
-	} else if m.state == stateConfirm {
+	} else if m.state == stateConfirm || m.state == stateNewTopicConfirm {
 		if m.confirmationOverlay == nil {
 			log.ErrorLog.Printf("confirmation overlay is nil")
 		}
