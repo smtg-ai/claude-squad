@@ -110,6 +110,11 @@ type home struct {
 	focusedPanel int
 	// pendingTopicName stores the topic name during the two-step creation flow
 	pendingTopicName string
+
+	// Layout dimensions for mouse hit-testing
+	sidebarWidth  int
+	listWidth     int
+	contentHeight int
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -192,6 +197,11 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	m.list.SetSize(listWidth, contentHeight)
 	m.sidebar.SetSize(sidebarWidth, contentHeight)
 
+	// Store for mouse hit-testing
+	m.sidebarWidth = sidebarWidth
+	m.listWidth = listWidth
+	m.contentHeight = contentHeight
+
 	if m.textInputOverlay != nil {
 		m.textInputOverlay.SetSize(int(float32(msg.Width)*0.6), int(float32(msg.Height)*0.4))
 	}
@@ -256,23 +266,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tickUpdateMetadataCmd
 	case tea.MouseMsg:
-		// Handle mouse wheel events for scrolling the diff/preview pane
-		if msg.Action == tea.MouseActionPress {
-			if msg.Button == tea.MouseButtonWheelDown || msg.Button == tea.MouseButtonWheelUp {
-				selected := m.list.GetSelectedInstance()
-				if selected == nil || selected.Status == session.Paused {
-					return m, nil
-				}
-
-				switch msg.Button {
-				case tea.MouseButtonWheelUp:
-					m.tabbedWindow.ScrollUp()
-				case tea.MouseButtonWheelDown:
-					m.tabbedWindow.ScrollDown()
-				}
-			}
-		}
-		return m, nil
+		return m.handleMouse(msg)
 	case tea.KeyMsg:
 		return m.handleKeyPress(msg)
 	case tea.WindowSizeMsg:
@@ -335,6 +329,86 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 	return tea.Batch(
 		func() tea.Msg { return msg },
 		m.keydownCallback(name)), true
+}
+
+// handleMouse processes mouse events for click and scroll interactions.
+func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
+
+	// Handle scroll wheel (existing behavior)
+	if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+		selected := m.list.GetSelectedInstance()
+		if selected != nil && selected.Status != session.Paused {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.tabbedWindow.ScrollUp()
+			case tea.MouseButtonWheelDown:
+				m.tabbedWindow.ScrollDown()
+			}
+		}
+		return m, nil
+	}
+
+	// Only handle left clicks from here
+	if msg.Button != tea.MouseButtonLeft {
+		return m, nil
+	}
+
+	// Don't handle clicks in overlay states
+	if m.state != stateDefault {
+		return m, nil
+	}
+
+	x, y := msg.X, msg.Y
+
+	// Account for PaddingTop(1) on columns
+	contentY := y - 1
+
+	// Determine which column was clicked
+	if x < m.sidebarWidth {
+		// Click in sidebar
+		m.focusedPanel = 0
+		m.sidebar.SetFocused(true)
+
+		// Search bar is at rows 0-2 in the sidebar content (border takes 3 rows)
+		if contentY >= 0 && contentY <= 2 {
+			m.sidebar.ActivateSearch()
+			m.state = stateSearch
+			return m, nil
+		}
+
+		// Sidebar items start after search bar (row 0) + border (2 rows) + blank line (1 row) = row 4
+		itemRow := contentY - 4
+		if itemRow >= 0 {
+			m.sidebar.ClickItem(itemRow)
+			m.filterInstancesByTopic()
+			return m, m.instanceChanged()
+		}
+	} else if x < m.sidebarWidth+m.listWidth {
+		// Click in instance list
+		m.focusedPanel = 1
+		m.sidebar.SetFocused(false)
+
+		// Instance list items: each takes ~4 rows (title padding + title + desc + gap)
+		// First 2 rows are the header ("Instances" title + blank lines)
+		listY := contentY - 4
+		if listY >= 0 {
+			// Each instance item is approximately 4 rows (padding + title + branch + gap)
+			itemIdx := listY / 4
+			if itemIdx < m.list.NumInstances() {
+				m.list.SetSelectedInstance(itemIdx)
+				return m, m.instanceChanged()
+			}
+		}
+	} else {
+		// Click in preview/diff area — just switch focus to instance list
+		m.focusedPanel = 1
+		m.sidebar.SetFocused(false)
+	}
+
+	return m, nil
 }
 
 func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {

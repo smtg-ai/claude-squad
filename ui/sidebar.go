@@ -139,6 +139,21 @@ func (s *Sidebar) Down() {
 	}
 }
 
+// ClickItem selects a sidebar item by its rendered row offset (0-indexed from the first item).
+// Section headers count as a row but are skipped for selection.
+func (s *Sidebar) ClickItem(row int) {
+	currentRow := 0
+	for i, item := range s.items {
+		if currentRow == row {
+			if !item.IsSection {
+				s.selectedIdx = i
+			}
+			return
+		}
+		currentRow++
+	}
+}
+
 func (s *Sidebar) ActivateSearch()        { s.searchActive = true; s.searchQuery = "" }
 func (s *Sidebar) DeactivateSearch()      { s.searchActive = false; s.searchQuery = "" }
 func (s *Sidebar) IsSearchActive() bool   { return s.searchActive }
