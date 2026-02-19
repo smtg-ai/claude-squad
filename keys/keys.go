@@ -22,18 +22,18 @@ const (
 
 	KeyCheckout
 	KeyResume
-	KeyPrompt // New key for entering a prompt
-	KeyHelp              // Key for showing help screen
+	KeyPrompt             // New key for entering a prompt
+	KeyHelp               // Key for showing help screen
 	KeyNewSkipPermissions // Key for creating instance with --dangerously-skip-permissions
 
-	KeyNewTopic           // Key for creating a new topic
-	KeyMoveTo             // Key for moving instance to a topic
-	KeySearch             // Key for activating search
-	KeyLeft               // Key for switching focus left (to sidebar)
-	KeyRight              // Key for switching focus right (to instance list)
+	KeyNewTopic // Key for creating a new topic
+	KeyMoveTo   // Key for moving instance to a topic
+	KeySearch   // Key for activating search
+	KeyLeft     // Key for switching focus left (to sidebar)
+	KeyRight    // Key for switching focus right (to instance list)
 
-	KeyCreatePR           // Key for creating a pull request
-	KeyKillAllInTopic     // Key for killing all instances in the active topic
+	KeyCreatePR       // Key for creating a pull request
+	KeyKillAllInTopic // Key for killing all instances in the active topic
 
 	KeySendPrompt // Key for sending a prompt to a running instance
 
@@ -46,6 +46,11 @@ const (
 	KeyRepoSwitch   // Key for switching repos
 
 	KeyGitTab // Key for jumping directly to git tab
+
+	// Tab switching keybindings (Shift+1/2/3)
+	KeyTabAgent
+	KeyTabDiff
+	KeyTabGit
 
 	// Diff keybindings
 	KeyShiftUp
@@ -72,22 +77,25 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"p":          KeySubmit,
 	"?":          KeyHelp,
 	"S":          KeyNewSkipPermissions,
-	"T":     KeyNewTopic,
-	"m":     KeyMoveTo,
-	"/":     KeySearch,
-	"left":  KeyLeft,
-	"h":     KeyLeft,
-	"right": KeyRight,
-	"l":     KeyRight,
-	"X":     KeyKillAllInTopic,
-	"P":     KeyCreatePR,
-	"i":     KeySendPrompt,
-	" ":     KeySpace,
-	"1":     KeyFilterAll,
-	"2":     KeyFilterActive,
-	"3":     KeyCycleSort,
-	"R":     KeyRepoSwitch,
-	"g":     KeyGitTab,
+	"T":          KeyNewTopic,
+	"m":          KeyMoveTo,
+	"/":          KeySearch,
+	"left":       KeyLeft,
+	"h":          KeyLeft,
+	"right":      KeyRight,
+	"l":          KeyRight,
+	"X":          KeyKillAllInTopic,
+	"P":          KeyCreatePR,
+	"i":          KeySendPrompt,
+	" ":          KeySpace,
+	"1":          KeyFilterAll,
+	"2":          KeyFilterActive,
+	"3":          KeyCycleSort,
+	"R":          KeyRepoSwitch,
+	"g":          KeyGitTab,
+	"!":          KeyTabAgent,
+	"@":          KeyTabDiff,
+	"#":          KeyTabGit,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -207,6 +215,18 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyGitTab: key.NewBinding(
 		key.WithKeys("g"),
 		key.WithHelp("g", "git tab"),
+	),
+	KeyTabAgent: key.NewBinding(
+		key.WithKeys("!"),
+		key.WithHelp("!/#/@", "switch tab"),
+	),
+	KeyTabDiff: key.NewBinding(
+		key.WithKeys("@"),
+		key.WithHelp("@", "diff tab"),
+	),
+	KeyTabGit: key.NewBinding(
+		key.WithKeys("#"),
+		key.WithHelp("#", "git tab"),
 	),
 
 	// -- Special keybindings --

@@ -55,8 +55,6 @@ type Instance struct {
 	SkipPermissions bool
 	// TopicName is the name of the topic this instance belongs to (empty = ungrouped).
 	TopicName string
-	// Prompt is the initial prompt to pass to the instance on startup
-	Prompt string
 
 	// sharedWorktree is true if this instance uses a topic's shared worktree (should not clean it up).
 	sharedWorktree bool
@@ -102,14 +100,14 @@ type Instance struct {
 // ToInstanceData converts an Instance to its serializable form
 func (i *Instance) ToInstanceData() InstanceData {
 	data := InstanceData{
-		Title:     i.Title,
-		Path:      i.Path,
-		Branch:    i.Branch,
-		Status:    i.Status,
-		Height:    i.Height,
-		Width:     i.Width,
-		CreatedAt: i.CreatedAt,
-		UpdatedAt: time.Now(),
+		Title:           i.Title,
+		Path:            i.Path,
+		Branch:          i.Branch,
+		Status:          i.Status,
+		Height:          i.Height,
+		Width:           i.Width,
+		CreatedAt:       i.CreatedAt,
+		UpdatedAt:       time.Now(),
 		Program:         i.Program,
 		AutoYes:         i.AutoYes,
 		SkipPermissions: i.SkipPermissions,
@@ -142,14 +140,14 @@ func (i *Instance) ToInstanceData() InstanceData {
 // FromInstanceData creates a new Instance from serialized data
 func FromInstanceData(data InstanceData) (*Instance, error) {
 	instance := &Instance{
-		Title:     data.Title,
-		Path:      data.Path,
-		Branch:    data.Branch,
-		Status:    data.Status,
-		Height:    data.Height,
-		Width:     data.Width,
-		CreatedAt: data.CreatedAt,
-		UpdatedAt: data.UpdatedAt,
+		Title:           data.Title,
+		Path:            data.Path,
+		Branch:          data.Branch,
+		Status:          data.Status,
+		Height:          data.Height,
+		Width:           data.Width,
+		CreatedAt:       data.CreatedAt,
+		UpdatedAt:       data.UpdatedAt,
 		Program:         data.Program,
 		SkipPermissions: data.SkipPermissions,
 		TopicName:       data.TopicName,
@@ -205,15 +203,15 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 	}
 
 	return &Instance{
-		Title:     opts.Title,
-		Status:    Ready,
-		Path:      absPath,
-		Program:   opts.Program,
-		Height:    0,
-		Width:     0,
-		CreatedAt: t,
-		UpdatedAt: t,
-		AutoYes:         false,
+		Title:           opts.Title,
+		Status:          Ready,
+		Path:            absPath,
+		Program:         opts.Program,
+		Height:          0,
+		Width:           0,
+		CreatedAt:       t,
+		UpdatedAt:       t,
+		AutoYes:         opts.AutoYes,
 		SkipPermissions: opts.SkipPermissions,
 		TopicName:       opts.TopicName,
 	}, nil

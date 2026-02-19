@@ -2,12 +2,12 @@ package tmux
 
 import (
 	"bytes"
-	"hivemind/cmd"
-	"hivemind/log"
 	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"hivemind/cmd"
+	"hivemind/log"
 	"io"
 	"os"
 	"os/exec"
@@ -51,7 +51,7 @@ type TmuxSession struct {
 	monitor *statusMonitor
 
 	// Initialized by Attach
-	// Deinitilaized by Detach
+	// Deinitialized by Detach
 	//
 	// Channel to be closed at the very end of detaching. Used to signal callers.
 	attachCh chan struct{}
@@ -289,8 +289,9 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 		hasPrompt = strings.Contains(content, "Yes, allow once")
 	}
 
-	if !bytes.Equal(t.monitor.hash(content), t.monitor.prevOutputHash) {
-		t.monitor.prevOutputHash = t.monitor.hash(content)
+	newHash := t.monitor.hash(content)
+	if !bytes.Equal(newHash, t.monitor.prevOutputHash) {
+		t.monitor.prevOutputHash = newHash
 		return true, hasPrompt
 	}
 	return false, hasPrompt
@@ -525,7 +526,6 @@ func (t *TmuxSession) CapturePaneContentWithOptions(start, end string) (string, 
 	return string(output), nil
 }
 
-// GetPanePID returns the PID of the process running in the tmux pane.
 // GetPTY returns the master PTY file descriptor for direct I/O.
 func (t *TmuxSession) GetPTY() *os.File {
 	return t.ptmx

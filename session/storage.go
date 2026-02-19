@@ -1,25 +1,25 @@
 package session
 
 import (
-	"hivemind/config"
 	"encoding/json"
 	"fmt"
+	"hivemind/config"
 	"time"
 )
 
 // InstanceData represents the serializable data of an Instance
 type InstanceData struct {
-	Title     string    `json:"title"`
-	Path      string    `json:"path"`
-	Branch    string    `json:"branch"`
-	Status    Status    `json:"status"`
-	Height    int       `json:"height"`
-	Width     int       `json:"width"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	AutoYes         bool   `json:"auto_yes"`
-	SkipPermissions bool   `json:"skip_permissions"`
-	TopicName       string `json:"topic_name,omitempty"`
+	Title           string    `json:"title"`
+	Path            string    `json:"path"`
+	Branch          string    `json:"branch"`
+	Status          Status    `json:"status"`
+	Height          int       `json:"height"`
+	Width           int       `json:"width"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	AutoYes         bool      `json:"auto_yes"`
+	SkipPermissions bool      `json:"skip_permissions"`
+	TopicName       string    `json:"topic_name,omitempty"`
 
 	Program   string          `json:"program"`
 	Worktree  GitWorktreeData `json:"worktree"`

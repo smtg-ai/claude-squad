@@ -17,12 +17,6 @@ var pickerTitleStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("#F0A868")).
 	MarginBottom(1)
 
-var pickerSearchStyle = lipgloss.NewStyle().
-	Border(lipgloss.RoundedBorder()).
-	BorderForeground(lipgloss.Color("#555555")).
-	Padding(0, 1).
-	MarginBottom(1)
-
 var pickerSearchActiveStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
 	BorderForeground(lipgloss.Color("#7EC8D8")).
@@ -64,10 +58,6 @@ func NewPickerOverlay(title string, items []string) *PickerOverlay {
 		filtered: filtered,
 		width:    40,
 	}
-}
-
-func (p *PickerOverlay) SetWidth(w int) {
-	p.width = w
 }
 
 // HandleKeyPress processes input. Returns true when the overlay should close.

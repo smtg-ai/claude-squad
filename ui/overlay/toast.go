@@ -337,4 +337,3 @@ func (tm *ToastManager) GetPosition() (int, int) {
 	x += maxOffset
 	return x, y
 }
-

@@ -1,11 +1,11 @@
 package app
 
 import (
+	"fmt"
 	"hivemind/log"
 	"hivemind/session"
 	"hivemind/ui"
 	"hivemind/ui/overlay"
-	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"

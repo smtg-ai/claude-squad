@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"hivemind/app"
 	cmd2 "hivemind/cmd"
 	"hivemind/config"
@@ -9,9 +12,6 @@ import (
 	"hivemind/session"
 	"hivemind/session/git"
 	"hivemind/session/tmux"
-	"context"
-	"encoding/json"
-	"fmt"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -33,9 +33,11 @@ var (
 			if daemonFlag {
 				cfg := config.LoadConfig()
 				session.NotificationsEnabled = cfg.AreNotificationsEnabled()
-				err := daemon.RunDaemon(cfg)
-				log.ErrorLog.Printf("failed to start daemon %v", err)
-				return err
+				if err := daemon.RunDaemon(cfg); err != nil {
+					log.ErrorLog.Printf("failed to start daemon: %v", err)
+					return err
+				}
+				return nil
 			}
 
 			// Check if we're in a git repository

@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"hivemind/session"
 	"fmt"
+	"hivemind/session"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -19,7 +19,6 @@ type PreviewPane struct {
 	previewState previewState
 	isScrolling  bool
 	viewport     viewport.Model
-	loadingTick  int // animation counter for loading state
 }
 
 type previewState struct {

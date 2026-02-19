@@ -1,8 +1,8 @@
 package session
 
 import (
-	"hivemind/session/git"
 	"fmt"
+	"hivemind/session/git"
 	"time"
 )
 

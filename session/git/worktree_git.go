@@ -1,8 +1,8 @@
 package git
 
 import (
-	"hivemind/log"
 	"fmt"
+	"hivemind/log"
 	"os/exec"
 	"strings"
 )
@@ -80,7 +80,7 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 
 // GeneratePRBody assembles a markdown PR description from the branch's
 // changed files, commit history, and diff stats.
-func (g *GitWorktree) GeneratePRBody(commitMsg string) (string, error) {
+func (g *GitWorktree) GeneratePRBody() (string, error) {
 	base := g.GetBaseCommitSHA()
 	if base == "" {
 		return "", fmt.Errorf("no base commit SHA available")
@@ -182,7 +182,7 @@ func (g *GitWorktree) IsBranchCheckedOut() (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("failed to get current branch: %w", err)
 	}
-	return strings.TrimSpace(string(output)) == g.branchName, nil
+	return strings.TrimSpace(output) == g.branchName, nil
 }
 
 // OpenBranchURL opens the branch URL in the default browser

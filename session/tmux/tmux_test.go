@@ -1,8 +1,8 @@
 package tmux
 
 import (
-	cmd2 "hivemind/cmd"
 	"fmt"
+	cmd2 "hivemind/cmd"
 	"math/rand"
 	"os"
 	"os/exec"

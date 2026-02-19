@@ -1,10 +1,10 @@
 package ui
 
 import (
-	"hivemind/log"
-	"hivemind/session"
 	"errors"
 	"fmt"
+	"hivemind/log"
+	"hivemind/session"
 	"math"
 	"sort"
 	"strings"
@@ -201,7 +201,7 @@ func (l *List) HandleTabClick(localX, localY int) (StatusFilter, bool) {
 	}
 
 	// Tab widths include Padding(0,1) so 1 char padding on each side.
-	allWidth := len(allTabText) + 2  // "1 All" + 2 padding = 7
+	allWidth := len(allTabText) + 2       // "1 All" + 2 padding = 7
 	activeWidth := len(activeTabText) + 2 // "2 Active" + 2 padding = 10
 
 	if localX >= 0 && localX < allWidth {

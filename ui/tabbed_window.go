@@ -1,9 +1,9 @@
 package ui
 
 import (
+	"github.com/charmbracelet/lipgloss"
 	"hivemind/log"
 	"hivemind/session"
-	"github.com/charmbracelet/lipgloss"
 )
 
 func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
@@ -26,7 +26,7 @@ var (
 			Border(activeTabBorder, true).
 			AlignHorizontal(lipgloss.Center)
 	windowBorder = lipgloss.RoundedBorder()
-	windowStyle = lipgloss.NewStyle().
+	windowStyle  = lipgloss.NewStyle().
 			BorderForeground(highlightColor).
 			Border(windowBorder, false, true, true, true)
 )

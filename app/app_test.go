@@ -1,13 +1,13 @@
 package app
 
 import (
+	"context"
+	"fmt"
 	"hivemind/config"
 	"hivemind/log"
 	"hivemind/session"
 	"hivemind/ui"
 	"hivemind/ui/overlay"
-	"context"
-	"fmt"
 	"os"
 	"testing"
 

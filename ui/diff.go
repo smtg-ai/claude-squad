@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"hivemind/session"
 	"fmt"
+	"hivemind/session"
 	"path/filepath"
 	"strings"
 
@@ -30,9 +30,6 @@ var (
 	filePanelBorderFocusedStyle = lipgloss.NewStyle().
 					Border(lipgloss.RoundedBorder()).
 					BorderForeground(lipgloss.Color("#F0A868"))
-	diffPanelBorderStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(lipgloss.AdaptiveColor{Light: "#d0d0d0", Dark: "#333333"})
 	diffHeaderStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#F0A868")).
 			Bold(true)
@@ -194,7 +191,7 @@ func (d *DiffPane) renderSidebar() string {
 	// "All" entry
 	allLabel := "\uf0ce All"
 	if d.selectedFile == -1 {
-		b.WriteString(fileItemSelectedStyle.Width(innerWidth).Render(" "+allLabel))
+		b.WriteString(fileItemSelectedStyle.Width(innerWidth).Render(" " + allLabel))
 	} else {
 		b.WriteString(fileItemStyle.Render(" " + allLabel))
 	}
@@ -274,7 +271,7 @@ func (d *DiffPane) renderSidebar() string {
 	}
 
 	// Fill remaining height with empty lines so the border stretches
-	lines := 2 + len(d.files) // header + all entry + file entries
+	lines := 2 + len(d.files)             // header + all entry + file entries
 	for i := lines; i < d.height-3; i++ { // -3 for border + hint
 		b.WriteString("\n")
 	}

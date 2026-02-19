@@ -170,7 +170,7 @@ func (s *Sidebar) SetItems(topicNames []string, instanceCountByTopic map[string]
 			items = append(items, SidebarItem{
 				Name: name, ID: name, Count: count,
 				SharedWorktree: sharedTopics[name],
-				HasRunning: st.HasRunning, HasNotification: st.HasNotification,
+				HasRunning:     st.HasRunning, HasNotification: st.HasNotification,
 			})
 		}
 	}
@@ -270,10 +270,10 @@ func (s *Sidebar) SelectFirst() {
 	}
 }
 
-func (s *Sidebar) ActivateSearch()        { s.searchActive = true; s.searchQuery = "" }
-func (s *Sidebar) DeactivateSearch()      { s.searchActive = false; s.searchQuery = "" }
-func (s *Sidebar) IsSearchActive() bool   { return s.searchActive }
-func (s *Sidebar) GetSearchQuery() string { return s.searchQuery }
+func (s *Sidebar) ActivateSearch()         { s.searchActive = true; s.searchQuery = "" }
+func (s *Sidebar) DeactivateSearch()       { s.searchActive = false; s.searchQuery = "" }
+func (s *Sidebar) IsSearchActive() bool    { return s.searchActive }
+func (s *Sidebar) GetSearchQuery() string  { return s.searchQuery }
 func (s *Sidebar) SetSearchQuery(q string) { s.searchQuery = q }
 
 func (s *Sidebar) String() string {

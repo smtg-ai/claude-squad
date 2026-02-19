@@ -1,8 +1,8 @@
 package git
 
 import (
-	"hivemind/log"
 	"fmt"
+	"hivemind/log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -74,11 +74,7 @@ func (g *GitWorktree) setupFromExistingBranch() error {
 
 // setupNewWorktree creates a new worktree from HEAD
 func (g *GitWorktree) setupNewWorktree() error {
-	// Ensure worktrees directory exists
-	worktreesDir := filepath.Join(g.repoPath, "worktrees")
-	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
-		return fmt.Errorf("failed to create worktrees directory: %w", err)
-	}
+	// Directory already created in Setup(), skip duplicate creation
 
 	// Clean up any existing worktree first
 	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath) // Ignore error if worktree doesn't exist
@@ -103,7 +99,7 @@ func (g *GitWorktree) setupNewWorktree() error {
 		}
 		return fmt.Errorf("failed to get HEAD commit hash: %w", err)
 	}
-	headCommit := strings.TrimSpace(string(output))
+	headCommit := strings.TrimSpace(output)
 	g.baseCommitSHA = headCommit
 
 	// Create a new worktree from the HEAD commit

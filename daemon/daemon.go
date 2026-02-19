@@ -1,10 +1,10 @@
 package daemon
 
 import (
+	"fmt"
 	"hivemind/config"
 	"hivemind/log"
 	"hivemind/session"
-	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -26,7 +26,7 @@ func RunDaemon(cfg *config.Config) error {
 
 	instances, err := storage.LoadInstances()
 	if err != nil {
-		return fmt.Errorf("failed to load instacnes: %w", err)
+		return fmt.Errorf("failed to load instances: %w", err)
 	}
 	for _, instance := range instances {
 		// Assume AutoYes is true if the daemon is running.
@@ -35,7 +35,7 @@ func RunDaemon(cfg *config.Config) error {
 
 	pollInterval := time.Duration(cfg.DaemonPollInterval) * time.Millisecond
 
-	// If we get an error for a session, it's likely that we'll keep getting the error. Log every 30 seconds.
+	// If we get an error for a session, it's likely that we'll keep getting the error. Log every 60 seconds.
 	everyN := log.NewEvery(60 * time.Second)
 
 	wg := &sync.WaitGroup{}

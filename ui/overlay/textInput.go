@@ -41,36 +41,16 @@ func NewTextInputOverlay(title string, initialValue string) *TextInputOverlay {
 }
 
 func (t *TextInputOverlay) SetSize(width, height int) {
-	t.textarea.SetHeight(height) // Set textarea height to 10 lines
+	t.textarea.SetHeight(height)
 	t.width = width
 	t.height = height
-}
-
-// Init initializes the text input overlay model
-func (t *TextInputOverlay) Init() tea.Cmd {
-	return textarea.Blink
-}
-
-// View renders the model's view
-func (t *TextInputOverlay) View() string {
-	return t.Render()
 }
 
 // HandleKeyPress processes a key press and updates the state accordingly.
 // Returns true if the overlay should be closed.
 func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 	switch msg.Type {
-	case tea.KeyTab:
-		// Toggle focus between input and enter button.
-		t.FocusIndex = (t.FocusIndex + 1) % 2
-		if t.FocusIndex == 0 {
-			t.textarea.Focus()
-		} else {
-			t.textarea.Blur()
-		}
-		return false
-	case tea.KeyShiftTab:
-		// Toggle focus in reverse.
+	case tea.KeyTab, tea.KeyShiftTab:
 		t.FocusIndex = (t.FocusIndex + 1) % 2
 		if t.FocusIndex == 0 {
 			t.textarea.Focus()
@@ -104,16 +84,6 @@ func (t *TextInputOverlay) GetValue() string {
 // IsSubmitted returns whether the form was submitted.
 func (t *TextInputOverlay) IsSubmitted() bool {
 	return t.Submitted
-}
-
-// IsCanceled returns whether the form was canceled.
-func (t *TextInputOverlay) IsCanceled() bool {
-	return t.Canceled
-}
-
-// SetOnSubmit sets a callback function for form submission.
-func (t *TextInputOverlay) SetOnSubmit(onSubmit func()) {
-	t.OnSubmit = onSubmit
 }
 
 // Render renders the text input overlay.

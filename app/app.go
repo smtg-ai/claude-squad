@@ -1,14 +1,14 @@
 package app
 
 import (
+	"context"
+	"fmt"
 	"hivemind/config"
 	"hivemind/keys"
 	"hivemind/log"
 	"hivemind/session"
 	"hivemind/ui"
 	"hivemind/ui/overlay"
-	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -961,8 +961,8 @@ func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
 		items = append(items, overlay.ContextMenuItem{Label: "Move to topic", Action: "move_instance"})
 		items = append(items, overlay.ContextMenuItem{Label: "Push branch", Action: "push_instance"})
 		items = append(items, overlay.ContextMenuItem{Label: "Create PR", Action: "create_pr_instance"})
-	items = append(items, overlay.ContextMenuItem{Label: "Copy worktree path", Action: "copy_worktree_path"})
-	items = append(items, overlay.ContextMenuItem{Label: "Copy branch name", Action: "copy_branch_name"})
+		items = append(items, overlay.ContextMenuItem{Label: "Copy worktree path", Action: "copy_worktree_path"})
+		items = append(items, overlay.ContextMenuItem{Label: "Copy branch name", Action: "copy_branch_name"})
 		m.contextMenu = overlay.NewContextMenu(x, y, items)
 		m.state = stateContextMenu
 		return m, nil
@@ -1139,11 +1139,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					m.textInputOverlay = nil
 
 					// Generate a PR body from git data
-					commitMsg := fmt.Sprintf("[hivemind] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
 					generatedBody := ""
 					worktree, err := selected.GetGitWorktree()
 					if err == nil {
-						body, genErr := worktree.GeneratePRBody(commitMsg)
+						body, genErr := worktree.GeneratePRBody()
 						if genErr == nil {
 							generatedBody = body
 						}
@@ -1273,6 +1272,24 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if msg.Type == tea.KeyCtrlO {
 			m.exitFocusMode()
 			return m, tea.WindowSize()
+		}
+
+		// Shift+1/2/3: exit focus mode and switch to specific tab
+		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
+			if targetTab, ok := shiftNumToTab(msg.Runes[0]); ok {
+				wasGitTab := m.tabbedWindow.IsInGitTab()
+				m.exitFocusMode()
+				m.tabbedWindow.SetActiveTab(targetTab)
+				m.menu.SetInDiffTab(targetTab == ui.DiffTab)
+				if wasGitTab && targetTab != ui.GitTab {
+					m.killGitTab()
+				}
+				if targetTab == ui.GitTab && !wasGitTab {
+					cmd := m.spawnGitTab()
+					return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), cmd)
+				}
+				return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+			}
 		}
 
 		// Git tab focus: forward to lazygit
@@ -1675,6 +1692,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.menu.SetInDiffTab(false)
 		cmd := m.spawnGitTab()
 		return m, tea.Batch(m.instanceChanged(), cmd)
+	case keys.KeyTabAgent, keys.KeyTabDiff, keys.KeyTabGit:
+		return m.switchToTab(name)
 	case keys.KeySendPrompt:
 		if m.tabbedWindow.IsInGitTab() {
 			return m, m.enterGitFocusMode()
@@ -1987,6 +2006,51 @@ func (m *home) exitFocusMode() {
 	m.tabbedWindow.SetFocusMode(false)
 }
 
+// shiftNumToTab maps Shift+1/2/3 characters to tab indices.
+func shiftNumToTab(r rune) (int, bool) {
+	switch r {
+	case '!':
+		return ui.PreviewTab, true
+	case '@':
+		return ui.DiffTab, true
+	case '#':
+		return ui.GitTab, true
+	default:
+		return 0, false
+	}
+}
+
+// switchToTab switches to the specified tab, handling git tab spawn/kill lifecycle.
+func (m *home) switchToTab(name keys.KeyName) (tea.Model, tea.Cmd) {
+	var targetTab int
+	switch name {
+	case keys.KeyTabAgent:
+		targetTab = ui.PreviewTab
+	case keys.KeyTabDiff:
+		targetTab = ui.DiffTab
+	case keys.KeyTabGit:
+		targetTab = ui.GitTab
+	default:
+		return m, nil
+	}
+
+	if m.tabbedWindow.GetActiveTab() == targetTab {
+		return m, nil
+	}
+
+	wasGitTab := m.tabbedWindow.IsInGitTab()
+	m.tabbedWindow.SetActiveTab(targetTab)
+	m.menu.SetInDiffTab(targetTab == ui.DiffTab)
+
+	if wasGitTab && targetTab != ui.GitTab {
+		m.killGitTab()
+	}
+	if targetTab == ui.GitTab {
+		cmd := m.spawnGitTab()
+		return m, tea.Batch(m.instanceChanged(), cmd)
+	}
+	return m, m.instanceChanged()
+}
 
 func (m *home) filterInstancesByTopic() {
 	selectedID := m.sidebar.GetSelectedID()

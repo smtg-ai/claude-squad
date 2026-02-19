@@ -62,7 +62,6 @@ func NewEvery(timeout time.Duration) *Every {
 func (e *Every) ShouldLog() bool {
 	if e.timer == nil {
 		e.timer = time.NewTimer(e.timeout)
-		e.timer.Reset(e.timeout)
 		return true
 	}
 

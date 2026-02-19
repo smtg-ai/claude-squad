@@ -1,9 +1,9 @@
 package config
 
 import (
-	"hivemind/log"
 	"encoding/json"
 	"fmt"
+	"hivemind/log"
 	"os"
 	"path/filepath"
 )

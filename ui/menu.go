@@ -179,8 +179,8 @@ func (m *Menu) String() string {
 		start int
 		end   int
 	}{
-		{0, 2},         // Instance management group
-		{2, actionEnd}, // Action group
+		{0, 2},                      // Instance management group
+		{2, actionEnd},              // Action group
 		{actionEnd, len(m.options)}, // System group
 	}
 

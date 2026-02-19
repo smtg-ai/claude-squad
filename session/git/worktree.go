@@ -1,9 +1,9 @@
 package git
 
 import (
+	"fmt"
 	"hivemind/config"
 	"hivemind/log"
-	"fmt"
 	"path/filepath"
 	"time"
 )
