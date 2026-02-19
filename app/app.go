@@ -115,6 +115,8 @@ type home struct {
 
 	// contextMenu is the right-click context menu overlay
 	contextMenu *overlay.ContextMenu
+	// pickerOverlay is the topic picker overlay for move-to-topic
+	pickerOverlay *overlay.PickerOverlay
 
 	// Layout dimensions for mouse hit-testing
 	sidebarWidth  int
@@ -499,7 +501,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.state = stateMoveTo
-		m.textInputOverlay = overlay.NewTextInputOverlay("Move to topic (empty to ungroup)", selected.TopicName)
+		m.pickerOverlay = overlay.NewPickerOverlay("Move to topic", m.getMovableTopicNames())
 		return m, nil
 
 	case "push_instance":
@@ -841,47 +843,29 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, tea.WindowSize()
 	}
 
-	// Handle move-to-topic state
+	// Handle move-to-topic state (picker overlay)
 	if m.state == stateMoveTo {
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
 		if shouldClose {
 			selected := m.list.GetSelectedInstance()
-			if selected != nil && m.textInputOverlay.IsSubmitted() {
-				newTopic := m.textInputOverlay.GetValue()
-				// Validate the topic exists (if non-empty)
-				if newTopic != "" {
-					found := false
-					for _, t := range m.topics {
-						if t.Name == newTopic {
-							if t.SharedWorktree {
-								m.state = stateDefault
-								m.menu.SetState(ui.StateDefault)
-								m.textInputOverlay = nil
-								return m, m.handleError(fmt.Errorf("cannot move into shared-worktree topics"))
-							}
-							found = true
-							break
-						}
-					}
-					if !found {
-						m.state = stateDefault
-						m.menu.SetState(ui.StateDefault)
-						m.textInputOverlay = nil
-						return m, m.handleError(fmt.Errorf("topic '%s' not found", newTopic))
-					}
+			if selected != nil && m.pickerOverlay.IsSubmitted() {
+				picked := m.pickerOverlay.Value()
+				if picked == "(Ungrouped)" {
+					selected.TopicName = ""
+				} else {
+					selected.TopicName = picked
 				}
-				selected.TopicName = newTopic
 				m.updateSidebarItems()
 				if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
 					m.state = stateDefault
 					m.menu.SetState(ui.StateDefault)
-					m.textInputOverlay = nil
+					m.pickerOverlay = nil
 					return m, m.handleError(err)
 				}
 			}
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
-			m.textInputOverlay = nil
+			m.pickerOverlay = nil
 			return m, tea.WindowSize()
 		}
 		return m, nil
@@ -1183,7 +1167,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 		}
 		m.state = stateMoveTo
-		m.textInputOverlay = overlay.NewTextInputOverlay("Move to topic (empty to ungroup)", selected.TopicName)
+		m.pickerOverlay = overlay.NewPickerOverlay("Move to topic", m.getMovableTopicNames())
 		return m, nil
 	case keys.KeySearch:
 		m.sidebar.ActivateSearch()
@@ -1214,6 +1198,17 @@ func (m *home) updateSidebarItems() {
 	}
 
 	m.sidebar.SetItems(topicNames, countByTopic, ungroupedCount)
+}
+
+// getMovableTopicNames returns topic names that a non-shared instance can be moved to.
+func (m *home) getMovableTopicNames() []string {
+	names := []string{"(Ungrouped)"}
+	for _, t := range m.topics {
+		if !t.SharedWorktree {
+			names = append(names, t.Name)
+		}
+	}
+	return names
 }
 
 func (m *home) filterInstancesByTopic() {
@@ -1341,7 +1336,9 @@ func (m *home) View() string {
 		m.errBox.String(),
 	)
 
-	if m.state == statePrompt || m.state == stateMoveTo {
+	if m.state == stateMoveTo && m.pickerOverlay != nil {
+		return overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
+	} else if m.state == statePrompt {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
