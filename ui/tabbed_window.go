@@ -226,10 +226,10 @@ func (w *TabbedWindow) String() string {
 			"",
 			lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#7D56F4")).Render("Editor"),
 			"",
-			lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#808080", Dark: "#808080"}).Render("Press 'e' to open nvim in this instance's worktree"),
+			lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#808080", Dark: "#808080"}).Render("Press 'e' to open your editor in this instance's worktree"),
 			"",
-			lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#aaaaaa", Dark: "#555555"}).Render("nvim will get full terminal control"),
-			lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#aaaaaa", Dark: "#555555"}).Render("Exit nvim (:q) to return here"),
+			lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#aaaaaa", Dark: "#555555"}).Render("Close the editor (:q in nvim) to return here"),
+			lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "#aaaaaa", Dark: "#555555"}).Render("Uses $EDITOR if set, otherwise nvim"),
 		)
 		content = editorHint
 	}
