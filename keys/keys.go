@@ -32,6 +32,17 @@ const (
 	KeyLeft               // Key for switching focus left (to sidebar)
 	KeyRight              // Key for switching focus right (to instance list)
 
+	KeyCreatePR           // Key for creating a pull request
+	KeyKillAllInTopic     // Key for killing all instances in the active topic
+
+	KeySendPrompt // Key for sending a prompt to a running instance
+
+	KeySpace // Key for opening context menu on selected item
+
+	// Instance filter keybindings
+	KeyFilterAll    // Key for showing all instances
+	KeyFilterActive // Key for showing only active instances
+
 	// Diff keybindings
 	KeyShiftUp
 	KeyShiftDown
@@ -64,6 +75,12 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"h":     KeyLeft,
 	"right": KeyRight,
 	"l":     KeyRight,
+	"X":     KeyKillAllInTopic,
+	"P":     KeyCreatePR,
+	"i":     KeySendPrompt,
+	" ":     KeySpace,
+	"1":     KeyFilterAll,
+	"2":     KeyFilterActive,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -140,6 +157,14 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithKeys("/"),
 		key.WithHelp("/", "search"),
 	),
+	KeyCreatePR: key.NewBinding(
+		key.WithKeys("P"),
+		key.WithHelp("P", "create PR"),
+	),
+	KeyKillAllInTopic: key.NewBinding(
+		key.WithKeys("X"),
+		key.WithHelp("X", "kill all in topic"),
+	),
 	KeyLeft: key.NewBinding(
 		key.WithKeys("left", "h"),
 		key.WithHelp("←/h", "sidebar"),
@@ -147,6 +172,22 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyRight: key.NewBinding(
 		key.WithKeys("right", "l"),
 		key.WithHelp("→/l", "instances"),
+	),
+	KeySendPrompt: key.NewBinding(
+		key.WithKeys("i"),
+		key.WithHelp("i", "send prompt"),
+	),
+	KeySpace: key.NewBinding(
+		key.WithKeys(" "),
+		key.WithHelp("space", "actions"),
+	),
+	KeyFilterAll: key.NewBinding(
+		key.WithKeys("1"),
+		key.WithHelp("1", "all"),
+	),
+	KeyFilterActive: key.NewBinding(
+		key.WithKeys("2"),
+		key.WithHelp("2", "active"),
 	),
 
 	// -- Special keybindings --

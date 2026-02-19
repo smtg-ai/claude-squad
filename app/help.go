@@ -1,10 +1,10 @@
 package app
 
 import (
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/ui"
-	"claude-squad/ui/overlay"
+	"hivemind/log"
+	"hivemind/session"
+	"hivemind/ui"
+	"hivemind/ui/overlay"
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -35,32 +35,35 @@ func helpStart(instance *session.Instance) helpText {
 
 func (h helpTypeGeneral) toContent() string {
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		titleStyle.Render("Claude Squad"),
+		lipgloss.NewStyle().Bold(true).Underline(true).Render(ui.GradientText("Hivemind", "#F0A868", "#7EC8D8")),
 		"",
 		"A terminal UI that manages multiple Claude Code (and other local agents) in separate workspaces.",
 		"",
-		headerStyle.Render("Managing:"),
+		headerStyle.Render("\uf03a Managing:"),
 		keyStyle.Render("n")+descStyle.Render("         - Create a new session"),
 		keyStyle.Render("N")+descStyle.Render("         - Create a new session with a prompt"),
 		keyStyle.Render("S")+descStyle.Render("         - New session with --dangerously-skip-permissions"),
 		keyStyle.Render("D")+descStyle.Render("         - Kill (delete) the selected session"),
 		keyStyle.Render("↑/j, ↓/k")+descStyle.Render("  - Navigate between sessions"),
 		keyStyle.Render("↵/o")+descStyle.Render("       - Attach to the selected session"),
+		keyStyle.Render("i")+descStyle.Render("         - Send prompt to the selected session"),
 		keyStyle.Render("ctrl-q")+descStyle.Render("    - Detach from session"),
 		"",
-		headerStyle.Render("Handoff:"),
+		headerStyle.Render("\uf126 Handoff:"),
 		keyStyle.Render("p")+descStyle.Render("         - Commit and push branch to github"),
+		keyStyle.Render("P")+descStyle.Render("         - Create a pull request"),
 		keyStyle.Render("c")+descStyle.Render("         - Checkout: commit changes and pause session"),
 		keyStyle.Render("r")+descStyle.Render("         - Resume a paused session"),
 		"",
-		headerStyle.Render("Other:"),
+		headerStyle.Render("\uf085 Other:"),
 		keyStyle.Render("tab")+descStyle.Render("       - Switch between preview and diff tabs"),
 		keyStyle.Render("shift-↓/↑")+descStyle.Render(" - Scroll in diff view"),
 		keyStyle.Render("q")+descStyle.Render("         - Quit the application"),
 		"",
-		headerStyle.Render("Topics:"),
+		headerStyle.Render("\uf07b Topics:"),
 		keyStyle.Render("T")+descStyle.Render("         - Create a new topic"),
 		keyStyle.Render("m")+descStyle.Render("         - Move instance to a topic"),
+		keyStyle.Render("X")+descStyle.Render("         - Kill all instances in active topic"),
 		keyStyle.Render("/")+descStyle.Render("         - Search topics and instances"),
 		keyStyle.Render("←/h, →/l")+descStyle.Render("  - Switch sidebar and instance list"),
 	)
@@ -77,12 +80,12 @@ func (h helpTypeInstanceStart) toContent() string {
 		descStyle.Render(fmt.Sprintf("• %s running in background tmux session",
 			lipgloss.NewStyle().Bold(true).Render(h.instance.Program))),
 		"",
-		headerStyle.Render("Managing:"),
+		headerStyle.Render("\uf03a Managing:"),
 		keyStyle.Render("↵/o")+descStyle.Render("   - Attach to the session to interact with it directly"),
 		keyStyle.Render("tab")+descStyle.Render("   - Switch preview panes to view session diff"),
 		keyStyle.Render("D")+descStyle.Render("     - Kill (delete) the selected session"),
 		"",
-		headerStyle.Render("Handoff:"),
+		headerStyle.Render("\uf126 Handoff:"),
 		keyStyle.Render("c")+descStyle.Render("     - Checkout this instance's branch"),
 		keyStyle.Render("p")+descStyle.Render("     - Push branch to GitHub to create a PR"),
 	)
@@ -106,7 +109,7 @@ func (h helpTypeInstanceCheckout) toContent() string {
 		"",
 		"Feel free to make changes to the branch and commit them. When resuming, the session will continue from where you left off.",
 		"",
-		headerStyle.Render("Commands:"),
+		headerStyle.Render("\uea85 Commands:"),
 		keyStyle.Render("c")+descStyle.Render(" - Checkout: commit changes locally and pause session"),
 		keyStyle.Render("r")+descStyle.Render(" - Resume a paused session"),
 	)
@@ -127,7 +130,7 @@ func (h helpTypeInstanceCheckout) mask() uint32 {
 }
 
 var (
-	titleStyle  = lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.Color("#7D56F4"))
+	titleStyle  = lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.Color("#F0A868"))
 	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#36CFC9"))
 	keyStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFCC00"))
 	descStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFFFFF"))

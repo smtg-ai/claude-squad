@@ -1,10 +1,10 @@
 package ui
 
 import (
-	"claude-squad/keys"
+	"hivemind/keys"
 	"strings"
 
-	"claude-squad/session"
+	"hivemind/session"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -24,13 +24,13 @@ var sepStyle = lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{
 	Dark:  "#3C3C3C",
 })
 
-var actionGroupStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("99"))
+var actionGroupStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("216"))
 
 var separator = " • "
 var verticalSeparator = " │ "
 
 var menuStyle = lipgloss.NewStyle().
-	Foreground(lipgloss.Color("205"))
+	Foreground(lipgloss.Color("#7EC8D8"))
 
 // MenuState represents different states the menu can be in
 type MenuState int
@@ -51,9 +51,14 @@ type Menu struct {
 
 	// keyDown is the key which is pressed. The default is -1.
 	keyDown keys.KeyName
+
+	// systemGroupSize is the number of items in the trailing system group
+	// (used for separator placement). Defaults to 4 if unset.
+	systemGroupSize int
 }
 
-var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyPrompt, keys.KeyHelp, keys.KeyQuit}
+var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyPrompt, keys.KeySearch, keys.KeySpace, keys.KeyHelp, keys.KeyQuit}
+var defaultSystemGroupSize = 4 // / search, space actions, ? help, q quit
 var newInstanceMenuOptions = []keys.KeyName{keys.KeySubmitName}
 var promptMenuOptions = []keys.KeyName{keys.KeySubmitName}
 
@@ -105,6 +110,7 @@ func (m *Menu) updateOptions() {
 	switch m.state {
 	case StateEmpty:
 		m.options = defaultMenuOptions
+		m.systemGroupSize = defaultSystemGroupSize
 	case StateDefault:
 		if m.instance != nil {
 			// When there is an instance, show that instance's options
@@ -112,11 +118,14 @@ func (m *Menu) updateOptions() {
 		} else {
 			// When there is no instance, show the empty state
 			m.options = defaultMenuOptions
+			m.systemGroupSize = defaultSystemGroupSize
 		}
 	case StateNewInstance:
 		m.options = newInstanceMenuOptions
+		m.systemGroupSize = 0
 	case StatePrompt:
 		m.options = promptMenuOptions
+		m.systemGroupSize = 0
 	}
 }
 
@@ -125,7 +134,7 @@ func (m *Menu) addInstanceOptions() {
 	options := []keys.KeyName{keys.KeyNew, keys.KeyKill}
 
 	// Action group
-	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeySubmit}
+	actionGroup := []keys.KeyName{keys.KeyEnter, keys.KeySendPrompt, keys.KeySpace, keys.KeySubmit, keys.KeyCreatePR}
 	if m.instance.Status == session.Paused {
 		actionGroup = append(actionGroup, keys.KeyResume)
 	} else {
@@ -138,13 +147,14 @@ func (m *Menu) addInstanceOptions() {
 	}
 
 	// System group
-	systemGroup := []keys.KeyName{keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
+	systemGroup := []keys.KeyName{keys.KeyKillAllInTopic, keys.KeySearch, keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
 
 	// Combine all groups
 	options = append(options, actionGroup...)
 	options = append(options, systemGroup...)
 
 	m.options = options
+	m.systemGroupSize = len(systemGroup)
 }
 
 // SetSize sets the width of the window. The menu will be centered horizontally within this width.
@@ -156,14 +166,22 @@ func (m *Menu) SetSize(width, height int) {
 func (m *Menu) String() string {
 	var s strings.Builder
 
-	// Define group boundaries
+	// Define group boundaries dynamically based on option count
+	// Instance management: n, D (2 items)
+	// Action group: enter, space, submit, P, pause/resume [+ shift-up if diff tab] (variable)
+	// System group: X, /, tab, ?, q (at the end)
+	sysSize := m.systemGroupSize
+	if sysSize == 0 {
+		sysSize = 4
+	}
+	actionEnd := len(m.options) - sysSize
 	groups := []struct {
 		start int
 		end   int
 	}{
-		{0, 2}, // Instance management group (n, d)
-		{2, 5}, // Action group (enter, submit, pause/resume)
-		{6, 8}, // System group (tab, help, q)
+		{0, 2},         // Instance management group
+		{2, actionEnd}, // Action group
+		{actionEnd, len(m.options)}, // System group
 	}
 
 	for i, k := range m.options {

@@ -1,18 +1,19 @@
 package app
 
 import (
-	"claude-squad/config"
-	"claude-squad/keys"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/ui"
-	"claude-squad/ui/overlay"
+	"hivemind/config"
+	"hivemind/keys"
+	"hivemind/log"
+	"hivemind/session"
+	"hivemind/ui"
+	"hivemind/ui/overlay"
 	"context"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -52,6 +53,14 @@ const (
 	stateSearch
 	// stateMoveTo is the state when the user is moving an instance to a topic.
 	stateMoveTo
+	// statePRTitle is the state when the user is entering a PR title.
+	statePRTitle
+	// stateRenameInstance is the state when the user is renaming an instance.
+	stateRenameInstance
+	// stateRenameTopic is the state when the user is renaming a topic.
+	stateRenameTopic
+	// stateSendPrompt is the state when the user is sending a prompt to a running instance.
+	stateSendPrompt
 	// stateContextMenu is the state when a right-click context menu is shown.
 	stateContextMenu
 )
@@ -140,7 +149,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 
 	h := &home{
 		ctx:          ctx,
-		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+		spinner:      spinner.New(spinner.WithSpinner(spinner.Dot)),
 		menu:         ui.NewMenu(),
 		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
 		errBox:       ui.NewErrBox(),
@@ -187,9 +196,9 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 // The components will try to render inside their bounds.
 func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	// Three-column layout: sidebar (15%), instance list (20%), preview (remaining)
-	sidebarWidth := int(float32(msg.Width) * 0.15)
-	if sidebarWidth < 16 {
-		sidebarWidth = 16
+	sidebarWidth := int(float32(msg.Width) * 0.18)
+	if sidebarWidth < 20 {
+		sidebarWidth = 20
 	}
 	listWidth := int(float32(msg.Width) * 0.20)
 	tabsWidth := msg.Width - sidebarWidth - listWidth
@@ -261,6 +270,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				instance.SetStatus(session.Running)
 			} else {
 				if prompt {
+					instance.PromptDetected = true
 					instance.TapEnter()
 				} else {
 					instance.SetStatus(session.Ready)
@@ -269,7 +279,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if err := instance.UpdateDiffStats(); err != nil {
 				log.WarningLog.Printf("could not update diff stats: %v", err)
 			}
+			instance.UpdateResourceUsage()
 		}
+		m.updateSidebarItems()
 		return m, tickUpdateMetadataCmd
 	case tea.MouseMsg:
 		return m.handleMouse(msg)
@@ -328,7 +340,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -423,20 +435,30 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		// Click in instance list
 		m.setFocus(1)
 
-		// Instance list items: each takes ~4 rows (title padding + title + desc + gap)
-		// First 2 rows are the header ("Instances" title + blank lines)
+		localX := x - m.sidebarWidth
+		// Check if clicking on filter tabs
+		if filter, ok := m.list.HandleTabClick(localX, contentY); ok {
+			m.list.SetStatusFilter(filter)
+			return m, m.instanceChanged()
+		}
+
+		// Instance list items start after the header (blank lines + tabs + blank lines)
 		listY := contentY - 4
 		if listY >= 0 {
-			// Each instance item is approximately 4 rows (padding + title + branch + gap)
-			itemIdx := listY / 4
-			if itemIdx < m.list.NumInstances() {
+			itemIdx := m.list.GetItemAtRow(listY)
+			if itemIdx >= 0 {
 				m.list.SetSelectedInstance(itemIdx)
 				return m, m.instanceChanged()
 			}
 		}
 	} else {
-		// Click in preview/diff area — just switch focus to instance list
+		// Click in preview/diff area
 		m.setFocus(1)
+		localX := x - m.sidebarWidth - m.listWidth
+		if m.tabbedWindow.HandleTabClick(localX, contentY) {
+			m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
+			return m, m.instanceChanged()
+		}
 	}
 
 	return m, nil
@@ -445,6 +467,42 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // executeContextAction performs the action selected from a context menu.
 func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 	switch action {
+	case "kill_all_in_topic":
+		selectedID := m.sidebar.GetSelectedID()
+		if selectedID == ui.SidebarAll || selectedID == ui.SidebarUngrouped {
+			return m, nil
+		}
+		killAction := func() tea.Msg {
+			m.list.KillInstancesByTopic(selectedID)
+			m.storage.SaveInstances(m.list.GetInstances())
+			m.updateSidebarItems()
+			return instanceChangedMsg{}
+		}
+		message := fmt.Sprintf("[!] Kill all instances in topic '%s'?", selectedID)
+		return m, m.confirmAction(message, killAction)
+
+	case "delete_topic_and_instances":
+		selectedID := m.sidebar.GetSelectedID()
+		if selectedID == ui.SidebarAll || selectedID == ui.SidebarUngrouped {
+			return m, nil
+		}
+		deleteAction := func() tea.Msg {
+			m.list.KillInstancesByTopic(selectedID)
+			for i, t := range m.topics {
+				if t.Name == selectedID {
+					t.Cleanup()
+					m.topics = append(m.topics[:i], m.topics[i+1:]...)
+					break
+				}
+			}
+			m.storage.SaveInstances(m.list.GetInstances())
+			m.storage.SaveTopics(m.topics)
+			m.updateSidebarItems()
+			return instanceChangedMsg{}
+		}
+		message := fmt.Sprintf("[!] Delete topic '%s' and kill all its instances?", selectedID)
+		return m, m.confirmAction(message, deleteAction)
+
 	case "delete_topic":
 		selectedID := m.sidebar.GetSelectedID()
 		// Remove all instances in this topic first
@@ -528,6 +586,66 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}}
 		}
 
+	case "create_pr_instance":
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		m.state = statePRTitle
+		m.textInputOverlay = overlay.NewTextInputOverlay("PR title", selected.Title)
+		m.textInputOverlay.SetSize(60, 3)
+		return m, nil
+
+	case "send_prompt_instance":
+		selected := m.list.GetSelectedInstance()
+		if selected == nil || !selected.Started() || selected.Paused() {
+			return m, nil
+		}
+		m.state = stateSendPrompt
+		m.textInputOverlay = overlay.NewTextInputOverlay("Send prompt", "")
+		m.textInputOverlay.SetSize(60, 3)
+		return m, nil
+
+	case "copy_worktree_path":
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		worktree, err := selected.GetGitWorktree()
+		if err != nil {
+			return m, m.handleError(err)
+		}
+		_ = clipboard.WriteAll(worktree.GetWorktreePath())
+		return m, nil
+
+	case "copy_branch_name":
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		_ = clipboard.WriteAll(selected.Branch)
+		return m, nil
+
+	case "rename_instance":
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		m.state = stateRenameInstance
+		m.textInputOverlay = overlay.NewTextInputOverlay("Rename instance", selected.Title)
+		m.textInputOverlay.SetSize(60, 3)
+		return m, nil
+
+	case "rename_topic":
+		selectedID := m.sidebar.GetSelectedID()
+		if selectedID == ui.SidebarAll || selectedID == ui.SidebarUngrouped {
+			return m, nil
+		}
+		m.state = stateRenameTopic
+		m.textInputOverlay = overlay.NewTextInputOverlay("Rename topic", selectedID)
+		m.textInputOverlay.SetSize(60, 3)
+		return m, nil
+
 	case "push_topic":
 		// Push the topic's branch — find first running instance in topic to push via
 		selectedID := m.sidebar.GetSelectedID()
@@ -542,6 +660,73 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	return m, nil
+}
+
+// openContextMenu builds a context menu for the currently focused/selected item
+// (sidebar topic or instance) and positions it next to the selected item.
+func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
+	if m.focusedPanel == 0 {
+		// Sidebar focused — build topic context menu
+		selectedID := m.sidebar.GetSelectedID()
+		if selectedID == ui.SidebarAll || selectedID == ui.SidebarUngrouped {
+			return m, nil
+		}
+		var topic *session.Topic
+		for _, t := range m.topics {
+			if t.Name == selectedID {
+				topic = t
+				break
+			}
+		}
+		if topic == nil {
+			return m, nil
+		}
+		items := []overlay.ContextMenuItem{
+			{Label: "Kill all instances", Action: "kill_all_in_topic"},
+			{Label: "Delete topic + instances", Action: "delete_topic_and_instances"},
+			{Label: "Delete topic (ungroup only)", Action: "delete_topic"},
+			{Label: "Rename topic", Action: "rename_topic"},
+		}
+		if topic.SharedWorktree {
+			items = append(items, overlay.ContextMenuItem{Label: "Push branch", Action: "push_topic"})
+		}
+		// Position next to the selected sidebar item
+		x := m.sidebarWidth
+		y := 1 + 4 + m.sidebar.GetSelectedIdx() // PaddingTop(1) + search/header rows + item index
+		m.contextMenu = overlay.NewContextMenu(x, y, items)
+		m.state = stateContextMenu
+		return m, nil
+	}
+
+	// Instance list focused — build instance context menu
+	selected := m.list.GetSelectedInstance()
+	if selected == nil {
+		return m, nil
+	}
+	items := []overlay.ContextMenuItem{
+		{Label: "Open", Action: "open_instance"},
+		{Label: "Kill", Action: "kill_instance"},
+	}
+	if selected.Status == session.Paused {
+		items = append(items, overlay.ContextMenuItem{Label: "Resume", Action: "resume_instance"})
+	} else {
+		items = append(items, overlay.ContextMenuItem{Label: "Pause", Action: "pause_instance"})
+	}
+	if selected.Started() && selected.Status != session.Paused {
+		items = append(items, overlay.ContextMenuItem{Label: "Send prompt", Action: "send_prompt_instance"})
+	}
+	items = append(items, overlay.ContextMenuItem{Label: "Rename", Action: "rename_instance"})
+	items = append(items, overlay.ContextMenuItem{Label: "Move to topic", Action: "move_instance"})
+	items = append(items, overlay.ContextMenuItem{Label: "Push branch", Action: "push_instance"})
+	items = append(items, overlay.ContextMenuItem{Label: "Create PR", Action: "create_pr_instance"})
+	items = append(items, overlay.ContextMenuItem{Label: "Copy worktree path", Action: "copy_worktree_path"})
+	items = append(items, overlay.ContextMenuItem{Label: "Copy branch name", Action: "copy_branch_name"})
+	// Position next to the selected instance
+	x := m.sidebarWidth + m.listWidth
+	y := 1 + 4 + m.list.GetSelectedIdx()*4 // PaddingTop(1) + header rows + item offset
+	m.contextMenu = overlay.NewContextMenu(x, y, items)
+	m.state = stateContextMenu
 	return m, nil
 }
 
@@ -571,8 +756,10 @@ func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		items := []overlay.ContextMenuItem{
-			{Label: "Delete topic", Action: "delete_topic"},
-			{Label: "Rename topic", Action: "rename_topic", Disabled: true},
+			{Label: "Kill all instances", Action: "kill_all_in_topic"},
+			{Label: "Delete topic + instances", Action: "delete_topic_and_instances"},
+			{Label: "Delete topic (ungroup only)", Action: "delete_topic"},
+			{Label: "Rename topic", Action: "rename_topic"},
 		}
 		if topic.SharedWorktree {
 			items = append(items, overlay.ContextMenuItem{Label: "Push branch", Action: "push_topic"})
@@ -584,8 +771,8 @@ func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
 		// Right-click in instance list — select the item first
 		listY := contentY - 4
 		if listY >= 0 {
-			itemIdx := listY / 4
-			if itemIdx < m.list.NumInstances() {
+			itemIdx := m.list.GetItemAtRow(listY)
+			if itemIdx >= 0 {
 				m.list.SetSelectedInstance(itemIdx)
 			}
 		}
@@ -602,8 +789,15 @@ func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
 		} else {
 			items = append(items, overlay.ContextMenuItem{Label: "Pause", Action: "pause_instance"})
 		}
+		if selected.Started() && selected.Status != session.Paused {
+			items = append(items, overlay.ContextMenuItem{Label: "Send prompt", Action: "send_prompt_instance"})
+		}
+		items = append(items, overlay.ContextMenuItem{Label: "Rename", Action: "rename_instance"})
 		items = append(items, overlay.ContextMenuItem{Label: "Move to topic", Action: "move_instance"})
 		items = append(items, overlay.ContextMenuItem{Label: "Push branch", Action: "push_instance"})
+		items = append(items, overlay.ContextMenuItem{Label: "Create PR", Action: "create_pr_instance"})
+	items = append(items, overlay.ContextMenuItem{Label: "Copy worktree path", Action: "copy_worktree_path"})
+	items = append(items, overlay.ContextMenuItem{Label: "Copy branch name", Action: "copy_branch_name"})
 		m.contextMenu = overlay.NewContextMenu(x, y, items)
 		m.state = stateContextMenu
 		return m, nil
@@ -761,6 +955,133 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			)
 		}
 
+		return m, nil
+	}
+
+	// Handle PR title input state
+	if m.state == statePRTitle {
+		if m.textInputOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			if m.textInputOverlay.IsSubmitted() {
+				prTitle := m.textInputOverlay.GetValue()
+				selected := m.list.GetSelectedInstance()
+				if selected != nil && prTitle != "" {
+					m.textInputOverlay = nil
+					m.state = stateDefault
+					m.menu.SetState(ui.StateDefault)
+					return m, tea.Batch(tea.WindowSize(), func() tea.Msg {
+						commitMsg := fmt.Sprintf("[hivemind] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
+						worktree, err := selected.GetGitWorktree()
+						if err != nil {
+							return err
+						}
+						if err := worktree.CreatePR(prTitle, commitMsg); err != nil {
+							return err
+						}
+						return nil
+					})
+				}
+			}
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, tea.WindowSize()
+		}
+		return m, nil
+	}
+
+	// Handle instance rename state
+	if m.state == stateRenameInstance {
+		if m.textInputOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			if m.textInputOverlay.IsSubmitted() {
+				newName := m.textInputOverlay.GetValue()
+				selected := m.list.GetSelectedInstance()
+				if selected != nil && newName != "" {
+					selected.Title = newName
+					m.storage.SaveInstances(m.list.GetInstances())
+				}
+			}
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, tea.WindowSize()
+		}
+		return m, nil
+	}
+
+	// Handle topic rename state
+	if m.state == stateRenameTopic {
+		if m.textInputOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			if m.textInputOverlay.IsSubmitted() {
+				newName := m.textInputOverlay.GetValue()
+				oldName := m.sidebar.GetSelectedID()
+				if newName != "" && newName != oldName {
+					// Rename the topic
+					for _, t := range m.topics {
+						if t.Name == oldName {
+							t.Name = newName
+							break
+						}
+					}
+					// Update all instances that reference this topic
+					for _, inst := range m.list.GetInstances() {
+						if inst.TopicName == oldName {
+							inst.TopicName = newName
+						}
+					}
+					m.updateSidebarItems()
+					m.storage.SaveInstances(m.list.GetInstances())
+					m.storage.SaveTopics(m.topics)
+				}
+			}
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, tea.WindowSize()
+		}
+		return m, nil
+	}
+
+	// Handle send prompt state
+	if m.state == stateSendPrompt {
+		if m.textInputOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			if m.textInputOverlay.IsSubmitted() {
+				value := m.textInputOverlay.GetValue()
+				selected := m.list.GetSelectedInstance()
+				if selected != nil && value != "" {
+					if err := selected.SendPrompt(value); err != nil {
+						m.textInputOverlay = nil
+						m.state = stateDefault
+						m.menu.SetState(ui.StateDefault)
+						return m, m.handleError(err)
+					}
+					selected.SetStatus(session.Running)
+				}
+			}
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, tea.WindowSize()
+		}
 		return m, nil
 	}
 
@@ -1048,6 +1369,23 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.tabbedWindow.Toggle()
 		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
 		return m, m.instanceChanged()
+	case keys.KeyFilterAll:
+		m.list.SetStatusFilter(ui.StatusFilterAll)
+		return m, m.instanceChanged()
+	case keys.KeyFilterActive:
+		m.list.SetStatusFilter(ui.StatusFilterActive)
+		return m, m.instanceChanged()
+	case keys.KeySpace:
+		return m.openContextMenu()
+	case keys.KeySendPrompt:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil || !selected.Started() || selected.Paused() {
+			return m, nil
+		}
+		m.state = stateSendPrompt
+		m.textInputOverlay = overlay.NewTextInputOverlay("Send prompt", "")
+		m.textInputOverlay.SetSize(60, 3)
+		return m, nil
 	case keys.KeyKill:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
@@ -1093,7 +1431,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Create the push action as a tea.Cmd
 		pushAction := func() tea.Msg {
 			// Default commit message with timestamp
-			commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
+			commitMsg := fmt.Sprintf("[hivemind] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
 			worktree, err := selected.GetGitWorktree()
 			if err != nil {
 				return err
@@ -1107,6 +1445,15 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Show confirmation modal
 		message := fmt.Sprintf("[!] Push changes from session '%s'?", selected.Title)
 		return m, m.confirmAction(message, pushAction)
+	case keys.KeyCreatePR:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		m.state = statePRTitle
+		m.textInputOverlay = overlay.NewTextInputOverlay("PR title", selected.Title)
+		m.textInputOverlay.SetSize(60, 3)
+		return m, nil
 	case keys.KeyCheckout:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
@@ -1176,6 +1523,19 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.state = stateMoveTo
 		m.pickerOverlay = overlay.NewPickerOverlay("Move to topic", m.getMovableTopicNames())
 		return m, nil
+	case keys.KeyKillAllInTopic:
+		selectedID := m.sidebar.GetSelectedID()
+		if selectedID == ui.SidebarAll || selectedID == ui.SidebarUngrouped {
+			return m, m.handleError(fmt.Errorf("select a topic first"))
+		}
+		killAction := func() tea.Msg {
+			m.list.KillInstancesByTopic(selectedID)
+			m.storage.SaveInstances(m.list.GetInstances())
+			m.updateSidebarItems()
+			return instanceChangedMsg{}
+		}
+		message := fmt.Sprintf("[!] Kill all instances in topic '%s'?", selectedID)
+		return m, m.confirmAction(message, killAction)
 	case keys.KeySearch:
 		m.sidebar.ActivateSearch()
 		m.sidebar.SelectFirst() // Reset to "All" when starting search
@@ -1192,6 +1552,7 @@ func (m *home) updateSidebarItems() {
 	topicNames := make([]string, len(m.topics))
 	countByTopic := make(map[string]int)
 	sharedTopics := make(map[string]bool)
+	topicStatuses := make(map[string]ui.TopicStatus)
 	ungroupedCount := 0
 
 	for i, t := range m.topics {
@@ -1207,9 +1568,22 @@ func (m *home) updateSidebarItems() {
 		} else {
 			countByTopic[inst.TopicName]++
 		}
+
+		// Track running and notification status per topic key.
+		// An instance is "active" if it's started, not paused, and hasn't shown
+		// a prompt yet (meaning the program is still working).
+		topicKey := inst.TopicName // "" for ungrouped
+		st := topicStatuses[topicKey]
+		if inst.Started() && !inst.Paused() && !inst.PromptDetected {
+			st.HasRunning = true
+		}
+		if inst.Notified {
+			st.HasNotification = true
+		}
+		topicStatuses[topicKey] = st
 	}
 
-	m.sidebar.SetItems(topicNames, countByTopic, ungroupedCount, sharedTopics)
+	m.sidebar.SetItems(topicNames, countByTopic, ungroupedCount, sharedTopics, topicStatuses)
 }
 
 // getMovableTopicNames returns topic names that a non-shared instance can be moved to.
@@ -1283,6 +1657,12 @@ func (m *home) filterBySearch() {
 func (m *home) instanceChanged() tea.Cmd {
 	// selected may be nil
 	selected := m.list.GetSelectedInstance()
+
+	// Clear notification when user selects this instance — they've seen it
+	if selected != nil && selected.Notified {
+		selected.Notified = false
+		m.updateSidebarItems()
+	}
 
 	m.tabbedWindow.UpdateDiff(selected)
 	m.tabbedWindow.SetInstance(selected)
@@ -1390,7 +1770,15 @@ func (m *home) View() string {
 		m.errBox.String(),
 	)
 
-	if m.state == stateMoveTo && m.pickerOverlay != nil {
+	if m.state == stateSendPrompt && m.textInputOverlay != nil {
+		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	} else if m.state == statePRTitle && m.textInputOverlay != nil {
+		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	} else if m.state == stateRenameInstance && m.textInputOverlay != nil {
+		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	} else if m.state == stateRenameTopic && m.textInputOverlay != nil {
+		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	} else if m.state == stateMoveTo && m.pickerOverlay != nil {
 		return overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
 	} else if m.state == stateNewTopic && m.textInputOverlay != nil {
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
