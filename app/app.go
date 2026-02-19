@@ -52,6 +52,8 @@ const (
 	stateSearch
 	// stateMoveTo is the state when the user is moving an instance to a topic.
 	stateMoveTo
+	// stateContextMenu is the state when a right-click context menu is shown.
+	stateContextMenu
 )
 
 type home struct {
@@ -110,6 +112,9 @@ type home struct {
 	focusedPanel int
 	// pendingTopicName stores the topic name during the two-step creation flow
 	pendingTopicName string
+
+	// contextMenu is the right-click context menu overlay
+	contextMenu *overlay.ContextMenu
 
 	// Layout dimensions for mouse hit-testing
 	sidebarWidth  int
@@ -304,7 +309,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -351,12 +356,12 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Only handle left clicks from here
-	if msg.Button != tea.MouseButtonLeft {
+	// Don't handle clicks in overlay states (except context menu dismissal)
+	if m.state == stateContextMenu && msg.Button == tea.MouseButtonLeft {
+		m.contextMenu = nil
+		m.state = stateDefault
 		return m, nil
 	}
-
-	// Don't handle clicks in overlay states
 	if m.state != stateDefault {
 		return m, nil
 	}
@@ -365,6 +370,16 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	// Account for PaddingTop(1) on columns
 	contentY := y - 1
+
+	// Right-click: show context menu
+	if msg.Button == tea.MouseButtonRight {
+		return m.handleRightClick(x, y, contentY)
+	}
+
+	// Only handle left clicks from here
+	if msg.Button != tea.MouseButtonLeft {
+		return m, nil
+	}
 
 	// Determine which column was clicked
 	if x < m.sidebarWidth {
@@ -411,10 +426,196 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// executeContextAction performs the action selected from a context menu.
+func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
+	switch action {
+	case "delete_topic":
+		selectedID := m.sidebar.GetSelectedID()
+		// Remove all instances in this topic first
+		for _, inst := range m.list.GetInstances() {
+			if inst.TopicName == selectedID {
+				inst.TopicName = ""
+			}
+		}
+		// Remove the topic
+		for i, t := range m.topics {
+			if t.Name == selectedID {
+				t.Cleanup()
+				m.topics = append(m.topics[:i], m.topics[i+1:]...)
+				break
+			}
+		}
+		m.updateSidebarItems()
+		m.storage.SaveInstances(m.list.GetInstances())
+		m.storage.SaveTopics(m.topics)
+		return m, tea.WindowSize()
+
+	case "kill_instance":
+		selected := m.list.GetSelectedInstance()
+		if selected != nil {
+			m.list.Kill()
+			m.storage.SaveInstances(m.list.GetInstances())
+			m.updateSidebarItems()
+		}
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+
+	case "open_instance":
+		selected := m.list.GetSelectedInstance()
+		if selected == nil || !selected.Started() || selected.Paused() || !selected.TmuxAlive() {
+			return m, nil
+		}
+		return m, func() tea.Msg {
+			ch, err := m.list.Attach()
+			if err != nil {
+				return err
+			}
+			<-ch
+			return instanceChangedMsg{}
+		}
+
+	case "pause_instance":
+		selected := m.list.GetSelectedInstance()
+		if selected != nil && selected.Status != session.Paused {
+			if err := selected.Pause(); err != nil {
+				return m, m.handleError(err)
+			}
+			m.storage.SaveInstances(m.list.GetInstances())
+		}
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+
+	case "resume_instance":
+		selected := m.list.GetSelectedInstance()
+		if selected != nil && selected.Status == session.Paused {
+			if err := selected.Resume(); err != nil {
+				return m, m.handleError(err)
+			}
+			m.storage.SaveInstances(m.list.GetInstances())
+		}
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+
+	case "move_instance":
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		m.state = stateMoveTo
+		m.textInputOverlay = overlay.NewTextInputOverlay("Move to topic (empty to ungroup)", selected.TopicName)
+		return m, nil
+
+	case "push_instance":
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		// Trigger the existing push flow
+		return m, func() tea.Msg {
+			return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}}
+		}
+
+	case "push_topic":
+		// Push the topic's branch — find first running instance in topic to push via
+		selectedID := m.sidebar.GetSelectedID()
+		for _, inst := range m.list.GetInstances() {
+			if inst.TopicName == selectedID && inst.Started() {
+				m.list.SetSelectedInstance(0) // select it
+				return m, func() tea.Msg {
+					return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'p'}}
+				}
+			}
+		}
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// handleRightClick builds and shows a context menu based on what was right-clicked.
+func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
+	if x < m.sidebarWidth {
+		// Right-click in sidebar
+		itemRow := contentY - 4
+		if itemRow >= 0 {
+			m.sidebar.ClickItem(itemRow)
+			m.filterInstancesByTopic()
+		}
+		selectedID := m.sidebar.GetSelectedID()
+		if selectedID == ui.SidebarAll || selectedID == ui.SidebarUngrouped {
+			// No context menu for All/Ungrouped
+			return m, nil
+		}
+		// Find the topic
+		var topic *session.Topic
+		for _, t := range m.topics {
+			if t.Name == selectedID {
+				topic = t
+				break
+			}
+		}
+		if topic == nil {
+			return m, nil
+		}
+		items := []overlay.ContextMenuItem{
+			{Label: "Delete topic", Action: "delete_topic"},
+			{Label: "Rename topic", Action: "rename_topic", Disabled: true},
+		}
+		if topic.SharedWorktree {
+			items = append(items, overlay.ContextMenuItem{Label: "Push branch", Action: "push_topic"})
+		}
+		m.contextMenu = overlay.NewContextMenu(x, y, items)
+		m.state = stateContextMenu
+		return m, nil
+	} else if x < m.sidebarWidth+m.listWidth {
+		// Right-click in instance list — select the item first
+		listY := contentY - 4
+		if listY >= 0 {
+			itemIdx := listY / 4
+			if itemIdx < m.list.NumInstances() {
+				m.list.SetSelectedInstance(itemIdx)
+			}
+		}
+		selected := m.list.GetSelectedInstance()
+		if selected == nil {
+			return m, nil
+		}
+		items := []overlay.ContextMenuItem{
+			{Label: "Open", Action: "open_instance"},
+			{Label: "Kill", Action: "kill_instance"},
+		}
+		if selected.Status == session.Paused {
+			items = append(items, overlay.ContextMenuItem{Label: "Resume", Action: "resume_instance"})
+		} else {
+			items = append(items, overlay.ContextMenuItem{Label: "Pause", Action: "pause_instance"})
+		}
+		items = append(items, overlay.ContextMenuItem{Label: "Move to topic", Action: "move_instance"})
+		items = append(items, overlay.ContextMenuItem{Label: "Push branch", Action: "push_instance"})
+		m.contextMenu = overlay.NewContextMenu(x, y, items)
+		m.state = stateContextMenu
+		return m, nil
+	}
+	return m, nil
+}
+
 func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	cmd, returnEarly := m.handleMenuHighlighting(msg)
 	if returnEarly {
 		return m, cmd
+	}
+
+	if m.state == stateContextMenu {
+		if m.contextMenu == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		action, closed := m.contextMenu.HandleKeyPress(msg)
+		if closed {
+			m.contextMenu = nil
+			m.state = stateDefault
+			if action != "" {
+				return m.executeContextAction(action)
+			}
+			return m, nil
+		}
+		return m, nil
 	}
 
 	if m.state == stateHelp {
@@ -1154,6 +1355,9 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("confirmation overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
+	} else if m.state == stateContextMenu && m.contextMenu != nil {
+		cx, cy := m.contextMenu.GetPosition()
+		return overlay.PlaceOverlay(cx, cy, m.contextMenu.Render(), mainView, true, false)
 	}
 
 	return mainView
