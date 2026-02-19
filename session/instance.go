@@ -84,6 +84,9 @@ type Instance struct {
 	// MemMB is the current memory usage in megabytes.
 	MemMB float64
 
+	// LastActivity is the most recently detected agent activity (ephemeral, not persisted).
+	LastActivity *Activity
+
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
 
@@ -417,6 +420,14 @@ func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
 		return false, false
 	}
 	return i.tmuxSession.HasUpdated()
+}
+
+// GetPaneContent returns the current tmux pane content for activity parsing.
+func (i *Instance) GetPaneContent() (string, error) {
+	if !i.started || i.Status == Paused {
+		return "", nil
+	}
+	return i.tmuxSession.CapturePaneContent()
 }
 
 // TapEnter sends an enter key press to the tmux session if AutoYes is enabled.

@@ -267,17 +267,26 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickUpdateMetadataMessage:
 		for _, instance := range m.list.GetInstances() {
 			if !instance.Started() || instance.Paused() {
+				instance.LastActivity = nil
 				continue
 			}
 			updated, prompt := instance.HasUpdated()
 			if updated {
 				instance.SetStatus(session.Running)
+				// Parse activity from pane content.
+				if content, err := instance.GetPaneContent(); err == nil && content != "" {
+					instance.LastActivity = session.ParseActivity(content, instance.Program)
+				}
 			} else {
 				if prompt {
 					instance.PromptDetected = true
 					instance.TapEnter()
 				} else {
 					instance.SetStatus(session.Ready)
+				}
+				// Clear activity when instance is no longer running.
+				if instance.Status != session.Running {
+					instance.LastActivity = nil
 				}
 			}
 			if err := instance.UpdateDiffStats(); err != nil {
@@ -377,15 +386,15 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Handle scroll wheel (existing behavior)
+	// Handle scroll wheel — always scrolls content (never navigates files)
 	if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
 		selected := m.list.GetSelectedInstance()
 		if selected != nil && selected.Status != session.Paused {
 			switch msg.Button {
 			case tea.MouseButtonWheelUp:
-				m.tabbedWindow.ScrollUp()
+				m.tabbedWindow.ContentScrollUp()
 			case tea.MouseButtonWheelDown:
-				m.tabbedWindow.ScrollDown()
+				m.tabbedWindow.ContentScrollDown()
 			}
 		}
 		return m, nil

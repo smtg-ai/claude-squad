@@ -1,11 +1,13 @@
 package ui
 
 import (
-	"claude-squad/log"
-	"claude-squad/session"
+	"hivemind/log"
+	"hivemind/session"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
@@ -13,10 +15,13 @@ import (
 )
 
 const readyIcon = "● "
-const pausedIcon = "⏸ "
+const pausedIcon = "\uf04c "
 
 var readyStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.AdaptiveColor{Light: "#51bd73", Dark: "#51bd73"})
+
+var notifyStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#F0A868"))
 
 var addedLinesStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.AdaptiveColor{Light: "#51bd73", Dark: "#51bd73"})
@@ -33,6 +38,16 @@ var titleStyle = lipgloss.NewStyle().
 
 var listDescStyle = lipgloss.NewStyle().
 	Padding(0, 1, 1, 1).
+	Foreground(lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"})
+
+var evenRowTitleStyle = lipgloss.NewStyle().
+	Padding(1, 1, 0, 1).
+	Background(lipgloss.AdaptiveColor{Light: "#f5f5f5", Dark: "#1e1e1e"}).
+	Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#dddddd"})
+
+var evenRowDescStyle = lipgloss.NewStyle().
+	Padding(0, 1, 1, 1).
+	Background(lipgloss.AdaptiveColor{Light: "#f5f5f5", Dark: "#1e1e1e"}).
 	Foreground(lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"})
 
 var selectedTitleStyle = lipgloss.NewStyle().
@@ -57,12 +72,37 @@ var activeDescStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.AdaptiveColor{Light: "#ffffff", Dark: "#1a1a1a"})
 
 var mainTitle = lipgloss.NewStyle().
-	Background(lipgloss.Color("62")).
+	Background(lipgloss.Color("216")).
 	Foreground(lipgloss.Color("230"))
 
 var autoYesStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("#dde4f0")).
 	Foreground(lipgloss.Color("#1a1a1a"))
+
+var resourceStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.AdaptiveColor{Light: "#999999", Dark: "#777777"})
+
+var activityStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.AdaptiveColor{Light: "#aaaaaa", Dark: "#666666"})
+
+// Status filter tab styles
+var activeFilterTab = lipgloss.NewStyle().
+	Background(lipgloss.Color("216")).
+	Foreground(lipgloss.Color("230")).
+	Padding(0, 1)
+
+var inactiveFilterTab = lipgloss.NewStyle().
+	Background(lipgloss.AdaptiveColor{Light: "#b0b0b0", Dark: "#444444"}).
+	Foreground(lipgloss.AdaptiveColor{Light: "#ffffff", Dark: "#999999"}).
+	Padding(0, 1)
+
+// StatusFilter determines which instances are shown based on their status.
+type StatusFilter int
+
+const (
+	StatusFilterAll    StatusFilter = iota // Show all instances
+	StatusFilterActive                     // Show only non-paused instances
+)
 
 type List struct {
 	items         []*session.Instance
@@ -76,8 +116,9 @@ type List struct {
 	// multiple repos in play.
 	repos map[string]int
 
-	filter   string // topic name filter (empty = show all)
-	allItems []*session.Instance
+	filter       string       // topic name filter (empty = show all)
+	statusFilter StatusFilter // status filter (All or Active)
+	allItems     []*session.Instance
 }
 
 func NewList(spinner *spinner.Model, autoYes bool) *List {
@@ -92,6 +133,49 @@ func NewList(spinner *spinner.Model, autoYes bool) *List {
 
 func (l *List) SetFocused(focused bool) {
 	l.focused = focused
+}
+
+// SetStatusFilter sets the status filter and rebuilds the filtered items.
+func (l *List) SetStatusFilter(filter StatusFilter) {
+	l.statusFilter = filter
+	l.rebuildFilteredItems()
+}
+
+// GetStatusFilter returns the current status filter.
+func (l *List) GetStatusFilter() StatusFilter {
+	return l.statusFilter
+}
+
+// GetSelectedIdx returns the index of the currently selected item in the filtered list.
+func (l *List) GetSelectedIdx() int {
+	return l.selectedIdx
+}
+
+// allTabText and activeTabText are the rendered tab labels with hotkey indicators.
+const allTabText = "1 All"
+const activeTabText = "2 Active"
+
+// HandleTabClick checks if a click at the given local coordinates (relative to the
+// list's top-left corner) hits a filter tab. Returns the filter and true if a tab was
+// clicked, or false if the click was outside the tab area.
+func (l *List) HandleTabClick(localX, localY int) (StatusFilter, bool) {
+	// The list String() starts with 2 newlines, then the tab row, then 2 more
+	// newlines. Accept clicks on rows 1-3 to cover the tab area generously,
+	// since the exact row depends on how lipgloss.Place renders the output.
+	if localY < 1 || localY > 3 {
+		return 0, false
+	}
+
+	// Tab widths include Padding(0,1) so 1 char padding on each side.
+	allWidth := len(allTabText) + 2  // "1 All" + 2 padding = 7
+	activeWidth := len(activeTabText) + 2 // "2 Active" + 2 padding = 10
+
+	if localX >= 0 && localX < allWidth {
+		return StatusFilterAll, true
+	} else if localX >= allWidth && localX < allWidth+activeWidth {
+		return StatusFilterActive, true
+	}
+	return 0, false
 }
 
 // SetSize sets the height and width of the list.
@@ -131,14 +215,10 @@ func (r *InstanceRenderer) setWidth(width int) {
 	r.width = AdjustPreviewWidth(width)
 }
 
-// ɹ and ɻ are other options.
-const branchIcon = "Ꮧ"
+const branchIcon = "\uf126"
 
-func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, focused bool, hasMultipleRepos bool) string {
-	prefix := fmt.Sprintf(" %d. ", idx)
-	if idx >= 10 {
-		prefix = prefix[:len(prefix)-1]
-	}
+func (r *InstanceRenderer) Render(i *session.Instance, selected bool, focused bool, hasMultipleRepos bool, rowIndex int) string {
+	prefix := " "
 	titleS := selectedTitleStyle
 	descS := selectedDescStyle
 	if selected && !focused {
@@ -146,8 +226,13 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, f
 		titleS = activeTitleStyle
 		descS = activeDescStyle
 	} else if !selected {
-		titleS = titleStyle
-		descS = listDescStyle
+		if rowIndex%2 == 1 {
+			titleS = evenRowTitleStyle
+			descS = evenRowDescStyle
+		} else {
+			titleS = titleStyle
+			descS = listDescStyle
+		}
 	}
 
 	// add spinner next to title if it's running
@@ -156,7 +241,16 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, f
 	case session.Running, session.Loading:
 		join = fmt.Sprintf("%s ", r.spinner.View())
 	case session.Ready:
-		join = readyStyle.Render(readyIcon)
+		if i.Notified {
+			t := (math.Sin(float64(time.Now().UnixMilli())/300.0) + 1.0) / 2.0
+			cr := lerpByte(0x51, 0xF0, t)
+			cg := lerpByte(0xBD, 0xA8, t)
+			cb := lerpByte(0x73, 0x68, t)
+			pulseStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(fmt.Sprintf("#%02x%02x%02x", cr, cg, cb)))
+			join = pulseStyle.Render(readyIcon)
+		} else {
+			join = readyStyle.Render(readyIcon)
+		}
 	case session.Paused:
 		join = pausedStyle.Render(pausedIcon)
 	default:
@@ -172,7 +266,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, f
 	// Add skip-permissions indicator
 	skipPermsIndicator := ""
 	if i.SkipPermissions {
-		skipPermsIndicator = " ⚡"
+		skipPermsIndicator = " \uf132"
 	}
 
 	titleContent := fmt.Sprintf("%s %s%s", prefix, titleText, skipPermsIndicator)
@@ -241,26 +335,70 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, f
 	}
 	remainingWidth -= runewidth.StringWidth(branch)
 
+	// Build activity indicator for running instances.
+	var activityText string
+	if i.Status == session.Running && i.LastActivity != nil {
+		act := i.LastActivity
+		if act.Detail != "" {
+			activityText = fmt.Sprintf(" \u00b7 %s %s", act.Action, act.Detail)
+		} else {
+			activityText = fmt.Sprintf(" \u00b7 %s", act.Action)
+		}
+		activityWidth := runewidth.StringWidth(activityText)
+		// Only show if there is enough room (at least the separator + a few chars).
+		if activityWidth > remainingWidth-1 {
+			// Truncate or drop if it doesn't fit.
+			avail := remainingWidth - 1 // leave at least 1 space before diff
+			if avail > 5 {
+				activityText = " " + runewidth.Truncate(activityText[1:], avail-1, "...")
+			} else {
+				activityText = ""
+			}
+		}
+		remainingWidth -= runewidth.StringWidth(activityText)
+	}
+
 	// Add spaces to fill the remaining width.
 	spaces := ""
 	if remainingWidth > 0 {
 		spaces = strings.Repeat(" ", remainingWidth)
 	}
 
-	branchLine := fmt.Sprintf("%s %s-%s%s%s", strings.Repeat(" ", len(prefix)), branchIcon, branch, spaces, diff)
+	// Render the activity text in a muted style.
+	var renderedActivity string
+	if activityText != "" {
+		renderedActivity = activityStyle.Background(descS.GetBackground()).Render(activityText)
+	}
 
-	// join title and subtitle — use same width for uniform background
-	text := lipgloss.JoinVertical(
-		lipgloss.Left,
+	branchLine := fmt.Sprintf("%s %s-%s%s%s%s", strings.Repeat(" ", len(prefix)), branchIcon, branch, renderedActivity, spaces, diff)
+
+	// Build resource usage line for non-paused instances (third line)
+	var resourceLine string
+	if i.Status != session.Paused && i.MemMB > 0 {
+		cpuText := fmt.Sprintf("\U000f0d46 %.0f%%", i.CPUPercent)
+		memText := fmt.Sprintf("\uefc5 %.0fM", i.MemMB)
+		resourceContent := fmt.Sprintf("%s %s  %s", strings.Repeat(" ", len(prefix)), cpuText, memText)
+		resourcePad := r.width - runewidth.StringWidth(resourceContent)
+		if resourcePad < 0 {
+			resourcePad = 0
+		}
+		resourceLine = resourceStyle.Render(resourceContent) + strings.Repeat(" ", resourcePad)
+	}
+
+	// join title, branch, and optionally resource line
+	lines := []string{
 		title,
 		descS.Width(r.width).Render(branchLine),
-	)
+	}
+	if resourceLine != "" {
+		lines = append(lines, descS.Width(r.width).Render(resourceLine))
+	}
+	text := lipgloss.JoinVertical(lipgloss.Left, lines...)
 
 	return text
 }
 
 func (l *List) String() string {
-	const titleText = " Instances "
 	const autoYesText = " auto-yes "
 
 	// Write the title.
@@ -268,15 +406,28 @@ func (l *List) String() string {
 	b.WriteString("\n")
 	b.WriteString("\n")
 
-	// Write title line
-	// add padding of 2 because the border on list items adds some extra characters
+	// Write filter tabs
 	titleWidth := AdjustPreviewWidth(l.width) + 2
+
+	allTab := inactiveFilterTab
+	activeTab := inactiveFilterTab
+	if l.statusFilter == StatusFilterAll {
+		allTab = activeFilterTab
+	} else {
+		activeTab = activeFilterTab
+	}
+
+	tabs := lipgloss.JoinHorizontal(lipgloss.Bottom,
+		allTab.Render(allTabText),
+		activeTab.Render(activeTabText),
+	)
+
 	if !l.autoyes {
 		b.WriteString(lipgloss.Place(
-			titleWidth, 1, lipgloss.Left, lipgloss.Bottom, mainTitle.Render(titleText)))
+			titleWidth, 1, lipgloss.Left, lipgloss.Bottom, tabs))
 	} else {
 		title := lipgloss.Place(
-			titleWidth/2, 1, lipgloss.Left, lipgloss.Bottom, mainTitle.Render(titleText))
+			titleWidth/2, 1, lipgloss.Left, lipgloss.Bottom, tabs)
 		autoYes := lipgloss.Place(
 			titleWidth-(titleWidth/2), 1, lipgloss.Right, lipgloss.Bottom, autoYesStyle.Render(autoYesText))
 		b.WriteString(lipgloss.JoinHorizontal(
@@ -288,12 +439,38 @@ func (l *List) String() string {
 
 	// Render the list.
 	for i, item := range l.items {
-		b.WriteString(l.renderer.Render(item, i+1, i == l.selectedIdx, l.focused, len(l.repos) > 1))
+		b.WriteString(l.renderer.Render(item, i == l.selectedIdx, l.focused, len(l.repos) > 1, i))
 		if i != len(l.items)-1 {
 			b.WriteString("\n\n")
 		}
 	}
 	return lipgloss.Place(l.width, l.height, lipgloss.Left, lipgloss.Top, b.String())
+}
+
+// itemHeight returns the rendered row count for an instance entry.
+// Title style has Padding(1,0) top, desc style has Padding(0,1) bottom.
+// 2-line item (title+branch) = 4 rows; 3-line (with resource) = 6 rows.
+func (l *List) itemHeight(idx int) int {
+	inst := l.items[idx]
+	base := 4 // title (1 pad top + 1 content) + branch (1 content + 1 pad bottom)
+	if inst.Status != session.Paused && inst.MemMB > 0 {
+		base += 2 // resource line (1 content + 1 pad bottom)
+	}
+	return base
+}
+
+// GetItemAtRow maps a row offset (relative to the first item) to an item index.
+// Returns -1 if the row doesn't correspond to any item.
+func (l *List) GetItemAtRow(row int) int {
+	currentRow := 0
+	for i := range l.items {
+		h := l.itemHeight(i)
+		if row >= currentRow && row < currentRow+h {
+			return i
+		}
+		currentRow += h + 1 // +1 for the blank line gap between items
+	}
+	return -1
 }
 
 // Down selects the next item in the list.
@@ -339,6 +516,26 @@ func (l *List) Kill() {
 			break
 		}
 	}
+}
+
+// KillInstancesByTopic kills and removes all instances belonging to the given topic.
+func (l *List) KillInstancesByTopic(topicName string) {
+	var remaining []*session.Instance
+	for _, inst := range l.allItems {
+		if inst.TopicName == topicName {
+			if err := inst.Kill(); err != nil {
+				log.ErrorLog.Printf("could not kill instance %s: %v", inst.Title, err)
+			}
+			repoName, err := inst.RepoName()
+			if err == nil {
+				l.rmRepo(repoName)
+			}
+		} else {
+			remaining = append(remaining, inst)
+		}
+	}
+	l.allItems = remaining
+	l.rebuildFilteredItems()
 }
 
 func (l *List) Attach() (chan struct{}, error) {
@@ -437,7 +634,11 @@ func (l *List) SetSearchFilterWithTopic(query string, topicFilter string) {
 	l.filter = ""
 	filtered := make([]*session.Instance, 0)
 	for _, inst := range l.allItems {
-		// Check topic filter first
+		// Check status filter
+		if l.statusFilter == StatusFilterActive && inst.Paused() {
+			continue
+		}
+		// Check topic filter
 		if topicFilter != "" {
 			if topicFilter == "__ungrouped__" && inst.TopicName != "" {
 				continue
@@ -462,25 +663,39 @@ func (l *List) SetSearchFilterWithTopic(query string, topicFilter string) {
 }
 
 func (l *List) rebuildFilteredItems() {
+	// First apply topic filter
+	var topicFiltered []*session.Instance
 	if l.filter == "" {
-		l.items = l.allItems
+		topicFiltered = l.allItems
 	} else if l.filter == SidebarUngrouped {
-		filtered := make([]*session.Instance, 0)
+		topicFiltered = make([]*session.Instance, 0)
 		for _, inst := range l.allItems {
 			if inst.TopicName == "" {
+				topicFiltered = append(topicFiltered, inst)
+			}
+		}
+	} else {
+		topicFiltered = make([]*session.Instance, 0)
+		for _, inst := range l.allItems {
+			if inst.TopicName == l.filter {
+				topicFiltered = append(topicFiltered, inst)
+			}
+		}
+	}
+
+	// Then apply status filter
+	if l.statusFilter == StatusFilterActive {
+		filtered := make([]*session.Instance, 0)
+		for _, inst := range topicFiltered {
+			if !inst.Paused() {
 				filtered = append(filtered, inst)
 			}
 		}
 		l.items = filtered
 	} else {
-		filtered := make([]*session.Instance, 0)
-		for _, inst := range l.allItems {
-			if inst.TopicName == l.filter {
-				filtered = append(filtered, inst)
-			}
-		}
-		l.items = filtered
+		l.items = topicFiltered
 	}
+
 	if l.selectedIdx >= len(l.items) {
 		l.selectedIdx = len(l.items) - 1
 	}
