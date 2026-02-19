@@ -1318,6 +1318,7 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 		if action != nil {
 			_ = action()
 		}
+		m.updateSidebarItems()
 	}
 
 	m.confirmationOverlay.OnCancel = func() {
