@@ -19,6 +19,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/mattn/go-runewidth"
 )
 
@@ -26,10 +27,11 @@ const GlobalInstanceLimit = 10
 
 // Run is the main entrypoint into the application.
 func Run(ctx context.Context, program string, autoYes bool) error {
+	zone.NewGlobal()
 	p := tea.NewProgram(
 		newHome(ctx, program, autoYes),
 		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(), // Mouse scroll
+		tea.WithMouseAllMotion(), // Full mouse tracking for hover + scroll + click
 	)
 	_, err := p.Run()
 	return err
@@ -67,8 +69,6 @@ const (
 	stateSendPrompt
 	// stateFocusAgent is the state when the user is typing directly into the agent pane.
 	stateFocusAgent
-	// stateFocusGit is the state when the user is typing directly into the lazygit pane.
-	stateFocusGit
 	// stateContextMenu is the state when a right-click context menu is shown.
 	stateContextMenu
 	// stateRepoSwitch is the state when the user is switching repos via picker.
@@ -118,8 +118,8 @@ type home struct {
 	menu *ui.Menu
 	// tabbedWindow displays the tabbed window with preview and diff panes
 	tabbedWindow *ui.TabbedWindow
-	// errBox displays error messages
-	errBox *ui.ErrBox
+	// toastManager manages toast notifications
+	toastManager *overlay.ToastManager
 	// global spinner instance. we plumb this down to where it's needed
 	spinner spinner.Model
 	// textInputOverlay handles text input with state
@@ -141,6 +141,8 @@ type home struct {
 	pendingTopicName string
 	// pendingPRTitle stores the PR title during the two-step PR creation flow
 	pendingPRTitle string
+	// pendingPRToastID stores the toast ID for the in-progress PR creation
+	pendingPRToastID string
 
 	// contextMenu is the right-click context menu overlay
 	contextMenu *overlay.ContextMenu
@@ -184,7 +186,6 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		spinner:        spinner.New(spinner.WithSpinner(spinner.Dot)),
 		menu:           ui.NewMenu(),
 		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewGitPane()),
-		errBox:         ui.NewErrBox(),
 		storage:        storage,
 		appConfig:      appConfig,
 		program:        program,
@@ -194,6 +195,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		activeRepoPath: activeRepoPath,
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
+	h.toastManager = overlay.NewToastManager(&h.spinner)
 	h.sidebar = ui.NewSidebar()
 	h.sidebar.SetRepoName(filepath.Base(activeRepoPath))
 	h.setFocus(1) // Start with instance list focused
@@ -255,8 +257,8 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 
 	// Menu takes 10% of height, list and window take 90%
 	contentHeight := int(float32(msg.Height) * 0.9)
-	menuHeight := msg.Height - contentHeight - 1     // minus 1 for error box
-	m.errBox.SetSize(int(float32(msg.Width)*0.9), 1) // error box takes 1 row
+	menuHeight := msg.Height - contentHeight
+	m.toastManager.SetSize(msg.Width, msg.Height)
 
 	m.tabbedWindow.SetSize(tabsWidth, contentHeight)
 	m.list.SetSize(listWidth, contentHeight)
@@ -291,13 +293,27 @@ func (m *home) Init() tea.Cmd {
 			return previewTickMsg{}
 		},
 		tickUpdateMetadataCmd,
+		m.toastTickCmd(),
 	)
 }
 
 func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case hideErrMsg:
-		m.errBox.Clear()
+	case overlay.ToastTickMsg:
+		m.toastManager.Tick()
+		if m.toastManager.HasActiveToasts() {
+			return m, m.toastTickCmd()
+		}
+		return m, nil
+	case prCreatedMsg:
+		m.toastManager.Resolve(m.pendingPRToastID, overlay.ToastSuccess, "PR created!")
+		m.pendingPRToastID = ""
+		return m, m.toastTickCmd()
+	case prErrorMsg:
+		log.ErrorLog.Printf("%v", msg.err)
+		m.toastManager.Resolve(msg.id, overlay.ToastError, msg.err.Error())
+		m.pendingPRToastID = ""
+		return m, m.toastTickCmd()
 	case previewTickMsg:
 		cmd := m.instanceChanged()
 		return m, tea.Batch(
@@ -311,12 +327,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state != stateFocusAgent || m.embeddedTerminal == nil {
 			return m, nil
 		}
-		// Render from the emulator. Only update if content changed (prevents flicker).
+		// Only update preview when content actually changed — avoids redundant re-renders.
 		if content, changed := m.embeddedTerminal.Render(); changed {
 			m.tabbedWindow.SetPreviewContent(content)
 		}
 		return m, func() tea.Msg {
-			time.Sleep(33 * time.Millisecond)
+			time.Sleep(16 * time.Millisecond) // 60fps to match capture rate
 			return focusPreviewTickMsg{}
 		}
 	case gitTabTickMsg:
@@ -326,6 +342,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		gitPane := m.tabbedWindow.GetGitPane()
 		if !gitPane.IsRunning() {
 			return m, nil
+		}
+		// Only trigger re-render when content changed to avoid flicker
+		content, changed := gitPane.Render()
+		if changed {
+			m.tabbedWindow.SetGitContent(content)
 		}
 		return m, func() tea.Msg {
 			time.Sleep(33 * time.Millisecond)
@@ -440,7 +461,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateFocusGit || m.state == stateRepoSwitch {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch {
 		return nil, false
 	}
 	// Skip menu highlighting when git tab is active and lazygit is running
@@ -473,6 +494,10 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 
 // handleMouse processes mouse events for click and scroll interactions.
 func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	// Track hover state for the repo button on any mouse event
+	repoHovered := zone.Get(ui.ZoneRepoSwitch).InBounds(msg)
+	m.sidebar.SetRepoHovered(repoHovered)
+
 	if msg.Action != tea.MouseActionPress {
 		return m, nil
 	}
@@ -513,6 +538,13 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 	// Only handle left clicks from here
 	if msg.Button != tea.MouseButtonLeft {
+		return m, nil
+	}
+
+	// Zone-based click: repo switch button (works regardless of sidebar layout)
+	if zone.Get(ui.ZoneRepoSwitch).InBounds(msg) {
+		m.state = stateRepoSwitch
+		m.pickerOverlay = overlay.NewPickerOverlay("Switch repo", m.buildRepoPickerItems())
 		return m, nil
 	}
 
@@ -1143,17 +1175,19 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					m.pendingPRTitle = ""
 					m.state = stateDefault
 					m.menu.SetState(ui.StateDefault)
+					m.pendingPRToastID = m.toastManager.Loading("Creating PR...")
+					prToastID := m.pendingPRToastID
 					return m, tea.Batch(tea.WindowSize(), func() tea.Msg {
 						commitMsg := fmt.Sprintf("[hivemind] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
 						worktree, err := selected.GetGitWorktree()
 						if err != nil {
-							return err
+							return prErrorMsg{id: prToastID, err: err}
 						}
 						if err := worktree.CreatePR(prTitle, prBody, commitMsg); err != nil {
-							return err
+							return prErrorMsg{id: prToastID, err: err}
 						}
-						return nil
-					})
+						return prCreatedMsg{}
+					}, m.toastTickCmd())
 				}
 			}
 			m.textInputOverlay = nil
@@ -1234,8 +1268,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 
-		// Ctrl+Space exits focus mode
-		if msg.Type == tea.KeyCtrlAt {
+		// Ctrl+O exits focus mode
+		if msg.Type == tea.KeyCtrlO {
 			m.exitFocusMode()
 			return m, tea.WindowSize()
 		}
@@ -1250,41 +1284,29 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
-	// Handle lazygit focus mode — all keys go to lazygit, Ctrl+Space exits
-	if m.state == stateFocusGit {
-		gitPane := m.tabbedWindow.GetGitPane()
-		if gitPane == nil || !gitPane.IsRunning() {
-			m.exitGitFocusMode()
-			return m, nil
-		}
-
-		// Ctrl+Space exits lazygit focus mode
-		if msg.Type == tea.KeyCtrlAt {
-			m.exitGitFocusMode()
-			return m, tea.WindowSize()
-		}
-
-		data := keyToBytes(msg)
-		if data == nil {
-			return m, nil
-		}
-		if err := gitPane.SendKey(data); err != nil {
-			return m, m.handleError(err)
-		}
-		return m, nil
-	}
-
-	// When git tab is active, auto-enter focus mode so lazygit gets all input
+	// Handle git tab — forward all keys to lazygit's PTY.
+	// Ctrl+Space exits git tab. Tab falls through for tab-cycling.
 	if m.state == stateDefault && m.tabbedWindow.IsInGitTab() {
 		gitPane := m.tabbedWindow.GetGitPane()
 		if gitPane != nil && gitPane.IsRunning() {
-			m.enterGitFocusMode()
-			// Forward this key to lazygit too
-			data := keyToBytes(msg)
-			if data != nil {
-				gitPane.SendKey(data)
+			// Ctrl+Space exits git tab back to preview
+			if msg.Type == tea.KeyCtrlAt {
+				m.killGitTab()
+				m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+				m.menu.SetInDiffTab(false)
+				return m, m.instanceChanged()
 			}
-			return m, nil
+			// Tab falls through to normal tab-cycling handler
+			if msg.Type != tea.KeyTab {
+				data := keyToBytes(msg)
+				if data == nil {
+					return m, nil
+				}
+				if err := gitPane.SendKey(data); err != nil {
+					return m, m.handleError(err)
+				}
+				return m, nil
+			}
 		}
 	}
 
@@ -1904,7 +1926,14 @@ func (m *home) enterFocusMode() tea.Cmd {
 		return nil
 	}
 
-	term, err := selected.NewEmbeddedTerminalForInstance()
+	cols, rows := m.tabbedWindow.GetPreviewSize()
+	if cols < 10 {
+		cols = 80
+	}
+	if rows < 5 {
+		rows = 24
+	}
+	term, err := selected.NewEmbeddedTerminalForInstance(cols, rows)
 	if err != nil {
 		return m.handleError(err)
 	}
@@ -1929,17 +1958,6 @@ func (m *home) exitFocusMode() {
 	m.tabbedWindow.SetFocusMode(false)
 }
 
-// enterGitFocusMode enters focus mode for the lazygit git pane.
-func (m *home) enterGitFocusMode() {
-	m.state = stateFocusGit
-	m.tabbedWindow.SetFocusMode(true)
-}
-
-// exitGitFocusMode exits lazygit focus mode back to normal state.
-func (m *home) exitGitFocusMode() {
-	m.state = stateDefault
-	m.tabbedWindow.SetFocusMode(false)
-}
 
 func (m *home) filterInstancesByTopic() {
 	selectedID := m.sidebar.GetSelectedID()
@@ -2166,8 +2184,14 @@ func (m *home) keydownCallback(name keys.KeyName) tea.Cmd {
 	}
 }
 
-// hideErrMsg implements tea.Msg and clears the error text from the screen.
-type hideErrMsg struct{}
+// prCreatedMsg is sent when async PR creation succeeds.
+type prCreatedMsg struct{}
+
+// prErrorMsg is sent when async PR creation fails.
+type prErrorMsg struct {
+	id  string
+	err error
+}
 
 // previewTickMsg implements tea.Msg and triggers a preview update
 type previewTickMsg struct{}
@@ -2195,19 +2219,17 @@ var tickUpdateMetadataCmd = func() tea.Msg {
 	return tickUpdateMetadataMessage{}
 }
 
-// handleError handles all errors which get bubbled up to the app. sets the error message. We return a callback tea.Cmd that returns a hideErrMsg message
-// which clears the error message after 3 seconds.
+func (m *home) toastTickCmd() tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(50 * time.Millisecond)
+		return overlay.ToastTickMsg{}
+	}
+}
+
 func (m *home) handleError(err error) tea.Cmd {
 	log.ErrorLog.Printf("%v", err)
-	m.errBox.SetError(err)
-	return func() tea.Msg {
-		select {
-		case <-m.ctx.Done():
-		case <-time.After(3 * time.Second):
-		}
-
-		return hideErrMsg{}
-	}
+	m.toastManager.Error(err.Error())
+	return m.toastTickCmd()
 }
 
 // confirmAction shows a confirmation modal and stores the action to execute on confirm
@@ -2248,52 +2270,60 @@ func (m *home) View() string {
 		lipgloss.Left,
 		listAndPreview,
 		m.menu.String(),
-		m.errBox.String(),
 	)
 
-	if m.state == stateSendPrompt && m.textInputOverlay != nil {
-		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	} else if m.state == statePRTitle && m.textInputOverlay != nil {
-		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	} else if m.state == statePRBody && m.textInputOverlay != nil {
-		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	} else if m.state == stateRenameInstance && m.textInputOverlay != nil {
-		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	} else if m.state == stateRenameTopic && m.textInputOverlay != nil {
-		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	} else if m.state == stateMoveTo && m.pickerOverlay != nil {
-		return overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
-	} else if m.state == stateRepoSwitch && m.pickerOverlay != nil {
+	var result string
+	switch {
+	case m.state == stateSendPrompt && m.textInputOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	case m.state == statePRTitle && m.textInputOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	case m.state == statePRBody && m.textInputOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	case m.state == stateRenameInstance && m.textInputOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	case m.state == stateRenameTopic && m.textInputOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	case m.state == stateMoveTo && m.pickerOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
+	case m.state == stateRepoSwitch && m.pickerOverlay != nil:
 		// Position near the repo button at the bottom of the sidebar
 		pickerX := 1
 		pickerY := m.contentHeight - 10 // above the bottom menu, near the repo indicator
 		if pickerY < 2 {
 			pickerY = 2
 		}
-		return overlay.PlaceOverlay(pickerX, pickerY, m.pickerOverlay.Render(), mainView, true, false)
-	} else if m.state == stateNewTopic && m.textInputOverlay != nil {
-		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	} else if m.state == statePrompt {
+		result = overlay.PlaceOverlay(pickerX, pickerY, m.pickerOverlay.Render(), mainView, true, false)
+	case m.state == stateNewTopic && m.textInputOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	case m.state == statePrompt:
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
-		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
-	} else if m.state == stateHelp {
+		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	case m.state == stateHelp:
 		if m.textOverlay == nil {
 			log.ErrorLog.Printf("text overlay is nil")
 		}
-		return overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
-	} else if m.state == stateConfirm || m.state == stateNewTopicConfirm {
+		result = overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
+	case m.state == stateConfirm || m.state == stateNewTopicConfirm:
 		if m.confirmationOverlay == nil {
 			log.ErrorLog.Printf("confirmation overlay is nil")
 		}
-		return overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
-	} else if m.state == stateContextMenu && m.contextMenu != nil {
+		result = overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
+	case m.state == stateContextMenu && m.contextMenu != nil:
 		cx, cy := m.contextMenu.GetPosition()
-		return overlay.PlaceOverlay(cx, cy, m.contextMenu.Render(), mainView, true, false)
+		result = overlay.PlaceOverlay(cx, cy, m.contextMenu.Render(), mainView, true, false)
+	default:
+		result = mainView
 	}
 
-	return mainView
+	if toastView := m.toastManager.View(); toastView != "" {
+		x, y := m.toastManager.GetPosition()
+		result = overlay.PlaceOverlay(x, y, toastView, result, false, false)
+	}
+
+	return zone.Scan(result)
 }
 
 // keyToBytes translates a Bubble Tea key message to raw bytes for PTY forwarding.
