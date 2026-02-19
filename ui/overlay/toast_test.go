@@ -127,3 +127,46 @@ func TestLoadingToastDoesNotAutoDismiss(t *testing.T) {
 	require.Len(t, tm.toasts, 1)
 	assert.Equal(t, PhaseSlidingOut, tm.toasts[0].Phase, "resolved toast should begin sliding out after dismiss duration")
 }
+
+func TestToastViewRendersContent(t *testing.T) {
+	s := spinner.New()
+	tm := NewToastManager(&s)
+
+	_ = tm.Info("hello world")
+	require.Len(t, tm.toasts, 1)
+
+	// Force the toast into PhaseVisible so it renders without animation offset.
+	tm.toasts[0].Phase = PhaseVisible
+	tm.toasts[0].PhaseStart = time.Now()
+
+	view := tm.View()
+	assert.NotEmpty(t, view, "View() should return non-empty string for active toast")
+	assert.Contains(t, view, "hello world", "View() should contain the toast message text")
+}
+
+func TestToastViewEmpty(t *testing.T) {
+	s := spinner.New()
+	tm := NewToastManager(&s)
+
+	view := tm.View()
+	assert.Empty(t, view, "View() should return empty string when there are no toasts")
+}
+
+func TestToastViewStacking(t *testing.T) {
+	s := spinner.New()
+	tm := NewToastManager(&s)
+
+	_ = tm.Info("first message")
+	_ = tm.Error("second message")
+	require.Len(t, tm.toasts, 2)
+
+	// Force both toasts into PhaseVisible.
+	for _, toast := range tm.toasts {
+		toast.Phase = PhaseVisible
+		toast.PhaseStart = time.Now()
+	}
+
+	view := tm.View()
+	assert.Contains(t, view, "first message", "View() should contain the first toast message")
+	assert.Contains(t, view, "second message", "View() should contain the second toast message")
+}
