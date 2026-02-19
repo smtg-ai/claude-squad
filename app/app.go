@@ -934,11 +934,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
 		topicName := ""
-		if m.focusedPanel == 0 {
-			selectedID := m.sidebar.GetSelectedID()
-			if selectedID != ui.SidebarAll && selectedID != ui.SidebarUngrouped {
-				topicName = selectedID
-			}
+		selectedID := m.sidebar.GetSelectedID()
+		if selectedID != ui.SidebarAll && selectedID != ui.SidebarUngrouped {
+			topicName = selectedID
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:     "",
@@ -963,11 +961,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
 		topicName := ""
-		if m.focusedPanel == 0 {
-			selectedID := m.sidebar.GetSelectedID()
-			if selectedID != ui.SidebarAll && selectedID != ui.SidebarUngrouped {
-				topicName = selectedID
-			}
+		selectedID := m.sidebar.GetSelectedID()
+		if selectedID != ui.SidebarAll && selectedID != ui.SidebarUngrouped {
+			topicName = selectedID
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:     "",
@@ -991,11 +987,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
 		topicName := ""
-		if m.focusedPanel == 0 {
-			selectedID := m.sidebar.GetSelectedID()
-			if selectedID != ui.SidebarAll && selectedID != ui.SidebarUngrouped {
-				topicName = selectedID
-			}
+		selectedID := m.sidebar.GetSelectedID()
+		if selectedID != ui.SidebarAll && selectedID != ui.SidebarUngrouped {
+			topicName = selectedID
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:           "",
