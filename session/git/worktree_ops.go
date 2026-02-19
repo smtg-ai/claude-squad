@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 	"hivemind/log"
 	"os"
@@ -132,7 +133,7 @@ func (g *GitWorktree) Cleanup() error {
 	repo, err := git.PlainOpen(g.repoPath)
 	if err != nil {
 		errs = append(errs, fmt.Errorf("failed to open repository for cleanup: %w", err))
-		return g.combineErrors(errs)
+		return errors.Join(errs...)
 	}
 
 	branchRef := plumbing.NewBranchReferenceName(g.branchName)
@@ -152,7 +153,7 @@ func (g *GitWorktree) Cleanup() error {
 	}
 
 	if len(errs) > 0 {
-		return g.combineErrors(errs)
+		return errors.Join(errs...)
 	}
 
 	return nil

@@ -1,7 +1,6 @@
 package git
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/go-git/go-git/v5"
@@ -41,20 +40,4 @@ func (g *GitWorktree) cleanupExistingBranch(repo *git.Repository) error {
 	}
 
 	return nil
-}
-
-// combineErrors combines multiple errors into a single error
-func (g *GitWorktree) combineErrors(errs []error) error {
-	if len(errs) == 0 {
-		return nil
-	}
-	if len(errs) == 1 {
-		return errs[0]
-	}
-
-	errMsg := "multiple errors occurred:"
-	for _, err := range errs {
-		errMsg += "\n  - " + err.Error()
-	}
-	return errors.New(errMsg)
 }

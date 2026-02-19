@@ -1,15 +1,15 @@
 package session
 
 import (
+	"errors"
+	"fmt"
 	"hivemind/log"
 	"hivemind/session/git"
 	"hivemind/session/tmux"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
-
-	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -395,23 +395,7 @@ func (i *Instance) Kill() error {
 		}
 	}
 
-	return i.combineErrors(errs)
-}
-
-// combineErrors combines multiple errors into a single error
-func (i *Instance) combineErrors(errs []error) error {
-	if len(errs) == 0 {
-		return nil
-	}
-	if len(errs) == 1 {
-		return errs[0]
-	}
-
-	errMsg := "multiple cleanup errors occurred:"
-	for _, err := range errs {
-		errMsg += "\n  - " + err.Error()
-	}
-	return fmt.Errorf("%s", errMsg)
+	return errors.Join(errs...)
 }
 
 func (i *Instance) Preview() (string, error) {
@@ -525,7 +509,7 @@ func (i *Instance) Pause() error {
 				errs = append(errs, fmt.Errorf("failed to commit changes: %w", err))
 				log.ErrorLog.Print(err)
 				// Return early if we can't commit changes to avoid corrupted state
-				return i.combineErrors(errs)
+				return errors.Join(errs...)
 			}
 		}
 	}
@@ -544,19 +528,19 @@ func (i *Instance) Pause() error {
 			if err := i.gitWorktree.Remove(); err != nil {
 				errs = append(errs, fmt.Errorf("failed to remove git worktree: %w", err))
 				log.ErrorLog.Print(err)
-				return i.combineErrors(errs)
+				return errors.Join(errs...)
 			}
 
 			// Only prune if remove was successful
 			if err := i.gitWorktree.Prune(); err != nil {
 				errs = append(errs, fmt.Errorf("failed to prune git worktrees: %w", err))
 				log.ErrorLog.Print(err)
-				return i.combineErrors(errs)
+				return errors.Join(errs...)
 			}
 		}
 	}
 
-	if err := i.combineErrors(errs); err != nil {
+	if err := errors.Join(errs...); err != nil {
 		log.ErrorLog.Print(err)
 		return err
 	}

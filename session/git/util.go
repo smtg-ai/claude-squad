@@ -12,8 +12,8 @@ import (
 
 // Pre-compiled regexes for branch name sanitization.
 var (
-	unsafeCharsRegex  = regexp.MustCompile(`[^a-z0-9\-_/.]+`)
-	multiDashRegex    = regexp.MustCompile(`-+`)
+	unsafeCharsRegex = regexp.MustCompile(`[^a-z0-9\-_/.]+`)
+	multiDashRegex   = regexp.MustCompile(`-+`)
 )
 
 // sanitizeBranchName transforms an arbitrary string into a Git branch name friendly string.
