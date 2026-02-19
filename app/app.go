@@ -147,6 +147,9 @@ type home struct {
 	sidebarWidth  int
 	listWidth     int
 	contentHeight int
+
+	// embeddedTerminal is the VT emulator for focus mode (nil when not in focus mode)
+	embeddedTerminal *session.EmbeddedTerminal
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -286,14 +289,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			},
 		)
 	case focusPreviewTickMsg:
-		if m.state != stateFocusAgent {
+		if m.state != stateFocusAgent || m.embeddedTerminal == nil {
 			return m, nil
 		}
-		// Minimal 30fps refresh: ONLY capture pane content. No diff, no menu, no sidebar.
-		selected := m.list.GetSelectedInstance()
-		if selected != nil {
-			_ = m.tabbedWindow.UpdatePreview(selected)
-		}
+		// Render from the embedded VT emulator's screen buffer — no subprocess calls.
+		m.tabbedWindow.SetPreviewContent(m.embeddedTerminal.Render())
 		return m, func() tea.Msg {
 			time.Sleep(33 * time.Millisecond)
 			return focusPreviewTickMsg{}
@@ -366,6 +366,18 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.instance.AutoYes = true
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+	case folderPickedMsg:
+		m.state = stateDefault
+		m.pickerOverlay = nil
+		if msg.err != nil {
+			return m, m.handleError(msg.err)
+		}
+		if msg.path != "" {
+			m.activeRepoPath = msg.path
+			m.sidebar.SetRepoName(filepath.Base(msg.path))
+			m.rebuildInstanceList()
+		}
+		return m, nil
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -1148,10 +1160,65 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
-	// stateFocusAgent should not receive key events — it's handled by direct attach.
-	// If we get here in this state, just reset.
+	// Handle focus mode — forward keys directly to the embedded terminal's PTY
 	if m.state == stateFocusAgent {
-		m.exitFocusMode()
+		if m.embeddedTerminal == nil {
+			m.exitFocusMode()
+			return m, nil
+		}
+
+		// ESC exits focus mode
+		if msg.Type == tea.KeyEsc {
+			m.exitFocusMode()
+			return m, tea.WindowSize()
+		}
+
+		// Translate key event to raw bytes and write directly to PTY
+		var data []byte
+		switch msg.Type {
+		case tea.KeyRunes:
+			data = []byte(string(msg.Runes))
+		case tea.KeyEnter:
+			data = []byte{0x0D}
+		case tea.KeyBackspace:
+			data = []byte{0x7F}
+		case tea.KeyTab:
+			data = []byte{0x09}
+		case tea.KeySpace:
+			data = []byte{0x20}
+		case tea.KeyUp:
+			data = []byte("\x1b[A")
+		case tea.KeyDown:
+			data = []byte("\x1b[B")
+		case tea.KeyRight:
+			data = []byte("\x1b[C")
+		case tea.KeyLeft:
+			data = []byte("\x1b[D")
+		case tea.KeyCtrlC:
+			data = []byte{0x03}
+		case tea.KeyCtrlD:
+			data = []byte{0x04}
+		case tea.KeyCtrlA:
+			data = []byte{0x01}
+		case tea.KeyCtrlE:
+			data = []byte{0x05}
+		case tea.KeyCtrlL:
+			data = []byte{0x0C}
+		case tea.KeyCtrlU:
+			data = []byte{0x15}
+		case tea.KeyCtrlK:
+			data = []byte{0x0B}
+		case tea.KeyCtrlW:
+			data = []byte{0x17}
+		case tea.KeyDelete:
+			data = []byte("\x1b[3~")
+		default:
+			return m, nil
+		}
+
+		if err := m.embeddedTerminal.SendKey(data); err != nil {
+			return m, m.handleError(err)
+		}
 		return m, nil
 	}
 
@@ -1299,10 +1366,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				selected := m.pickerOverlay.Value()
 				if selected != "" {
 					if selected == "Open folder..." {
-						// TODO: Will be wired to native folder picker in Task 7
 						m.state = stateDefault
 						m.pickerOverlay = nil
-						return m, nil
+						return m, m.openFolderPicker()
 					}
 					m.switchToRepo(selected)
 				}
@@ -1737,22 +1803,45 @@ func (m *home) setFocus(panel int) {
 // enterFocusMode enters focus/insert mode and starts the fast preview ticker.
 // enterFocusMode directly attaches to the selected instance's tmux session.
 // This takes over the terminal for native performance. Ctrl+Q detaches.
+// enterFocusMode creates an embedded terminal emulator connected to the instance's
+// PTY and starts the 30fps render ticker. Input goes directly to the PTY (zero latency),
+// display is rendered from the emulator's screen buffer (no subprocess calls).
 func (m *home) enterFocusMode() tea.Cmd {
-	m.state = stateFocusAgent
-	// Attach blocks the goroutine, taking over stdin/stdout.
-	// Bubble Tea pauses until detach (Ctrl+Q).
-	ch, err := m.list.Attach()
+	selected := m.list.GetSelectedInstance()
+	if selected == nil {
+		return nil
+	}
+
+	// Get preview pane dimensions for the emulator
+	cols, rows := m.tabbedWindow.GetPreviewSize()
+	if cols < 10 {
+		cols = 80
+	}
+	if rows < 5 {
+		rows = 24
+	}
+
+	term, err := selected.NewEmbeddedTerminalForInstance(cols, rows)
 	if err != nil {
-		m.state = stateDefault
 		return m.handleError(err)
 	}
-	<-ch
-	m.state = stateDefault
-	return tea.Batch(tea.WindowSize(), m.instanceChanged())
+
+	m.embeddedTerminal = term
+	m.state = stateFocusAgent
+	m.tabbedWindow.SetFocusMode(true)
+
+	// Start the 30fps render ticker
+	return func() tea.Msg {
+		return focusPreviewTickMsg{}
+	}
 }
 
-// exitFocusMode resets state from focus mode (used as fallback).
+// exitFocusMode shuts down the embedded terminal and resets state.
 func (m *home) exitFocusMode() {
+	if m.embeddedTerminal != nil {
+		m.embeddedTerminal.Close()
+		m.embeddedTerminal = nil
+	}
 	m.state = stateDefault
 	m.tabbedWindow.SetFocusMode(false)
 }
