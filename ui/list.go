@@ -662,6 +662,14 @@ func (l *List) SetSearchFilterWithTopic(query string, topicFilter string) {
 	}
 }
 
+// Clear removes all instances from the list.
+func (l *List) Clear() {
+	l.allItems = nil
+	l.items = nil
+	l.selectedIdx = 0
+	l.filter = ""
+}
+
 func (l *List) rebuildFilteredItems() {
 	// First apply topic filter
 	var topicFiltered []*session.Instance

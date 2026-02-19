@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -61,8 +62,10 @@ const (
 	stateRenameInstance
 	// stateRenameTopic is the state when the user is renaming a topic.
 	stateRenameTopic
-	// stateSendPrompt is the state when the user is sending a prompt to a running instance.
+	// stateSendPrompt is the state when the user is sending a prompt via text overlay.
 	stateSendPrompt
+	// stateFocusAgent is the state when the user is typing directly into the agent pane.
+	stateFocusAgent
 	// stateContextMenu is the state when a right-click context menu is shown.
 	stateContextMenu
 )
@@ -75,6 +78,9 @@ type home struct {
 	program string
 	autoYes bool
 
+	// activeRepoPath is the currently active repository path for filtering and new instances
+	activeRepoPath string
+
 	// storage is the interface for saving/loading data to/from the app's state
 	storage *session.Storage
 	// appConfig stores persistent application configuration
@@ -83,6 +89,9 @@ type home struct {
 	appState config.AppState
 
 	// -- State --
+
+	// allInstances stores every instance across all repos (master list)
+	allInstances []*session.Instance
 
 	// state is the current discrete state of the application
 	state state
@@ -151,18 +160,25 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		os.Exit(1)
 	}
 
+	activeRepoPath, err := filepath.Abs(".")
+	if err != nil {
+		fmt.Printf("Failed to get current directory: %v\n", err)
+		os.Exit(1)
+	}
+
 	h := &home{
-		ctx:          ctx,
-		spinner:      spinner.New(spinner.WithSpinner(spinner.Dot)),
-		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
-		errBox:       ui.NewErrBox(),
-		storage:      storage,
-		appConfig:    appConfig,
-		program:      program,
-		autoYes:      autoYes,
-		state:        stateDefault,
-		appState:     appState,
+		ctx:            ctx,
+		spinner:        spinner.New(spinner.WithSpinner(spinner.Dot)),
+		menu:           ui.NewMenu(),
+		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
+		errBox:         ui.NewErrBox(),
+		storage:        storage,
+		appConfig:      appConfig,
+		program:        program,
+		autoYes:        autoYes,
+		state:          stateDefault,
+		appState:       appState,
+		activeRepoPath: activeRepoPath,
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 	h.sidebar = ui.NewSidebar()
@@ -175,12 +191,16 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		os.Exit(1)
 	}
 
-	// Add loaded instances to the list
+	h.allInstances = instances
+
+	// Add instances matching active repo to the list
 	for _, instance := range instances {
-		// Call the finalizer immediately.
-		h.list.AddInstance(instance)()
-		if autoYes {
-			instance.AutoYes = true
+		repoPath := instance.GetRepoPath()
+		if repoPath == "" || repoPath == h.activeRepoPath {
+			h.list.AddInstance(instance)()
+			if autoYes {
+				instance.AutoYes = true
+			}
 		}
 	}
 
@@ -261,6 +281,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return previewTickMsg{}
 			},
 		)
+	case focusPreviewTickMsg:
+		// No-op: focus mode now uses direct tmux attach for native performance.
+		return m, nil
 	case keyupMsg:
 		m.menu.ClearKeydown()
 		return m, nil
@@ -317,7 +340,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.handleError(msg.err)
 		}
 		// Instance started successfully — save and finalize
-		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+		if err := m.saveAllInstances(); err != nil {
 			return m, m.handleError(err)
 		}
 		m.updateSidebarItems()
@@ -337,7 +360,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {
-	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+	if err := m.saveAllInstances(); err != nil {
 		return m, m.handleError(err)
 	}
 	if err := m.storage.SaveTopics(m.topics); err != nil {
@@ -353,7 +376,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt || m.state == stateFocusAgent {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -487,7 +510,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		killAction := func() tea.Msg {
 			m.list.KillInstancesByTopic(selectedID)
-			m.storage.SaveInstances(m.list.GetInstances())
+			m.saveAllInstances()
 			m.updateSidebarItems()
 			return instanceChangedMsg{}
 		}
@@ -508,7 +531,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
-			m.storage.SaveInstances(m.list.GetInstances())
+			m.saveAllInstances()
 			m.storage.SaveTopics(m.topics)
 			m.updateSidebarItems()
 			return instanceChangedMsg{}
@@ -533,7 +556,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.updateSidebarItems()
-		m.storage.SaveInstances(m.list.GetInstances())
+		m.saveAllInstances()
 		m.storage.SaveTopics(m.topics)
 		return m, tea.WindowSize()
 
@@ -541,7 +564,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		selected := m.list.GetSelectedInstance()
 		if selected != nil {
 			m.list.Kill()
-			m.storage.SaveInstances(m.list.GetInstances())
+			m.saveAllInstances()
 			m.updateSidebarItems()
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
@@ -566,7 +589,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err := selected.Pause(); err != nil {
 				return m, m.handleError(err)
 			}
-			m.storage.SaveInstances(m.list.GetInstances())
+			m.saveAllInstances()
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 
@@ -576,7 +599,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			if err := selected.Resume(); err != nil {
 				return m, m.handleError(err)
 			}
-			m.storage.SaveInstances(m.list.GetInstances())
+			m.saveAllInstances()
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 
@@ -614,10 +637,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
-		m.state = stateSendPrompt
-		m.textInputOverlay = overlay.NewTextInputOverlay("Send prompt", "")
-		m.textInputOverlay.SetSize(60, 3)
-		return m, nil
+		return m, m.enterFocusMode()
 
 	case "copy_worktree_path":
 		selected := m.list.GetSelectedInstance()
@@ -727,7 +747,7 @@ func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
 		items = append(items, overlay.ContextMenuItem{Label: "Pause", Action: "pause_instance"})
 	}
 	if selected.Started() && selected.Status != session.Paused {
-		items = append(items, overlay.ContextMenuItem{Label: "Send prompt", Action: "send_prompt_instance"})
+		items = append(items, overlay.ContextMenuItem{Label: "Focus agent", Action: "send_prompt_instance"})
 	}
 	items = append(items, overlay.ContextMenuItem{Label: "Rename", Action: "rename_instance"})
 	items = append(items, overlay.ContextMenuItem{Label: "Move to topic", Action: "move_instance"})
@@ -803,7 +823,7 @@ func (m *home) handleRightClick(x, y, contentY int) (tea.Model, tea.Cmd) {
 			items = append(items, overlay.ContextMenuItem{Label: "Pause", Action: "pause_instance"})
 		}
 		if selected.Started() && selected.Status != session.Paused {
-			items = append(items, overlay.ContextMenuItem{Label: "Send prompt", Action: "send_prompt_instance"})
+			items = append(items, overlay.ContextMenuItem{Label: "Focus agent", Action: "send_prompt_instance"})
 		}
 		items = append(items, overlay.ContextMenuItem{Label: "Rename", Action: "rename_instance"})
 		items = append(items, overlay.ContextMenuItem{Label: "Move to topic", Action: "move_instance"})
@@ -1064,7 +1084,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				selected := m.list.GetSelectedInstance()
 				if selected != nil && newName != "" {
 					selected.Title = newName
-					m.storage.SaveInstances(m.list.GetInstances())
+					m.saveAllInstances()
 				}
 			}
 			m.textInputOverlay = nil
@@ -1101,7 +1121,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						}
 					}
 					m.updateSidebarItems()
-					m.storage.SaveInstances(m.list.GetInstances())
+					m.saveAllInstances()
 					m.storage.SaveTopics(m.topics)
 				}
 			}
@@ -1110,6 +1130,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.menu.SetState(ui.StateDefault)
 			return m, tea.WindowSize()
 		}
+		return m, nil
+	}
+
+	// stateFocusAgent should not receive key events — it's handled by direct attach.
+	// If we get here in this state, just reset.
+	if m.state == stateFocusAgent {
+		m.exitFocusMode()
 		return m, nil
 	}
 
@@ -1234,7 +1261,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					selected.TopicName = picked
 				}
 				m.updateSidebarItems()
-				if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+				if err := m.saveAllInstances(); err != nil {
 					m.state = stateDefault
 					m.menu.SetState(ui.StateDefault)
 					m.pickerOverlay = nil
@@ -1439,10 +1466,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
 		}
-		m.state = stateSendPrompt
-		m.textInputOverlay = overlay.NewTextInputOverlay("Send prompt", "")
-		m.textInputOverlay.SetSize(60, 3)
-		return m, nil
+		return m, m.enterFocusMode()
 	case keys.KeyKill:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil {
@@ -1557,6 +1581,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.setFocus(0)
 		return m, nil
 	case keys.KeyRight:
+		if m.focusedPanel == 1 {
+			// Already on instance list → enter focus mode on preview pane
+			selected := m.list.GetSelectedInstance()
+			if selected != nil && selected.Started() && !selected.Paused() {
+				return m, m.enterFocusMode()
+			}
+		}
 		m.setFocus(1)
 		return m, nil
 	case keys.KeyNewTopic:
@@ -1587,7 +1618,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		killAction := func() tea.Msg {
 			m.list.KillInstancesByTopic(selectedID)
-			m.storage.SaveInstances(m.list.GetInstances())
+			m.saveAllInstances()
 			m.updateSidebarItems()
 			return instanceChangedMsg{}
 		}
@@ -1659,6 +1690,29 @@ func (m *home) setFocus(panel int) {
 	m.list.SetFocused(panel == 1)
 }
 
+// enterFocusMode enters focus/insert mode and starts the fast preview ticker.
+// enterFocusMode directly attaches to the selected instance's tmux session.
+// This takes over the terminal for native performance. Ctrl+Q detaches.
+func (m *home) enterFocusMode() tea.Cmd {
+	m.state = stateFocusAgent
+	// Attach blocks the goroutine, taking over stdin/stdout.
+	// Bubble Tea pauses until detach (Ctrl+Q).
+	ch, err := m.list.Attach()
+	if err != nil {
+		m.state = stateDefault
+		return m.handleError(err)
+	}
+	<-ch
+	m.state = stateDefault
+	return tea.Batch(tea.WindowSize(), m.instanceChanged())
+}
+
+// exitFocusMode resets state from focus mode (used as fallback).
+func (m *home) exitFocusMode() {
+	m.state = stateDefault
+	m.tabbedWindow.SetFocusMode(false)
+}
+
 func (m *home) filterInstancesByTopic() {
 	selectedID := m.sidebar.GetSelectedID()
 	switch selectedID {
@@ -1709,6 +1763,34 @@ func (m *home) filterBySearch() {
 	m.sidebar.UpdateMatchCounts(matchesByTopic, totalMatches)
 }
 
+// rebuildInstanceList clears the list and repopulates with instances matching activeRepoPath.
+func (m *home) rebuildInstanceList() {
+	m.list.Clear()
+	for _, inst := range m.allInstances {
+		repoPath := inst.GetRepoPath()
+		if repoPath == "" || repoPath == m.activeRepoPath {
+			m.list.AddInstance(inst)()
+		}
+	}
+	m.filterInstancesByTopic()
+	m.updateSidebarItems()
+}
+
+// saveAllInstances saves allInstances (all repos) to storage.
+func (m *home) saveAllInstances() error {
+	return m.storage.SaveInstances(m.allInstances)
+}
+
+// removeFromAllInstances removes an instance from the master list by title.
+func (m *home) removeFromAllInstances(title string) {
+	for i, inst := range m.allInstances {
+		if inst.Title == title {
+			m.allInstances = append(m.allInstances[:i], m.allInstances[i+1:]...)
+			return
+		}
+	}
+}
+
 // instanceChanged updates the preview pane, menu, and diff pane based on the selected instance. It returns an error
 // Cmd if there was any error.
 func (m *home) instanceChanged() tea.Cmd {
@@ -1755,6 +1837,9 @@ type hideErrMsg struct{}
 type previewTickMsg struct{}
 
 type tickUpdateMetadataMessage struct{}
+
+// focusPreviewTickMsg is a fast ticker (30fps) for focus mode preview refresh only.
+type focusPreviewTickMsg struct{}
 
 type instanceChangedMsg struct{}
 

@@ -226,6 +226,14 @@ func (i *Instance) RepoName() (string, error) {
 	return i.gitWorktree.GetRepoName(), nil
 }
 
+// GetRepoPath returns the repo path for this instance, or empty string if not started.
+func (i *Instance) GetRepoPath() string {
+	if !i.started || i.gitWorktree == nil {
+		return ""
+	}
+	return i.gitWorktree.GetRepoPath()
+}
+
 func (i *Instance) SetStatus(status Status) {
 	if i.Status == Running && status == Ready {
 		i.Notified = true
