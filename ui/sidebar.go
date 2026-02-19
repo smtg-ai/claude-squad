@@ -6,8 +6,12 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/mattn/go-runewidth"
 )
+
+// ZoneRepoSwitch is the bubblezone ID for the clickable repo indicator.
+const ZoneRepoSwitch = "repo-switch"
 
 var sidebarTitleStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("216")).
@@ -90,7 +94,8 @@ type Sidebar struct {
 	searchActive bool
 	searchQuery  string
 
-	repoName string // current repo name shown at bottom
+	repoName    string // current repo name shown at bottom
+	repoHovered bool   // true when mouse is hovering over the repo button
 }
 
 func NewSidebar() *Sidebar {
@@ -119,6 +124,11 @@ func (s *Sidebar) IsFocused() bool {
 // SetRepoName sets the current repo name displayed at the bottom of the sidebar.
 func (s *Sidebar) SetRepoName(name string) {
 	s.repoName = name
+}
+
+// SetRepoHovered sets whether the mouse is hovering over the repo button.
+func (s *Sidebar) SetRepoHovered(hovered bool) {
+	s.repoHovered = hovered
 }
 
 // TopicStatus holds status flags for a topic's instances.
@@ -320,21 +330,17 @@ func (s *Sidebar) String() string {
 			continue
 		}
 
-		// Build trailing indicators: shared worktree icon + status dot
-		var trailingIcons string
+		// Fixed-slot layout: [prefix 1ch] [name+count flexible] [icons fixed right]
+		// Content area = itemWidth - 2 (Padding(0,1) in item styles)
+		contentWidth := itemWidth - 2
+
+		// Build trailing icons and measure their fixed width
 		trailingWidth := 0
-
 		if item.SharedWorktree {
-			trailingIcons += " \ue727"
-			trailingWidth += 2
+			trailingWidth += 2 // " \ue727"
 		}
-
-		if item.HasNotification {
-			trailingIcons += " ●"
-			trailingWidth += 2
-		} else if item.HasRunning {
-			trailingIcons += " ●"
-			trailingWidth += 2
+		if item.HasNotification || item.HasRunning {
+			trailingWidth += 2 // " ●"
 		}
 
 		// Build count suffix
@@ -347,9 +353,9 @@ func (s *Sidebar) String() string {
 			countSuffix = fmt.Sprintf(" (%d)", displayCount)
 		}
 
-		// Truncate topic name to fit: itemWidth - prefix(1) - countSuffix - trailing
+		// Truncate name to fit: contentWidth - prefix(1) - countSuffix - trailing
 		nameText := item.Name
-		maxNameWidth := itemWidth - 1 - runewidth.StringWidth(countSuffix) - trailingWidth
+		maxNameWidth := contentWidth - 1 - runewidth.StringWidth(countSuffix) - trailingWidth
 		if maxNameWidth < 3 {
 			maxNameWidth = 3
 		}
@@ -357,8 +363,20 @@ func (s *Sidebar) String() string {
 			nameText = runewidth.Truncate(nameText, maxNameWidth-1, "…")
 		}
 
-		// Assemble plain text (no styled parts yet)
-		plainText := nameText + countSuffix
+		// Left part: prefix + name + count
+		prefix := " "
+		if i == s.selectedIdx {
+			prefix = "▸"
+		}
+		leftPart := prefix + nameText + countSuffix
+		leftWidth := runewidth.StringWidth(leftPart)
+
+		// Pad between left and right to push icons to the right edge
+		gap := contentWidth - leftWidth - trailingWidth
+		if gap < 0 {
+			gap = 0
+		}
+		paddedLeft := leftPart + strings.Repeat(" ", gap)
 
 		// Style the trailing icons
 		var styledTrailing string
@@ -375,21 +393,54 @@ func (s *Sidebar) String() string {
 			styledTrailing += " " + sidebarRunningStyle.Render("●")
 		}
 
+		line := paddedLeft + styledTrailing
 		if i == s.selectedIdx && s.focused {
-			b.WriteString(selectedTopicStyle.Width(itemWidth).MaxWidth(itemWidth).Render("▸" + plainText + styledTrailing))
+			b.WriteString(selectedTopicStyle.Width(itemWidth).Render(line))
 		} else if i == s.selectedIdx && !s.focused {
-			b.WriteString(activeTopicStyle.Width(itemWidth).MaxWidth(itemWidth).Render("▸" + plainText + styledTrailing))
+			b.WriteString(activeTopicStyle.Width(itemWidth).Render(line))
 		} else {
-			b.WriteString(topicItemStyle.Width(itemWidth).MaxWidth(itemWidth).Render(" " + plainText + styledTrailing))
+			b.WriteString(topicItemStyle.Width(itemWidth).Render(line))
 		}
 		b.WriteString("\n")
 	}
 
-	// Build repo indicator for the bottom
+	// Build repo indicator as a clickable dropdown button at the bottom.
+	// lipgloss .Width(w) includes padding but EXCLUDES borders.
+	// So total rendered = w + 2(border). To fit in sidebar content area
+	// (innerWidth - 2), we need: w + 2 <= innerWidth - 2 => w <= innerWidth - 4.
+	// Use innerWidth - 6 for safe margin.
 	var repoSection string
 	if s.repoName != "" {
-		repoSection = sectionHeaderStyle.Render("── Repo ──") + "\n" +
-			topicItemStyle.Width(itemWidth).MaxWidth(itemWidth).Render("\uf1d3 " + s.repoName)
+		btnWidth := innerWidth - 4 // same as search bar: border excluded from Width
+		if btnWidth < 4 {
+			btnWidth = 4
+		}
+
+		borderColor := lipgloss.AdaptiveColor{Light: "#c0c0c0", Dark: "#555555"}
+		textColor := lipgloss.AdaptiveColor{Light: "#555555", Dark: "#aaaaaa"}
+		if s.repoHovered {
+			borderColor = lipgloss.AdaptiveColor{Light: "#888888", Dark: "#888888"}
+			textColor = lipgloss.AdaptiveColor{Light: "#000000", Dark: "#ffffff"}
+		}
+
+		// Truncate repo name to fit: btnWidth - padding(2) - arrow
+		arrowStr := " ▾"
+		contentWidth := btnWidth - 2 // subtract padding
+		maxNameLen := contentWidth - runewidth.StringWidth(arrowStr)
+		displayName := s.repoName
+		if runewidth.StringWidth(displayName) > maxNameLen {
+			displayName = runewidth.Truncate(displayName, maxNameLen-1, "…")
+		}
+
+		btnStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(borderColor).
+			Foreground(textColor).
+			Width(btnWidth).
+			Padding(0, 1)
+
+		repoButton := btnStyle.Render(displayName + arrowStr)
+		repoSection = zone.Mark(ZoneRepoSwitch, repoButton)
 	}
 
 	topContent := b.String()
@@ -404,7 +455,9 @@ func (s *Sidebar) String() string {
 	if repoSection != "" {
 		topLines := strings.Count(topContent, "\n") + 1
 		repoLines := strings.Count(repoSection, "\n") + 1
-		gap := borderHeight - topLines - repoLines
+		// +1 because topContent's trailing \n merges with the gap,
+		// producing 1 fewer line than topLines + gap + repoLines.
+		gap := borderHeight - topLines - repoLines + 1
 		if gap < 1 {
 			gap = 1
 		}

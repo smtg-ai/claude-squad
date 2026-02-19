@@ -438,6 +438,16 @@ func (i *Instance) GetPaneContent() (string, error) {
 	return i.tmuxSession.CapturePaneContent()
 }
 
+// NewEmbeddedTerminalForInstance creates an embedded terminal emulator connected
+// to this instance's tmux PTY for zero-latency interactive focus mode.
+func (i *Instance) NewEmbeddedTerminalForInstance(cols, rows int) (*EmbeddedTerminal, error) {
+	if !i.started || i.tmuxSession == nil {
+		return nil, fmt.Errorf("instance not started")
+	}
+	sessionName := i.tmuxSession.GetSanitizedName()
+	return NewEmbeddedTerminal(sessionName, cols, rows)
+}
+
 // TapEnter sends an enter key press to the tmux session if AutoYes is enabled.
 func (i *Instance) TapEnter() {
 	if !i.started || !i.AutoYes {

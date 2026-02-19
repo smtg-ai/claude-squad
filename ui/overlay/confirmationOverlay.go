@@ -62,7 +62,7 @@ func (c *ConfirmationOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 // Render renders the confirmation overlay
 func (c *ConfirmationOverlay) Render(opts ...WhitespaceOption) string {
 	style := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.DoubleBorder()).
 		BorderForeground(c.borderColor).
 		Padding(1, 2).
 		Width(c.width)

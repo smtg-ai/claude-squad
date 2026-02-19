@@ -1,7 +1,7 @@
 package git
 
 import (
-	"claude-squad/log"
+	"hivemind/log"
 	"fmt"
 	"os"
 	"os/exec"

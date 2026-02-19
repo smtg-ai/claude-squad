@@ -42,7 +42,10 @@ const (
 	// Instance filter keybindings
 	KeyFilterAll    // Key for showing all instances
 	KeyFilterActive // Key for showing only active instances
+	KeyCycleSort    // Key for cycling sort mode
 	KeyRepoSwitch   // Key for switching repos
+
+	KeyGitTab // Key for jumping directly to git tab
 
 	// Diff keybindings
 	KeyShiftUp
@@ -82,7 +85,9 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	" ":     KeySpace,
 	"1":     KeyFilterAll,
 	"2":     KeyFilterActive,
+	"3":     KeyCycleSort,
 	"R":     KeyRepoSwitch,
+	"g":     KeyGitTab,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -191,9 +196,17 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithKeys("2"),
 		key.WithHelp("2", "active"),
 	),
+	KeyCycleSort: key.NewBinding(
+		key.WithKeys("3"),
+		key.WithHelp("3", "sort"),
+	),
 	KeyRepoSwitch: key.NewBinding(
 		key.WithKeys("R"),
 		key.WithHelp("R", "switch repo"),
+	),
+	KeyGitTab: key.NewBinding(
+		key.WithKeys("g"),
+		key.WithHelp("g", "git tab"),
 	),
 
 	// -- Special keybindings --

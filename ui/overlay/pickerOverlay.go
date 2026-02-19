@@ -9,12 +9,12 @@ import (
 
 var pickerBorderStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
-	BorderForeground(lipgloss.Color("#7D56F4")).
+	BorderForeground(lipgloss.Color("#F0A868")).
 	Padding(1, 2)
 
 var pickerTitleStyle = lipgloss.NewStyle().
 	Bold(true).
-	Foreground(lipgloss.Color("#7D56F4")).
+	Foreground(lipgloss.Color("#F0A868")).
 	MarginBottom(1)
 
 var pickerSearchStyle = lipgloss.NewStyle().
@@ -25,7 +25,7 @@ var pickerSearchStyle = lipgloss.NewStyle().
 
 var pickerSearchActiveStyle = lipgloss.NewStyle().
 	Border(lipgloss.RoundedBorder()).
-	BorderForeground(lipgloss.Color("#7D56F4")).
+	BorderForeground(lipgloss.Color("#7EC8D8")).
 	Padding(0, 1).
 	MarginBottom(1)
 
@@ -35,7 +35,7 @@ var pickerItemStyle = lipgloss.NewStyle().
 
 var pickerSelectedItemStyle = lipgloss.NewStyle().
 	Padding(0, 1).
-	Background(lipgloss.Color("#7D56F4")).
+	Background(lipgloss.Color("#7EC8D8")).
 	Foreground(lipgloss.Color("#ffffff"))
 
 var pickerHintStyle = lipgloss.NewStyle().
@@ -151,7 +151,7 @@ func (p *PickerOverlay) Render() string {
 	}
 	searchText := p.searchQuery
 	if searchText == "" {
-		searchText = "Type to filter..."
+		searchText = "\uf002 Type to filter..."
 	}
 	b.WriteString(pickerSearchActiveStyle.Width(innerWidth).Render(searchText))
 	b.WriteString("\n")

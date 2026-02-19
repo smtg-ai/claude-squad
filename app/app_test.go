@@ -1,11 +1,11 @@
 package app
 
 import (
-	"claude-squad/config"
-	"claude-squad/log"
-	"claude-squad/session"
-	"claude-squad/ui"
-	"claude-squad/ui/overlay"
+	"hivemind/config"
+	"hivemind/log"
+	"hivemind/session"
+	"hivemind/ui"
+	"hivemind/ui/overlay"
 	"context"
 	"fmt"
 	"os"
@@ -108,7 +108,7 @@ func TestConfirmationModalStateTransitions(t *testing.T) {
 // TestConfirmationModalKeyHandling tests the actual key handling in confirmation state
 func TestConfirmationModalKeyHandling(t *testing.T) {
 	// Import needed packages
-	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
+	spinner := spinner.New(spinner.WithSpinner(spinner.Dot))
 	list := ui.NewList(&spinner, false)
 
 	// Create enough of home struct to test handleKeyPress in confirmation state
@@ -229,7 +229,7 @@ func TestConfirmationMessageFormatting(t *testing.T) {
 // TestConfirmationFlowSimulation tests the confirmation flow by simulating the state changes
 func TestConfirmationFlowSimulation(t *testing.T) {
 	// Create a minimal setup
-	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
+	spinner := spinner.New(spinner.WithSpinner(spinner.Dot))
 	list := ui.NewList(&spinner, false)
 
 	// Add test instance

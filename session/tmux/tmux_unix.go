@@ -3,7 +3,7 @@
 package tmux
 
 import (
-	"claude-squad/log"
+	"hivemind/log"
 	"os"
 	"os/signal"
 	"syscall"

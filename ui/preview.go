@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"claude-squad/session"
+	"hivemind/session"
 	"fmt"
 	"strings"
 
@@ -33,6 +33,13 @@ func NewPreviewPane() *PreviewPane {
 	return &PreviewPane{
 		viewport: viewport.New(0, 0),
 	}
+}
+
+// SetRawContent sets the preview content directly from a pre-rendered string.
+// Used by the embedded terminal emulator in focus mode.
+func (p *PreviewPane) SetRawContent(content string) {
+	p.previewState = previewState{text: content}
+	p.isScrolling = false
 }
 
 func (p *PreviewPane) SetSize(width, maxHeight int) {
@@ -70,7 +77,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		if filled > barWidth {
 			filled = barWidth
 		}
-		bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+		bar := GradientBar(barWidth, filled, "#F0A868", "#7EC8D8")
 
 		stepText := instance.LoadingMessage
 		if stepText == "" {
@@ -87,12 +94,10 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 			"",
 			lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("#7D56F4")).
+				Foreground(lipgloss.Color("#F0A868")).
 				Render("Starting instance"),
 			"",
-			lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#7D56F4")).
-				Render(bar),
+			bar,
 			"",
 			lipgloss.NewStyle().
 				Foreground(lipgloss.AdaptiveColor{Light: "#808080", Dark: "#808080"}).

@@ -2,8 +2,8 @@ package tmux
 
 import (
 	"bytes"
-	"claude-squad/cmd"
-	"claude-squad/log"
+	"hivemind/cmd"
+	"hivemind/log"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -61,11 +62,11 @@ type TmuxSession struct {
 	wg     *sync.WaitGroup
 }
 
-const TmuxPrefix = "claudesquad_"
+const TmuxPrefix = "hivemind_"
 
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)
 
-func toClaudeSquadTmuxName(str string) string {
+func toHivemindTmuxName(str string) string {
 	str = whiteSpaceRegex.ReplaceAllString(str, "")
 	str = strings.ReplaceAll(str, ".", "_") // tmux replaces all . with _
 	return fmt.Sprintf("%s%s", TmuxPrefix, str)
@@ -83,7 +84,7 @@ func NewTmuxSessionWithDeps(name string, program string, skipPermissions bool, p
 
 func newTmuxSession(name string, program string, skipPermissions bool, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
 	return &TmuxSession{
-		sanitizedName:   toClaudeSquadTmuxName(name),
+		sanitizedName:   toHivemindTmuxName(name),
 		program:         program,
 		skipPermissions: skipPermissions,
 		ptyFactory:      ptyFactory,
@@ -522,6 +523,30 @@ func (t *TmuxSession) CapturePaneContentWithOptions(start, end string) (string, 
 		return "", fmt.Errorf("failed to capture tmux pane content with options: %v", err)
 	}
 	return string(output), nil
+}
+
+// GetPanePID returns the PID of the process running in the tmux pane.
+// GetPTY returns the master PTY file descriptor for direct I/O.
+func (t *TmuxSession) GetPTY() *os.File {
+	return t.ptmx
+}
+
+// GetSanitizedName returns the tmux session name used for tmux commands.
+func (t *TmuxSession) GetSanitizedName() string {
+	return t.sanitizedName
+}
+
+func (t *TmuxSession) GetPanePID() (int, error) {
+	pidCmd := exec.Command("tmux", "display-message", "-p", "-t", t.sanitizedName, "#{pane_pid}")
+	output, err := t.cmdExec.Output(pidCmd)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get pane PID: %w", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(output)))
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse pane PID: %w", err)
+	}
+	return pid, nil
 }
 
 // CleanupSessions kills all tmux sessions that start with "session-"

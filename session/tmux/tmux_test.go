@@ -1,7 +1,7 @@
 package tmux
 
 import (
-	cmd2 "claude-squad/cmd"
+	cmd2 "hivemind/cmd"
 	"fmt"
 	"math/rand"
 	"os"
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"claude-squad/cmd/cmd_test"
+	"hivemind/cmd/cmd_test"
 
 	"github.com/stretchr/testify/require"
 )
@@ -72,9 +72,9 @@ func TestStartTmuxSession(t *testing.T) {
 	err := session.Start(workdir)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s claudesquad_test-session -c %s claude", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s hivemind_test-session -c %s claude", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
-	require.Equal(t, "tmux attach-session -t claudesquad_test-session",
+	require.Equal(t, "tmux attach-session -t hivemind_test-session",
 		cmd2.ToString(ptyFactory.cmds[1]))
 
 	require.Equal(t, 2, len(ptyFactory.files))
@@ -110,7 +110,7 @@ func TestStartTmuxSessionWithSkipPermissions(t *testing.T) {
 	err := session.Start(workdir)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s claudesquad_test-session -c %s claude --dangerously-skip-permissions", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s hivemind_test-session -c %s claude --dangerously-skip-permissions", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
 }
 
@@ -137,6 +137,6 @@ func TestStartTmuxSessionSkipPermissionsNotAppliedToAider(t *testing.T) {
 	err := session.Start(workdir)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
-	require.Equal(t, fmt.Sprintf("tmux new-session -d -s claudesquad_test-session -c %s aider --model gpt-4", workdir),
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s hivemind_test-session -c %s aider --model gpt-4", workdir),
 		cmd2.ToString(ptyFactory.cmds[0]))
 }

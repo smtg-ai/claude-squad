@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 	"time"
 
@@ -104,6 +105,27 @@ const (
 	StatusFilterActive                     // Show only non-paused instances
 )
 
+// SortMode determines how instances are ordered.
+type SortMode int
+
+const (
+	SortNewest SortMode = iota // Most recently updated first (default)
+	SortOldest                 // Oldest first
+	SortName                   // Alphabetical by title
+	SortStatus                 // Grouped by status: running, ready, paused
+)
+
+var sortModeLabels = map[SortMode]string{
+	SortNewest: "Newest",
+	SortOldest: "Oldest",
+	SortName:   "Name",
+	SortStatus: "Status",
+}
+
+var sortDropdownStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("#7EC8D8")).
+	Padding(0, 1)
+
 type List struct {
 	items         []*session.Instance
 	selectedIdx   int
@@ -118,6 +140,7 @@ type List struct {
 
 	filter       string       // topic name filter (empty = show all)
 	statusFilter StatusFilter // status filter (All or Active)
+	sortMode     SortMode     // how instances are sorted
 	allItems     []*session.Instance
 }
 
@@ -139,6 +162,17 @@ func (l *List) SetFocused(focused bool) {
 func (l *List) SetStatusFilter(filter StatusFilter) {
 	l.statusFilter = filter
 	l.rebuildFilteredItems()
+}
+
+// CycleSortMode advances to the next sort mode and rebuilds.
+func (l *List) CycleSortMode() {
+	l.sortMode = (l.sortMode + 1) % 4
+	l.rebuildFilteredItems()
+}
+
+// GetSortMode returns the current sort mode.
+func (l *List) GetSortMode() SortMode {
+	return l.sortMode
 }
 
 // GetStatusFilter returns the current status filter.
@@ -422,16 +456,24 @@ func (l *List) String() string {
 		activeTab.Render(activeTabText),
 	)
 
+	sortLabel := sortDropdownStyle.Render("3 \uf0dc " + sortModeLabels[l.sortMode])
+
 	if !l.autoyes {
-		b.WriteString(lipgloss.Place(
-			titleWidth, 1, lipgloss.Left, lipgloss.Bottom, tabs))
+		left := tabs
+		right := sortLabel
+		gap := titleWidth - runewidth.StringWidth(left) - runewidth.StringWidth(right)
+		if gap < 1 {
+			gap = 1
+		}
+		b.WriteString(left + strings.Repeat(" ", gap) + right)
 	} else {
-		title := lipgloss.Place(
-			titleWidth/2, 1, lipgloss.Left, lipgloss.Bottom, tabs)
-		autoYes := lipgloss.Place(
-			titleWidth-(titleWidth/2), 1, lipgloss.Right, lipgloss.Bottom, autoYesStyle.Render(autoYesText))
-		b.WriteString(lipgloss.JoinHorizontal(
-			lipgloss.Top, title, autoYes))
+		left := tabs + " " + sortLabel
+		autoYes := autoYesStyle.Render(autoYesText)
+		gap := titleWidth - runewidth.StringWidth(left) - runewidth.StringWidth(autoYes)
+		if gap < 1 {
+			gap = 1
+		}
+		b.WriteString(left + strings.Repeat(" ", gap) + autoYes)
 	}
 
 	b.WriteString("\n")
@@ -704,10 +746,34 @@ func (l *List) rebuildFilteredItems() {
 		l.items = topicFiltered
 	}
 
+	// Apply sort
+	l.sortItems()
+
 	if l.selectedIdx >= len(l.items) {
 		l.selectedIdx = len(l.items) - 1
 	}
 	if l.selectedIdx < 0 {
 		l.selectedIdx = 0
+	}
+}
+
+func (l *List) sortItems() {
+	switch l.sortMode {
+	case SortNewest:
+		sort.SliceStable(l.items, func(i, j int) bool {
+			return l.items[i].UpdatedAt.After(l.items[j].UpdatedAt)
+		})
+	case SortOldest:
+		sort.SliceStable(l.items, func(i, j int) bool {
+			return l.items[i].CreatedAt.Before(l.items[j].CreatedAt)
+		})
+	case SortName:
+		sort.SliceStable(l.items, func(i, j int) bool {
+			return strings.ToLower(l.items[i].Title) < strings.ToLower(l.items[j].Title)
+		})
+	case SortStatus:
+		sort.SliceStable(l.items, func(i, j int) bool {
+			return l.items[i].Status < l.items[j].Status
+		})
 	}
 }

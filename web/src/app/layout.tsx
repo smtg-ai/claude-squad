@@ -20,20 +20,20 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Claude Squad - Manage Multiple AI Code Assistants",
-  description: "A terminal app that manages multiple AI code assistants (Claude Code, Codex, Aider, etc.) in separate workspaces, allowing you to work on multiple tasks simultaneously.",
-  keywords: ["claude", "claude squad", "ai", "code assistant", "terminal", "tmux", "claude code", "codex", "aider"],
-  authors: [{ name: "smtg-ai" }],
+  title: "Hivemind - A TUI-Based Agent-Driven IDE",
+  description: "A TUI-based agent-driven IDE that manages multiple AI agents (Claude Code, Codex, Aider, Gemini) in isolated workspaces, so you can work on multiple tasks simultaneously.",
+  keywords: ["hivemind", "tui", "ai", "ide", "agent", "terminal", "tmux", "claude code", "codex", "aider"],
+  authors: [{ name: "ByteMirror" }],
   openGraph: {
-    title: "Claude Squad",
-    description: "A terminal app that manages multiple AI code assistants in separate workspaces",
-    url: "https://github.com/smtg-ai/claude-squad",
+    title: "Hivemind",
+    description: "A TUI-based agent-driven IDE for managing multiple AI agents in isolated workspaces",
+    url: "https://github.com/ByteMirror/hivemind",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Claude Squad",
-    description: "A terminal app that manages multiple AI code assistants in separate workspaces",
+    title: "Hivemind",
+    description: "A TUI-based agent-driven IDE for managing multiple AI agents in isolated workspaces",
   },
 };
 

@@ -1,7 +1,7 @@
 version: 2.9
 
 builds:
-  - binary: claude-squad
+  - binary: hivemind
     goos:
       - darwin
       - linux
@@ -20,6 +20,20 @@ archives:
       - goos: windows
         format: zip
 
+brews:
+  - repository:
+      owner: ByteMirror
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_REPO_TOKEN }}"
+    name: hivemind
+    homepage: "https://github.com/ByteMirror/hivemind"
+    description: "Hivemind - A TUI-based agent-driven IDE for managing multiple AI agents"
+    license: "AGPL-3.0"
+    install: |
+      bin.install "hivemind"
+    test: |
+      system "#{bin}/hivemind", "version"
+
 release:
   prerelease: auto
   draft: true
@@ -37,4 +51,3 @@ changelog:
       - typo
       - "^refactor"
       - "^chore"
-

@@ -51,11 +51,12 @@ type TabbedWindow struct {
 	height    int
 	width     int
 
-	preview   *PreviewPane
-	diff      *DiffPane
-	git       *GitPane
-	instance  *session.Instance
-	focusMode bool // true when user is typing directly into the agent pane
+	preview    *PreviewPane
+	diff       *DiffPane
+	git        *GitPane
+	instance   *session.Instance
+	focusMode  bool   // true when user is typing directly into the agent pane
+	gitContent string // cached git pane content, set by tick when changed
 }
 
 // SetFocusMode enables or disables the focus/insert mode visual indicator.
@@ -71,7 +72,7 @@ func (w *TabbedWindow) IsFocusMode() bool {
 func NewTabbedWindow(preview *PreviewPane, diff *DiffPane, git *GitPane) *TabbedWindow {
 	return &TabbedWindow{
 		tabs: []string{
-			"\uea85 Preview",
+			"\uea85 Agent",
 			"\ueae1 Diff",
 			"\ue725 Git",
 		},
@@ -137,6 +138,11 @@ func (w *TabbedWindow) UpdatePreview(instance *session.Instance) error {
 // Used by the embedded terminal in focus mode to bypass tmux capture-pane.
 func (w *TabbedWindow) SetPreviewContent(content string) {
 	w.preview.SetRawContent(content)
+}
+
+// SetGitContent caches the git pane content to avoid re-rendering when unchanged.
+func (w *TabbedWindow) SetGitContent(content string) {
+	w.gitContent = content
 }
 
 func (w *TabbedWindow) UpdateDiff(instance *session.Instance) {
@@ -329,7 +335,11 @@ func (w *TabbedWindow) String() string {
 	case DiffTab:
 		content = w.diff.String()
 	case GitTab:
-		content = w.git.String()
+		if w.gitContent != "" {
+			content = w.gitContent
+		} else {
+			content = w.git.String()
+		}
 	}
 	ws := windowStyle
 	if w.focusMode {

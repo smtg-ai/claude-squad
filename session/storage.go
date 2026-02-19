@@ -1,7 +1,7 @@
 package session
 
 import (
-	"claude-squad/config"
+	"hivemind/config"
 	"encoding/json"
 	"fmt"
 	"time"

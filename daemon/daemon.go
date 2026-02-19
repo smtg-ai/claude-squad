@@ -1,9 +1,9 @@
 package daemon
 
 import (
-	"claude-squad/config"
-	"claude-squad/log"
-	"claude-squad/session"
+	"hivemind/config"
+	"hivemind/log"
+	"hivemind/session"
 	"fmt"
 	"os"
 	"os/exec"

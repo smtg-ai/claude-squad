@@ -327,12 +327,17 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state != stateFocusAgent || m.embeddedTerminal == nil {
 			return m, nil
 		}
-		// Only update preview when content actually changed — avoids redundant re-renders.
 		if content, changed := m.embeddedTerminal.Render(); changed {
 			m.tabbedWindow.SetPreviewContent(content)
 		}
+		// Capture reference for the command goroutine — safe even if
+		// exitFocusMode() nils m.embeddedTerminal before the command fires.
+		term := m.embeddedTerminal
 		return m, func() tea.Msg {
-			time.Sleep(16 * time.Millisecond) // 60fps to match capture rate
+			// Block until new content is rendered or 50ms elapses.
+			// This replaces the fixed 16ms sleep with event-driven wakeup,
+			// cutting worst-case display latency from ~24ms to ~1-3ms.
+			term.WaitForRender(50 * time.Millisecond)
 			return focusPreviewTickMsg{}
 		}
 	case gitTabTickMsg:
@@ -464,10 +469,6 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch {
 		return nil, false
 	}
-	// Skip menu highlighting when git tab is active and lazygit is running
-	if m.tabbedWindow.IsInGitTab() && m.tabbedWindow.GetGitPane().IsRunning() {
-		return nil, false
-	}
 	// If it's in the global keymap, we should try to highlight it.
 	name, ok := keys.GlobalKeyStringsMap[msg.String()]
 	if !ok {
@@ -516,9 +517,14 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Don't handle clicks in overlay states (except context menu dismissal)
+	// Dismiss overlays on click-outside
 	if m.state == stateContextMenu && msg.Button == tea.MouseButtonLeft {
 		m.contextMenu = nil
+		m.state = stateDefault
+		return m, nil
+	}
+	if m.state == stateRepoSwitch && msg.Button == tea.MouseButtonLeft {
+		m.pickerOverlay = nil
 		m.state = stateDefault
 		return m, nil
 	}
@@ -1261,19 +1267,37 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
-	// Handle focus mode — forward keys directly to the embedded terminal's PTY
+	// Handle focus mode — forward keys directly to the agent's or lazygit's PTY
 	if m.state == stateFocusAgent {
-		if m.embeddedTerminal == nil {
-			m.exitFocusMode()
-			return m, nil
-		}
-
 		// Ctrl+O exits focus mode
 		if msg.Type == tea.KeyCtrlO {
 			m.exitFocusMode()
 			return m, tea.WindowSize()
 		}
 
+		// Git tab focus: forward to lazygit
+		if m.tabbedWindow.IsInGitTab() {
+			gitPane := m.tabbedWindow.GetGitPane()
+			if gitPane == nil || !gitPane.IsRunning() {
+				m.exitFocusMode()
+				return m, nil
+			}
+			data := keyToBytes(msg)
+			if data == nil {
+				return m, nil
+			}
+			if err := gitPane.SendKey(data); err != nil {
+				m.exitFocusMode()
+				return m, m.handleError(err)
+			}
+			return m, nil
+		}
+
+		// Preview tab focus: forward to embedded terminal
+		if m.embeddedTerminal == nil {
+			m.exitFocusMode()
+			return m, nil
+		}
 		data := keyToBytes(msg)
 		if data == nil {
 			return m, nil
@@ -1282,32 +1306,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(err)
 		}
 		return m, nil
-	}
-
-	// Handle git tab — forward all keys to lazygit's PTY.
-	// Ctrl+Space exits git tab. Tab falls through for tab-cycling.
-	if m.state == stateDefault && m.tabbedWindow.IsInGitTab() {
-		gitPane := m.tabbedWindow.GetGitPane()
-		if gitPane != nil && gitPane.IsRunning() {
-			// Ctrl+Space exits git tab back to preview
-			if msg.Type == tea.KeyCtrlAt {
-				m.killGitTab()
-				m.tabbedWindow.SetActiveTab(ui.PreviewTab)
-				m.menu.SetInDiffTab(false)
-				return m, m.instanceChanged()
-			}
-			// Tab falls through to normal tab-cycling handler
-			if msg.Type != tea.KeyTab {
-				data := keyToBytes(msg)
-				if data == nil {
-					return m, nil
-				}
-				if err := gitPane.SendKey(data); err != nil {
-					return m, m.handleError(err)
-				}
-				return m, nil
-			}
-		}
 	}
 
 	// Handle send prompt state
@@ -1678,6 +1676,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		cmd := m.spawnGitTab()
 		return m, tea.Batch(m.instanceChanged(), cmd)
 	case keys.KeySendPrompt:
+		if m.tabbedWindow.IsInGitTab() {
+			return m, m.enterGitFocusMode()
+		}
 		selected := m.list.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
@@ -1796,7 +1797,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyRight:
 		if m.focusedPanel == 1 {
-			// Already on instance list → enter focus mode on preview pane
+			// Already on instance list → enter focus mode on the active tab's pane
+			if m.tabbedWindow.IsInGitTab() {
+				return m, m.enterGitFocusMode()
+			}
 			selected := m.list.GetSelectedInstance()
 			if selected != nil && selected.Started() && !selected.Paused() {
 				return m, m.enterFocusMode()
@@ -1945,6 +1949,31 @@ func (m *home) enterFocusMode() tea.Cmd {
 	// Start the 30fps render ticker
 	return func() tea.Msg {
 		return focusPreviewTickMsg{}
+	}
+}
+
+// enterGitFocusMode enters focus mode for the git tab (lazygit).
+// Spawns lazygit if it's not already running.
+func (m *home) enterGitFocusMode() tea.Cmd {
+	selected := m.list.GetSelectedInstance()
+	if selected == nil || !selected.Started() || selected.Paused() {
+		return nil
+	}
+
+	gitPane := m.tabbedWindow.GetGitPane()
+	if !gitPane.IsRunning() {
+		worktree, err := selected.GetGitWorktree()
+		if err != nil {
+			return m.handleError(err)
+		}
+		gitPane.Spawn(worktree.GetWorktreePath(), selected.Title)
+	}
+
+	m.state = stateFocusAgent
+	m.tabbedWindow.SetFocusMode(true)
+
+	return func() tea.Msg {
+		return gitTabTickMsg{}
 	}
 }
 

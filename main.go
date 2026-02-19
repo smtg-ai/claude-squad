@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	version     = "1.0.14"
+	version     = "0.1.0"
 	programFlag string
 	autoYesFlag bool
 	daemonFlag  bool
@@ -140,7 +140,7 @@ var (
 		Short: "Print the version number of hivemind",
 		Run: func(cmd *cobra.Command, args []string) {
 			fmt.Printf("hivemind version %s\n", version)
-			fmt.Printf("https://github.com/smtg-ai/claude-squad/releases/tag/v%s\n", version)
+			fmt.Printf("https://github.com/ByteMirror/hivemind/releases/tag/v%s\n", version)
 		},
 	}
 )
