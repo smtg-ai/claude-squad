@@ -52,12 +52,18 @@ const (
 	SidebarUngrouped = "__ungrouped__"
 )
 
+// dimmedTopicStyle is for topics with no matching instances during search
+var dimmedTopicStyle = lipgloss.NewStyle().
+	Padding(0, 1).
+	Foreground(lipgloss.AdaptiveColor{Light: "#c0c0c0", Dark: "#444444"})
+
 // SidebarItem represents a selectable item in the sidebar.
 type SidebarItem struct {
-	Name      string
-	ID        string
-	IsSection bool
-	Count     int
+	Name       string
+	ID         string
+	IsSection  bool
+	Count      int
+	MatchCount int // search match count (-1 = not searching)
 }
 
 // Sidebar is the left-most panel showing topics and search.
@@ -167,6 +173,28 @@ func (s *Sidebar) ClickItem(row int) {
 	}
 }
 
+// UpdateMatchCounts sets the search match counts for each topic item.
+// Pass nil to clear search highlighting.
+func (s *Sidebar) UpdateMatchCounts(matchesByTopic map[string]int, totalMatches int) {
+	for i := range s.items {
+		if s.items[i].IsSection {
+			continue
+		}
+		if matchesByTopic == nil {
+			s.items[i].MatchCount = -1 // not searching
+			continue
+		}
+		switch s.items[i].ID {
+		case SidebarAll:
+			s.items[i].MatchCount = totalMatches
+		case SidebarUngrouped:
+			s.items[i].MatchCount = matchesByTopic[""]
+		default:
+			s.items[i].MatchCount = matchesByTopic[s.items[i].ID]
+		}
+	}
+}
+
 func (s *Sidebar) ActivateSearch()        { s.searchActive = true; s.searchQuery = "" }
 func (s *Sidebar) DeactivateSearch()      { s.searchActive = false; s.searchQuery = "" }
 func (s *Sidebar) IsSearchActive() bool   { return s.searchActive }
@@ -211,14 +239,24 @@ func (s *Sidebar) String() string {
 		}
 
 		display := item.Name
-		if item.Count > 0 {
-			display = fmt.Sprintf("%s (%d)", display, item.Count)
+		// Show match count during search, otherwise total count
+		displayCount := item.Count
+		if s.searchActive && item.MatchCount >= 0 {
+			displayCount = item.MatchCount
 		}
+		if displayCount > 0 {
+			display = fmt.Sprintf("%s (%d)", display, displayCount)
+		}
+
+		// Dim topics with no matches during search
+		isDimmed := s.searchActive && item.MatchCount == 0
 
 		if i == s.selectedIdx && s.focused {
 			b.WriteString(selectedTopicStyle.Width(itemWidth).Render("▸ " + display))
 		} else if i == s.selectedIdx && !s.focused {
 			b.WriteString(activeTopicStyle.Width(itemWidth).Render("▸ " + display))
+		} else if isDimmed {
+			b.WriteString(dimmedTopicStyle.Width(itemWidth).Render("  " + display))
 		} else {
 			b.WriteString(topicItemStyle.Width(itemWidth).Render("  " + display))
 		}

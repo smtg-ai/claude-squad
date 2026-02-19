@@ -55,6 +55,19 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 	case instance == nil:
 		p.setFallbackState("No agents running yet. Spin up a new instance with 'n' to get started!")
 		return nil
+	case instance.Status == session.Loading:
+		p.setFallbackState(lipgloss.JoinVertical(lipgloss.Center,
+			"",
+			lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#7D56F4")).
+				Render("Starting instance..."),
+			"",
+			lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#808080", Dark: "#808080"}).
+				Render("Setting up git worktree and tmux session"),
+		))
+		return nil
 	case instance.Status == session.Paused:
 		p.setFallbackState(lipgloss.JoinVertical(lipgloss.Center,
 			"Session is paused. Press 'r' to resume.",

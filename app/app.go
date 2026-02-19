@@ -1226,10 +1226,23 @@ func (m *home) filterInstancesByTopic() {
 func (m *home) filterBySearch() {
 	query := strings.ToLower(m.sidebar.GetSearchQuery())
 	if query == "" {
+		m.sidebar.UpdateMatchCounts(nil, 0)
 		m.filterInstancesByTopic()
 		return
 	}
 	m.list.SetSearchFilter(query)
+
+	// Calculate match counts per topic for sidebar dimming
+	matchesByTopic := make(map[string]int)
+	totalMatches := 0
+	for _, inst := range m.list.GetInstances() {
+		if strings.Contains(strings.ToLower(inst.Title), query) ||
+			strings.Contains(strings.ToLower(inst.TopicName), query) {
+			matchesByTopic[inst.TopicName]++
+			totalMatches++
+		}
+	}
+	m.sidebar.UpdateMatchCounts(matchesByTopic, totalMatches)
 }
 
 // instanceChanged updates the preview pane, menu, and diff pane based on the selected instance. It returns an error
