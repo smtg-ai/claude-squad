@@ -158,6 +158,42 @@ func (tm *ToastManager) addToast(typ ToastType, msg string, duration time.Durati
 	return t.ID
 }
 
+// ToastTickMsg is sent by the main app every ~50ms while toasts are active
+// to drive animation phase transitions.
+type ToastTickMsg struct{}
+
+// Tick advances all toast animation phases based on elapsed time. Toasts that
+// have completed their full animation cycle (PhaseDone) are removed from the
+// manager's slice.
+func (tm *ToastManager) Tick() {
+	now := time.Now()
+	alive := tm.toasts[:0]
+	for _, t := range tm.toasts {
+		elapsed := now.Sub(t.PhaseStart)
+		switch t.Phase {
+		case PhaseSlidingIn:
+			if elapsed >= SlideInDuration {
+				t.Phase = PhaseVisible
+				t.PhaseStart = now
+			}
+		case PhaseVisible:
+			if t.Duration > 0 && elapsed >= t.Duration {
+				t.Phase = PhaseSlidingOut
+				t.PhaseStart = now
+			}
+		case PhaseSlidingOut:
+			if elapsed >= SlideOutDuration {
+				t.Phase = PhaseDone
+				continue // don't keep done toasts
+			}
+		case PhaseDone:
+			continue // don't keep done toasts
+		}
+		alive = append(alive, t)
+	}
+	tm.toasts = alive
+}
+
 // enforceMaxToasts removes the oldest non-loading toasts when the toast count
 // would exceed MaxToasts after adding a new one.
 func (tm *ToastManager) enforceMaxToasts() {

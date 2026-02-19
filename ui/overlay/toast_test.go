@@ -2,6 +2,7 @@ package overlay
 
 import (
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/stretchr/testify/assert"
@@ -60,4 +61,69 @@ func TestResolveNonexistentID(t *testing.T) {
 		tm.Resolve("does-not-exist", ToastSuccess, "resolved")
 	}, "Resolve with non-existent ID should not panic")
 	assert.Empty(t, tm.toasts, "toasts should remain empty after resolving non-existent ID")
+
+	// Tick on empty manager should also not panic.
+	assert.NotPanics(t, func() {
+		tm.Tick()
+	}, "Tick on empty manager should not panic")
+}
+
+func TestToastAnimationPhases(t *testing.T) {
+	s := spinner.New()
+	tm := NewToastManager(&s)
+
+	_ = tm.Info("hello")
+	require.Len(t, tm.toasts, 1)
+	assert.Equal(t, PhaseSlidingIn, tm.toasts[0].Phase, "new toast should start in PhaseSlidingIn")
+
+	// Advance past SlideInDuration -> should become PhaseVisible.
+	tm.toasts[0].PhaseStart = time.Now().Add(-SlideInDuration - time.Millisecond)
+	tm.Tick()
+	require.Len(t, tm.toasts, 1)
+	assert.Equal(t, PhaseVisible, tm.toasts[0].Phase, "should transition to PhaseVisible after slide-in")
+
+	// Advance past InfoDismissAfter -> should become PhaseSlidingOut.
+	tm.toasts[0].PhaseStart = time.Now().Add(-InfoDismissAfter - time.Millisecond)
+	tm.Tick()
+	require.Len(t, tm.toasts, 1)
+	assert.Equal(t, PhaseSlidingOut, tm.toasts[0].Phase, "should transition to PhaseSlidingOut after visible duration")
+
+	// Advance past SlideOutDuration -> should be removed (PhaseDone).
+	tm.toasts[0].PhaseStart = time.Now().Add(-SlideOutDuration - time.Millisecond)
+	tm.Tick()
+	assert.Empty(t, tm.toasts, "toast should be removed after slide-out completes")
+}
+
+func TestLoadingToastDoesNotAutoDismiss(t *testing.T) {
+	s := spinner.New()
+	tm := NewToastManager(&s)
+
+	id := tm.Loading("working...")
+	require.Len(t, tm.toasts, 1)
+	assert.Equal(t, PhaseSlidingIn, tm.toasts[0].Phase)
+
+	// Advance past slide-in -> PhaseVisible.
+	tm.toasts[0].PhaseStart = time.Now().Add(-SlideInDuration - time.Millisecond)
+	tm.Tick()
+	require.Len(t, tm.toasts, 1)
+	assert.Equal(t, PhaseVisible, tm.toasts[0].Phase, "loading toast should reach PhaseVisible")
+
+	// Even after a long time, loading toast should stay in PhaseVisible.
+	tm.toasts[0].PhaseStart = time.Now().Add(-1 * time.Minute)
+	tm.Tick()
+	require.Len(t, tm.toasts, 1)
+	assert.Equal(t, PhaseVisible, tm.toasts[0].Phase, "loading toast should not auto-dismiss")
+
+	// Resolve the loading toast to success.
+	tm.Resolve(id, ToastSuccess, "done!")
+	require.Len(t, tm.toasts, 1)
+	assert.Equal(t, ToastSuccess, tm.toasts[0].Type, "resolved toast should be ToastSuccess")
+	assert.Equal(t, "done!", tm.toasts[0].Message)
+	assert.Equal(t, PhaseVisible, tm.toasts[0].Phase, "resolved toast should be PhaseVisible")
+
+	// Advance past SuccessDismissAfter -> should become PhaseSlidingOut.
+	tm.toasts[0].PhaseStart = time.Now().Add(-SuccessDismissAfter - time.Millisecond)
+	tm.Tick()
+	require.Len(t, tm.toasts, 1)
+	assert.Equal(t, PhaseSlidingOut, tm.toasts[0].Phase, "resolved toast should begin sliding out after dismiss duration")
 }
