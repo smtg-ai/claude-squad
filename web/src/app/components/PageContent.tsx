@@ -9,6 +9,7 @@ import FeatureCard from "./FeatureCard";
 import InstallTabs from "./InstallTabs";
 import Header from "./Header";
 import BeeCompanion from "./BeeCompanion";
+import PixelBee from "./PixelBee";
 
 const features = [
   {
@@ -70,6 +71,7 @@ export default function PageContent() {
 
         {/* Hero */}
         <section className={styles.hero}>
+          <PixelBee scale={3} bob className={styles.heroBee} />
           <GradientText as="h1" className={styles.heroTitle}>
             hivemind
           </GradientText>
