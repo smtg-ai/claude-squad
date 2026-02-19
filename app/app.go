@@ -1183,10 +1183,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 func (m *home) updateSidebarItems() {
 	topicNames := make([]string, len(m.topics))
 	countByTopic := make(map[string]int)
+	sharedTopics := make(map[string]bool)
 	ungroupedCount := 0
 
 	for i, t := range m.topics {
 		topicNames[i] = t.Name
+		if t.SharedWorktree {
+			sharedTopics[t.Name] = true
+		}
 	}
 
 	for _, inst := range m.list.GetInstances() {
@@ -1197,16 +1201,14 @@ func (m *home) updateSidebarItems() {
 		}
 	}
 
-	m.sidebar.SetItems(topicNames, countByTopic, ungroupedCount)
+	m.sidebar.SetItems(topicNames, countByTopic, ungroupedCount, sharedTopics)
 }
 
 // getMovableTopicNames returns topic names that a non-shared instance can be moved to.
 func (m *home) getMovableTopicNames() []string {
 	names := []string{"(Ungrouped)"}
 	for _, t := range m.topics {
-		if !t.SharedWorktree {
-			names = append(names, t.Name)
-		}
+		names = append(names, t.Name)
 	}
 	return names
 }

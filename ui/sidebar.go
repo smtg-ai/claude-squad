@@ -59,11 +59,12 @@ var dimmedTopicStyle = lipgloss.NewStyle().
 
 // SidebarItem represents a selectable item in the sidebar.
 type SidebarItem struct {
-	Name       string
-	ID         string
-	IsSection  bool
-	Count      int
-	MatchCount int // search match count (-1 = not searching)
+	Name            string
+	ID              string
+	IsSection       bool
+	Count           int
+	MatchCount      int  // search match count (-1 = not searching)
+	SharedWorktree  bool // true if this topic has a shared worktree
 }
 
 // Sidebar is the left-most panel showing topics and search.
@@ -101,7 +102,8 @@ func (s *Sidebar) IsFocused() bool {
 }
 
 // SetItems updates the sidebar items from the current topics.
-func (s *Sidebar) SetItems(topicNames []string, instanceCountByTopic map[string]int, ungroupedCount int) {
+// sharedTopics maps topic name → whether it has a shared worktree.
+func (s *Sidebar) SetItems(topicNames []string, instanceCountByTopic map[string]int, ungroupedCount int, sharedTopics map[string]bool) {
 	totalCount := ungroupedCount
 	for _, c := range instanceCountByTopic {
 		totalCount += c
@@ -115,7 +117,7 @@ func (s *Sidebar) SetItems(topicNames []string, instanceCountByTopic map[string]
 		items = append(items, SidebarItem{Name: "Topics", IsSection: true})
 		for _, name := range topicNames {
 			count := instanceCountByTopic[name]
-			items = append(items, SidebarItem{Name: name, ID: name, Count: count})
+			items = append(items, SidebarItem{Name: name, ID: name, Count: count, SharedWorktree: sharedTopics[name]})
 		}
 	}
 
@@ -238,6 +240,12 @@ func (s *Sidebar) String() string {
 			continue
 		}
 
+		// Shared worktree icon — use fixed-width prefix so text stays aligned
+		icon := " "
+		if item.SharedWorktree {
+			icon = "⚙"
+		}
+
 		display := item.Name
 		// Show match count during search, otherwise total count
 		displayCount := item.Count
@@ -252,13 +260,13 @@ func (s *Sidebar) String() string {
 		isDimmed := s.searchActive && item.MatchCount == 0
 
 		if i == s.selectedIdx && s.focused {
-			b.WriteString(selectedTopicStyle.Width(itemWidth).Render("▸ " + display))
+			b.WriteString(selectedTopicStyle.Width(itemWidth).Render("▸" + icon + display))
 		} else if i == s.selectedIdx && !s.focused {
-			b.WriteString(activeTopicStyle.Width(itemWidth).Render("▸ " + display))
+			b.WriteString(activeTopicStyle.Width(itemWidth).Render("▸" + icon + display))
 		} else if isDimmed {
-			b.WriteString(dimmedTopicStyle.Width(itemWidth).Render("  " + display))
+			b.WriteString(dimmedTopicStyle.Width(itemWidth).Render(" " + icon + display))
 		} else {
-			b.WriteString(topicItemStyle.Width(itemWidth).Render("  " + display))
+			b.WriteString(topicItemStyle.Width(itemWidth).Render(" " + icon + display))
 		}
 		b.WriteString("\n")
 	}
