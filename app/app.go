@@ -1377,11 +1377,11 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 }
 
 func (m *home) View() string {
-	colHeight := m.contentHeight + 3
-	// All columns same total height. Sidebar gets extra top padding to align with preview tabs.
-	sidebarView := lipgloss.NewStyle().PaddingTop(3).Height(colHeight).Render(m.sidebar.String())
-	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Height(colHeight).Render(m.list.String())
-	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Height(colHeight).Render(m.tabbedWindow.String())
+	// All columns use identical padding and height for uniform alignment.
+	colStyle := lipgloss.NewStyle().PaddingTop(1).Height(m.contentHeight + 1)
+	sidebarView := colStyle.Render(m.sidebar.String())
+	listWithPadding := colStyle.Render(m.list.String())
+	previewWithPadding := colStyle.Render(m.tabbedWindow.String())
 	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, listWithPadding, previewWithPadding)
 
 	mainView := lipgloss.JoinVertical(
