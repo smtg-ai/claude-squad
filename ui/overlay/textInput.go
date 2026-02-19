@@ -141,7 +141,11 @@ func (t *TextInputOverlay) Render() string {
 		Foreground(lipgloss.Color("0"))
 
 	// Set textarea width to fit within the overlay
-	t.textarea.SetWidth(t.width - 6) // Account for padding and borders
+	w := t.width
+	if w < 40 {
+		w = 40
+	}
+	t.textarea.SetWidth(w - 6) // Account for padding and borders
 
 	// Build the view
 	content := titleStyle.Render(t.Title) + "\n"

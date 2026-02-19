@@ -671,6 +671,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.state = statePrompt
 				m.menu.SetState(ui.StatePrompt)
 				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+				m.textInputOverlay.SetSize(50, 5)
 				m.promptAfterName = false
 			}
 
@@ -1157,6 +1158,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyNewTopic:
 		m.state = stateNewTopic
 		m.textInputOverlay = overlay.NewTextInputOverlay("Topic name", "")
+		m.textInputOverlay.SetSize(50, 3)
 		return m, nil
 	case keys.KeyMoveTo:
 		selected := m.list.GetSelectedInstance()
