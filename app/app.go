@@ -877,18 +877,28 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
-	// Handle search state
+	// Handle search state — allows typing to filter AND arrow keys to navigate topics
 	if m.state == stateSearch {
 		switch {
 		case msg.String() == "esc":
 			m.sidebar.DeactivateSearch()
+			m.sidebar.UpdateMatchCounts(nil, 0)
 			m.state = stateDefault
 			m.filterInstancesByTopic()
 			return m, nil
 		case msg.String() == "enter":
 			m.sidebar.DeactivateSearch()
+			m.sidebar.UpdateMatchCounts(nil, 0)
 			m.state = stateDefault
 			return m, nil
+		case msg.String() == "up":
+			m.sidebar.Up()
+			m.filterSearchWithTopic()
+			return m, m.instanceChanged()
+		case msg.String() == "down":
+			m.sidebar.Down()
+			m.filterSearchWithTopic()
+			return m, m.instanceChanged()
 		case msg.Type == tea.KeyBackspace:
 			q := m.sidebar.GetSearchQuery()
 			if len(q) > 0 {
@@ -1171,9 +1181,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeySearch:
 		m.sidebar.ActivateSearch()
+		m.sidebar.SelectFirst() // Reset to "All" when starting search
 		m.state = stateSearch
 		m.focusedPanel = 0
 		m.sidebar.SetFocused(true)
+		m.list.SetFilter("") // Show all instances
 		return m, nil
 	default:
 		return m, nil
@@ -1223,6 +1235,22 @@ func (m *home) filterInstancesByTopic() {
 	default:
 		m.list.SetFilter(selectedID)
 	}
+}
+
+// filterSearchWithTopic applies the search query scoped to the currently selected topic.
+func (m *home) filterSearchWithTopic() {
+	query := strings.ToLower(m.sidebar.GetSearchQuery())
+	selectedID := m.sidebar.GetSelectedID()
+	topicFilter := ""
+	switch selectedID {
+	case ui.SidebarAll:
+		topicFilter = ""
+	case ui.SidebarUngrouped:
+		topicFilter = ui.SidebarUngrouped
+	default:
+		topicFilter = selectedID
+	}
+	m.list.SetSearchFilterWithTopic(query, topicFilter)
 }
 
 func (m *home) filterBySearch() {

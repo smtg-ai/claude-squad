@@ -405,11 +405,28 @@ func (l *List) SetFilter(topicFilter string) {
 }
 
 // SetSearchFilter filters instances by search query across all topics.
+// SetSearchFilter filters instances by search query across all topics.
 func (l *List) SetSearchFilter(query string) {
+	l.SetSearchFilterWithTopic(query, "")
+}
+
+// SetSearchFilterWithTopic filters instances by search query, optionally scoped to a topic.
+// topicFilter: "" = all topics, "__ungrouped__" = ungrouped only, otherwise = specific topic.
+func (l *List) SetSearchFilterWithTopic(query string, topicFilter string) {
 	l.filter = ""
 	filtered := make([]*session.Instance, 0)
 	for _, inst := range l.allItems {
-		if strings.Contains(strings.ToLower(inst.Title), query) ||
+		// Check topic filter first
+		if topicFilter != "" {
+			if topicFilter == "__ungrouped__" && inst.TopicName != "" {
+				continue
+			} else if topicFilter != "__ungrouped__" && inst.TopicName != topicFilter {
+				continue
+			}
+		}
+		// Then check search query
+		if query == "" ||
+			strings.Contains(strings.ToLower(inst.Title), query) ||
 			strings.Contains(strings.ToLower(inst.TopicName), query) {
 			filtered = append(filtered, inst)
 		}

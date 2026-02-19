@@ -19,6 +19,7 @@ type PreviewPane struct {
 	previewState previewState
 	isScrolling  bool
 	viewport     viewport.Model
+	loadingTick  int // animation counter for loading state
 }
 
 type previewState struct {
@@ -56,16 +57,35 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		p.setFallbackState("No agents running yet. Spin up a new instance with 'n' to get started!")
 		return nil
 	case instance.Status == session.Loading:
+		p.loadingTick++
+		// Animated progress bar
+		barWidth := 20
+		filled := p.loadingTick % (barWidth + 1)
+		bar := strings.Repeat("█", filled) + strings.Repeat("░", barWidth-filled)
+
+		// Cycling status messages
+		steps := []string{
+			"Creating git worktree...",
+			"Setting up branch...",
+			"Spawning tmux session...",
+			"Waiting for process...",
+		}
+		step := steps[(p.loadingTick/2)%len(steps)]
+
 		p.setFallbackState(lipgloss.JoinVertical(lipgloss.Center,
 			"",
 			lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("#7D56F4")).
-				Render("Starting instance..."),
+				Render("Starting instance"),
+			"",
+			lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#7D56F4")).
+				Render(bar),
 			"",
 			lipgloss.NewStyle().
 				Foreground(lipgloss.AdaptiveColor{Light: "#808080", Dark: "#808080"}).
-				Render("Setting up git worktree and tmux session"),
+				Render(step),
 		))
 		return nil
 	case instance.Status == session.Paused:

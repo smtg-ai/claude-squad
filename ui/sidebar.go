@@ -197,6 +197,16 @@ func (s *Sidebar) UpdateMatchCounts(matchesByTopic map[string]int, totalMatches 
 	}
 }
 
+// SelectFirst selects the first non-section item (typically "All").
+func (s *Sidebar) SelectFirst() {
+	for i, item := range s.items {
+		if !item.IsSection {
+			s.selectedIdx = i
+			return
+		}
+	}
+}
+
 func (s *Sidebar) ActivateSearch()        { s.searchActive = true; s.searchQuery = "" }
 func (s *Sidebar) DeactivateSearch()      { s.searchActive = false; s.searchQuery = "" }
 func (s *Sidebar) IsSearchActive() bool   { return s.searchActive }
