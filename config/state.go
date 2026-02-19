@@ -1,7 +1,7 @@
 package config
 
 import (
-	"claude-squad/log"
+	"hivemind/log"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -52,6 +52,8 @@ type State struct {
 	InstancesData json.RawMessage `json:"instances"`
 	// TopicsData stores the serialized topic data as raw JSON
 	TopicsData json.RawMessage `json:"topics,omitempty"`
+	// RecentRepos stores recently opened repo paths so they persist in the picker
+	RecentRepos []string `json:"recent_repos,omitempty"`
 }
 
 // DefaultState returns the default state
@@ -159,5 +161,21 @@ func (s *State) GetHelpScreensSeen() uint32 {
 // SetHelpScreensSeen updates the bitmask of seen help screens
 func (s *State) SetHelpScreensSeen(seen uint32) error {
 	s.HelpScreensSeen = seen
+	return SaveState(s)
+}
+
+// GetRecentRepos returns the list of recently opened repo paths.
+func (s *State) GetRecentRepos() []string {
+	return s.RecentRepos
+}
+
+// AddRecentRepo adds a repo path to the recent list if not already present.
+func (s *State) AddRecentRepo(path string) error {
+	for _, r := range s.RecentRepos {
+		if r == path {
+			return nil
+		}
+	}
+	s.RecentRepos = append(s.RecentRepos, path)
 	return SaveState(s)
 }

@@ -129,8 +129,10 @@ type home struct {
 
 	// sidebar displays the topic sidebar
 	sidebar *ui.Sidebar
-	// topics is the list of all topics
+	// topics is the list of topics for the active repo
 	topics []*session.Topic
+	// allTopics stores every topic across all repos (master list)
+	allTopics []*session.Topic
 	// focusedPanel tracks which panel has keyboard focus (0=sidebar, 1=instance list)
 	focusedPanel int
 	// pendingTopicName stores the topic name during the two-step creation flow
@@ -220,8 +222,14 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		log.ErrorLog.Printf("Failed to load topics: %v", err)
 		topics = []*session.Topic{}
 	}
-	h.topics = topics
+	h.allTopics = topics
+	h.topics = h.filterTopicsByRepo(topics, activeRepoPath)
 	h.updateSidebarItems()
+
+	// Persist the active repo so it appears in the picker even if it has no instances
+	if state, ok := h.appState.(*config.State); ok {
+		state.AddRecentRepo(activeRepoPath)
+	}
 
 	return h
 }
@@ -392,6 +400,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.path != "" {
 			m.activeRepoPath = msg.path
 			m.sidebar.SetRepoName(filepath.Base(msg.path))
+			if state, ok := m.appState.(*config.State); ok {
+				state.AddRecentRepo(msg.path)
+			}
 			m.rebuildInstanceList()
 		}
 		return m, nil
@@ -404,10 +415,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {
+	m.killGitTab()
 	if err := m.saveAllInstances(); err != nil {
 		return m, m.handleError(err)
 	}
-	if err := m.storage.SaveTopics(m.topics); err != nil {
+	if err := m.saveAllTopics(); err != nil {
 		return m, m.handleError(err)
 	}
 	return m, tea.Quit
@@ -421,6 +433,10 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		return nil, false
 	}
 	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch {
+		return nil, false
+	}
+	// Skip menu highlighting when git tab is active and lazygit is running
+	if m.tabbedWindow.IsInGitTab() && m.tabbedWindow.GetGitPane().IsRunning() {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -587,8 +603,14 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 					break
 				}
 			}
+			for i, t := range m.allTopics {
+				if t.Name == selectedID {
+					m.allTopics = append(m.allTopics[:i], m.allTopics[i+1:]...)
+					break
+				}
+			}
 			m.saveAllInstances()
-			m.storage.SaveTopics(m.topics)
+			m.saveAllTopics()
 			m.updateSidebarItems()
 			return instanceChangedMsg{}
 		}
@@ -611,9 +633,15 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
+		for i, t := range m.allTopics {
+			if t.Name == selectedID {
+				m.allTopics = append(m.allTopics[:i], m.allTopics[i+1:]...)
+				break
+			}
+		}
 		m.updateSidebarItems()
 		m.saveAllInstances()
-		m.storage.SaveTopics(m.topics)
+		m.saveAllTopics()
 		return m, tea.WindowSize()
 
 	case "kill_instance":
@@ -1180,7 +1208,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					}
 					m.updateSidebarItems()
 					m.saveAllInstances()
-					m.storage.SaveTopics(m.topics)
+					m.saveAllTopics()
 				}
 			}
 			m.textInputOverlay = nil
@@ -1204,53 +1232,37 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, tea.WindowSize()
 		}
 
-		// Translate key event to raw bytes and write directly to PTY
-		var data []byte
-		switch msg.Type {
-		case tea.KeyRunes:
-			data = []byte(string(msg.Runes))
-		case tea.KeyEnter:
-			data = []byte{0x0D}
-		case tea.KeyBackspace:
-			data = []byte{0x7F}
-		case tea.KeyTab:
-			data = []byte{0x09}
-		case tea.KeySpace:
-			data = []byte{0x20}
-		case tea.KeyUp:
-			data = []byte("\x1b[A")
-		case tea.KeyDown:
-			data = []byte("\x1b[B")
-		case tea.KeyRight:
-			data = []byte("\x1b[C")
-		case tea.KeyLeft:
-			data = []byte("\x1b[D")
-		case tea.KeyCtrlC:
-			data = []byte{0x03}
-		case tea.KeyCtrlD:
-			data = []byte{0x04}
-		case tea.KeyCtrlA:
-			data = []byte{0x01}
-		case tea.KeyCtrlE:
-			data = []byte{0x05}
-		case tea.KeyCtrlL:
-			data = []byte{0x0C}
-		case tea.KeyCtrlU:
-			data = []byte{0x15}
-		case tea.KeyCtrlK:
-			data = []byte{0x0B}
-		case tea.KeyCtrlW:
-			data = []byte{0x17}
-		case tea.KeyDelete:
-			data = []byte("\x1b[3~")
-		default:
+		data := keyToBytes(msg)
+		if data == nil {
 			return m, nil
 		}
-
 		if err := m.embeddedTerminal.SendKey(data); err != nil {
 			return m, m.handleError(err)
 		}
 		return m, nil
+	}
+
+	// Handle git tab — forward keys directly to lazygit's PTY
+	if m.state == stateDefault && m.tabbedWindow.IsInGitTab() {
+		gitPane := m.tabbedWindow.GetGitPane()
+		if gitPane.IsRunning() {
+			// ESC exits git tab back to preview
+			if msg.Type == tea.KeyEsc {
+				m.killGitTab()
+				m.tabbedWindow.SetActiveTab(ui.PreviewTab)
+				m.menu.SetInDiffTab(false)
+				return m, m.instanceChanged()
+			}
+
+			data := keyToBytes(msg)
+			if data == nil {
+				return m, nil
+			}
+			if err := gitPane.SendKey(data); err != nil {
+				return m, m.handleError(err)
+			}
+			return m, nil
+		}
 	}
 
 	// Handle send prompt state
@@ -1340,7 +1352,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		topic := session.NewTopic(session.TopicOptions{
 			Name:           m.pendingTopicName,
 			SharedWorktree: shared,
-			Path:           ".",
+			Path:           m.activeRepoPath,
 		})
 		if err := topic.Setup(); err != nil {
 			m.pendingTopicName = ""
@@ -1349,9 +1361,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.menu.SetState(ui.StateDefault)
 			return m, m.handleError(err)
 		}
+		m.allTopics = append(m.allTopics, topic)
 		m.topics = append(m.topics, topic)
 		m.updateSidebarItems()
-		if err := m.storage.SaveTopics(m.topics); err != nil {
+		if err := m.saveAllTopics(); err != nil {
 			return m, m.handleError(err)
 		}
 		m.pendingTopicName = ""
@@ -1586,8 +1599,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.tabbedWindow.ScrollDown()
 		return m, m.instanceChanged()
 	case keys.KeyTab:
+		wasGitTab := m.tabbedWindow.IsInGitTab()
 		m.tabbedWindow.Toggle()
 		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
+		// Kill lazygit when leaving git tab
+		if wasGitTab && !m.tabbedWindow.IsInGitTab() {
+			m.killGitTab()
+		}
+		// Spawn lazygit when entering git tab
+		if m.tabbedWindow.IsInGitTab() {
+			cmd := m.spawnGitTab()
+			return m, tea.Batch(m.instanceChanged(), cmd)
+		}
 		return m, m.instanceChanged()
 	case keys.KeyFilterAll:
 		m.list.SetStatusFilter(ui.StatusFilterAll)
@@ -1600,6 +1623,15 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, m.instanceChanged()
 	case keys.KeySpace:
 		return m.openContextMenu()
+	case keys.KeyGitTab:
+		// Jump directly to git tab
+		if m.tabbedWindow.IsInGitTab() {
+			return m, nil
+		}
+		m.tabbedWindow.SetActiveTab(ui.GitTab)
+		m.menu.SetInDiffTab(false)
+		cmd := m.spawnGitTab()
+		return m, tea.Batch(m.instanceChanged(), cmd)
 	case keys.KeySendPrompt:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() {
@@ -1849,16 +1881,7 @@ func (m *home) enterFocusMode() tea.Cmd {
 		return nil
 	}
 
-	// Get preview pane dimensions for the emulator
-	cols, rows := m.tabbedWindow.GetPreviewSize()
-	if cols < 10 {
-		cols = 80
-	}
-	if rows < 5 {
-		rows = 24
-	}
-
-	term, err := selected.NewEmbeddedTerminalForInstance(cols, rows)
+	term, err := selected.NewEmbeddedTerminalForInstance()
 	if err != nil {
 		return m.handleError(err)
 	}
@@ -1942,17 +1965,24 @@ func (m *home) rebuildInstanceList() {
 			m.list.AddInstance(inst)()
 		}
 	}
+	m.topics = m.filterTopicsByRepo(m.allTopics, m.activeRepoPath)
 	m.filterInstancesByTopic()
 	m.updateSidebarItems()
 }
 
-// getKnownRepos returns distinct repo paths from allInstances plus activeRepoPath.
+// getKnownRepos returns distinct repo paths from allInstances, recent repos, plus activeRepoPath.
 func (m *home) getKnownRepos() []string {
 	seen := make(map[string]bool)
 	seen[m.activeRepoPath] = true
 	for _, inst := range m.allInstances {
 		rp := inst.GetRepoPath()
 		if rp != "" {
+			seen[rp] = true
+		}
+	}
+	// Include recent repos from persisted state
+	if state, ok := m.appState.(*config.State); ok {
+		for _, rp := range state.GetRecentRepos() {
 			seen[rp] = true
 		}
 	}
@@ -2012,6 +2042,9 @@ func (m *home) switchToRepo(selection string) {
 	}
 	m.activeRepoPath = rp
 	m.sidebar.SetRepoName(filepath.Base(rp))
+	if state, ok := m.appState.(*config.State); ok {
+		state.AddRecentRepo(rp)
+	}
 	m.rebuildInstanceList()
 }
 
@@ -2028,6 +2061,22 @@ func (m *home) removeFromAllInstances(title string) {
 			return
 		}
 	}
+}
+
+// filterTopicsByRepo returns topics that belong to the given repo path.
+func (m *home) filterTopicsByRepo(topics []*session.Topic, repoPath string) []*session.Topic {
+	var filtered []*session.Topic
+	for _, t := range topics {
+		if t.Path == "" || t.Path == "." || t.Path == repoPath {
+			filtered = append(filtered, t)
+		}
+	}
+	return filtered
+}
+
+// saveAllTopics saves all topics (across all repos) to storage.
+func (m *home) saveAllTopics() error {
+	return m.storage.SaveTopics(m.allTopics)
 }
 
 // instanceChanged updates the preview pane, menu, and diff pane based on the selected instance. It returns an error
@@ -2051,6 +2100,19 @@ func (m *home) instanceChanged() tea.Cmd {
 	if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
 		return m.handleError(err)
 	}
+
+	// Respawn lazygit if the selected instance changed while on the git tab
+	if m.tabbedWindow.IsInGitTab() {
+		gitPane := m.tabbedWindow.GetGitPane()
+		title := ""
+		if selected != nil {
+			title = selected.Title
+		}
+		if gitPane.NeedsRespawn(title) {
+			return m.spawnGitTab()
+		}
+	}
+
 	return nil
 }
 
@@ -2167,7 +2229,13 @@ func (m *home) View() string {
 	} else if m.state == stateMoveTo && m.pickerOverlay != nil {
 		return overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
 	} else if m.state == stateRepoSwitch && m.pickerOverlay != nil {
-		return overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
+		// Position near the repo button at the bottom of the sidebar
+		pickerX := 1
+		pickerY := m.contentHeight - 10 // above the bottom menu, near the repo indicator
+		if pickerY < 2 {
+			pickerY = 2
+		}
+		return overlay.PlaceOverlay(pickerX, pickerY, m.pickerOverlay.Render(), mainView, true, false)
 	} else if m.state == stateNewTopic && m.textInputOverlay != nil {
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	} else if m.state == statePrompt {
