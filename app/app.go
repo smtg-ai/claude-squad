@@ -286,6 +286,24 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle instance changed after confirmation action
 		m.updateSidebarItems()
 		return m, m.instanceChanged()
+	case instanceStartedMsg:
+		if msg.err != nil {
+			m.list.Kill()
+			m.updateSidebarItems()
+			return m, m.handleError(msg.err)
+		}
+		// Instance started successfully — save and finalize
+		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+			return m, m.handleError(err)
+		}
+		m.updateSidebarItems()
+		if m.newInstanceFinalizer != nil {
+			m.newInstanceFinalizer()
+		}
+		if m.autoYes {
+			msg.instance.AutoYes = true
+		}
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -647,8 +665,20 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
-			// Check if instance belongs to a shared-worktree topic
-			var startErr error
+			// Set loading status and transition to default state immediately
+			instance.SetStatus(session.Loading)
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+
+			// Handle prompt-after-name flow
+			if m.promptAfterName {
+				m.state = statePrompt
+				m.menu.SetState(ui.StatePrompt)
+				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+				m.promptAfterName = false
+			}
+
+			// Find topic for shared worktree check
 			var topic *session.Topic
 			for _, t := range m.topics {
 				if t.Name == instance.TopicName {
@@ -657,42 +687,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				}
 			}
 
-			if topic != nil && topic.SharedWorktree && topic.Started() {
-				startErr = instance.StartInSharedWorktree(topic.GetGitWorktree(), topic.Branch)
-			} else {
-				startErr = instance.Start(true)
+			// Start instance asynchronously
+			startCmd := func() tea.Msg {
+				var startErr error
+				if topic != nil && topic.SharedWorktree && topic.Started() {
+					startErr = instance.StartInSharedWorktree(topic.GetGitWorktree(), topic.Branch)
+				} else {
+					startErr = instance.Start(true)
+				}
+				return instanceStartedMsg{instance: instance, err: startErr}
 			}
 
-			if startErr != nil {
-				m.list.Kill()
-				m.state = stateDefault
-				return m, m.handleError(startErr)
-			}
-			// Save after adding new instance
-			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-				return m, m.handleError(err)
-			}
-			m.updateSidebarItems()
-			// Instance added successfully, call the finalizer.
-			m.newInstanceFinalizer()
-			if m.autoYes {
-				instance.AutoYes = true
-			}
-
-			m.newInstanceFinalizer()
-			m.state = stateDefault
-			if m.promptAfterName {
-				m.state = statePrompt
-				m.menu.SetState(ui.StatePrompt)
-				// Initialize the text input overlay
-				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
-				m.promptAfterName = false
-			} else {
-				m.menu.SetState(ui.StateDefault)
-				m.showHelpScreen(helpStart(instance), nil)
-			}
-
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+			return m, tea.Batch(tea.WindowSize(), startCmd)
 		case tea.KeyRunes:
 			if runewidth.StringWidth(instance.Title) >= 32 {
 				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
@@ -1268,6 +1274,12 @@ type previewTickMsg struct{}
 type tickUpdateMetadataMessage struct{}
 
 type instanceChangedMsg struct{}
+
+// instanceStartedMsg is sent when an async instance startup completes.
+type instanceStartedMsg struct {
+	instance *session.Instance
+	err      error
+}
 
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
 // overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.

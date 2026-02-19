@@ -132,7 +132,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	// add spinner next to title if it's running
 	var join string
 	switch i.Status {
-	case session.Running:
+	case session.Running, session.Loading:
 		join = fmt.Sprintf("%s ", r.spinner.View())
 	case session.Ready:
 		join = readyStyle.Render(readyIcon)
