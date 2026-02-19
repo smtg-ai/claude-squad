@@ -150,6 +150,9 @@ type home struct {
 
 	// embeddedTerminal is the VT emulator for focus mode (nil when not in focus mode)
 	embeddedTerminal *session.EmbeddedTerminal
+
+	// repoPickerMap maps picker display text to full repo path
+	repoPickerMap map[string]string
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -176,7 +179,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		ctx:            ctx,
 		spinner:        spinner.New(spinner.WithSpinner(spinner.Dot)),
 		menu:           ui.NewMenu(),
-		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
+		tabbedWindow:   ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewGitPane()),
 		errBox:         ui.NewErrBox(),
 		storage:        storage,
 		appConfig:      appConfig,
@@ -292,11 +295,25 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state != stateFocusAgent || m.embeddedTerminal == nil {
 			return m, nil
 		}
-		// Render from the embedded VT emulator's screen buffer — no subprocess calls.
-		m.tabbedWindow.SetPreviewContent(m.embeddedTerminal.Render())
+		// Render from the emulator. Only update if content changed (prevents flicker).
+		if content, changed := m.embeddedTerminal.Render(); changed {
+			m.tabbedWindow.SetPreviewContent(content)
+		}
 		return m, func() tea.Msg {
 			time.Sleep(33 * time.Millisecond)
 			return focusPreviewTickMsg{}
+		}
+	case gitTabTickMsg:
+		if !m.tabbedWindow.IsInGitTab() {
+			return m, nil
+		}
+		gitPane := m.tabbedWindow.GetGitPane()
+		if !gitPane.IsRunning() {
+			return m, nil
+		}
+		return m, func() tea.Msg {
+			time.Sleep(33 * time.Millisecond)
+			return gitTabTickMsg{}
 		}
 	case keyupMsg:
 		m.menu.ClearKeydown()
@@ -536,6 +553,12 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		killAction := func() tea.Msg {
+			// Remove from allInstances before killing
+			for i := len(m.allInstances) - 1; i >= 0; i-- {
+				if m.allInstances[i].TopicName == selectedID {
+					m.allInstances = append(m.allInstances[:i], m.allInstances[i+1:]...)
+				}
+			}
 			m.list.KillInstancesByTopic(selectedID)
 			m.saveAllInstances()
 			m.updateSidebarItems()
@@ -550,6 +573,12 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		deleteAction := func() tea.Msg {
+			// Remove from allInstances before killing
+			for i := len(m.allInstances) - 1; i >= 0; i-- {
+				if m.allInstances[i].TopicName == selectedID {
+					m.allInstances = append(m.allInstances[:i], m.allInstances[i+1:]...)
+				}
+			}
 			m.list.KillInstancesByTopic(selectedID)
 			for i, t := range m.topics {
 				if t.Name == selectedID {
@@ -569,7 +598,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 	case "delete_topic":
 		selectedID := m.sidebar.GetSelectedID()
 		// Remove all instances in this topic first
-		for _, inst := range m.list.GetInstances() {
+		for _, inst := range m.allInstances {
 			if inst.TopicName == selectedID {
 				inst.TopicName = ""
 			}
@@ -590,6 +619,8 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 	case "kill_instance":
 		selected := m.list.GetSelectedInstance()
 		if selected != nil {
+			title := selected.Title
+			m.removeFromAllInstances(title)
 			m.list.Kill()
 			m.saveAllInstances()
 			m.updateSidebarItems()
@@ -1141,8 +1172,8 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 							break
 						}
 					}
-					// Update all instances that reference this topic
-					for _, inst := range m.list.GetInstances() {
+					// Update all instances that reference this topic (across all repos)
+					for _, inst := range m.allInstances {
 						if inst.TopicName == oldName {
 							inst.TopicName = newName
 						}
@@ -1367,6 +1398,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				if selected != "" {
 					if selected == "Open folder..." {
 						m.state = stateDefault
+						m.menu.SetState(ui.StateDefault)
 						m.pickerOverlay = nil
 						return m, m.openFolderPicker()
 					}
@@ -1374,6 +1406,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				}
 			}
 			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
 			m.pickerOverlay = nil
 		}
 		return m, nil
@@ -1580,6 +1613,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		// Create the kill action as a tea.Cmd
+		title := selected.Title
 		killAction := func() tea.Msg {
 			// Get worktree and check if branch is checked out
 			worktree, err := selected.GetGitWorktree()
@@ -1596,13 +1630,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return fmt.Errorf("instance %s is currently checked out", selected.Title)
 			}
 
-			// Delete from storage first
-			if err := m.storage.DeleteInstance(selected.Title); err != nil {
-				return err
-			}
-
-			// Then kill the instance
+			// Kill the instance, remove from master list, and persist
 			m.list.Kill()
+			m.removeFromAllInstances(title)
+			m.saveAllInstances()
 			return instanceChangedMsg{}
 		}
 
@@ -1723,6 +1754,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(fmt.Errorf("select a topic first"))
 		}
 		killAction := func() tea.Msg {
+			// Remove from allInstances before killing
+			for i := len(m.allInstances) - 1; i >= 0; i-- {
+				if m.allInstances[i].TopicName == selectedID {
+					m.allInstances = append(m.allInstances[:i], m.allInstances[i+1:]...)
+				}
+			}
 			m.list.KillInstancesByTopic(selectedID)
 			m.saveAllInstances()
 			m.updateSidebarItems()
@@ -1937,15 +1974,31 @@ func (m *home) buildRepoPickerItems() []string {
 			countByRepo[rp]++
 		}
 	}
+
+	// Detect duplicate basenames to disambiguate
+	baseCount := make(map[string]int)
+	for _, rp := range repos {
+		baseCount[filepath.Base(rp)]++
+	}
+
+	m.repoPickerMap = make(map[string]string)
 	items := make([]string, 0, len(repos)+1)
 	for _, rp := range repos {
-		name := filepath.Base(rp)
-		count := countByRepo[rp]
-		if rp == m.activeRepoPath {
-			items = append(items, fmt.Sprintf("%s (%d) ●", name, count))
-		} else {
-			items = append(items, fmt.Sprintf("%s (%d)", name, count))
+		base := filepath.Base(rp)
+		name := base
+		if baseCount[base] > 1 {
+			// Disambiguate with parent directory
+			name = filepath.Base(filepath.Dir(rp)) + "/" + base
 		}
+		count := countByRepo[rp]
+		var label string
+		if rp == m.activeRepoPath {
+			label = fmt.Sprintf("%s (%d) ●", name, count)
+		} else {
+			label = fmt.Sprintf("%s (%d)", name, count)
+		}
+		items = append(items, label)
+		m.repoPickerMap[label] = rp
 	}
 	items = append(items, "Open folder...")
 	return items
@@ -1953,16 +2006,13 @@ func (m *home) buildRepoPickerItems() []string {
 
 // switchToRepo switches the active repo based on picker selection text.
 func (m *home) switchToRepo(selection string) {
-	repos := m.getKnownRepos()
-	for _, rp := range repos {
-		name := filepath.Base(rp)
-		if strings.HasPrefix(selection, name+" (") {
-			m.activeRepoPath = rp
-			m.sidebar.SetRepoName(name)
-			m.rebuildInstanceList()
-			return
-		}
+	rp, ok := m.repoPickerMap[selection]
+	if !ok {
+		return
 	}
+	m.activeRepoPath = rp
+	m.sidebar.SetRepoName(filepath.Base(rp))
+	m.rebuildInstanceList()
 }
 
 // saveAllInstances saves allInstances (all repos) to storage.
@@ -2029,6 +2079,9 @@ type tickUpdateMetadataMessage struct{}
 
 // focusPreviewTickMsg is a fast ticker (30fps) for focus mode preview refresh only.
 type focusPreviewTickMsg struct{}
+
+// gitTabTickMsg is a 30fps ticker for refreshing the git tab's lazygit rendering.
+type gitTabTickMsg struct{}
 
 type instanceChangedMsg struct{}
 
@@ -2138,4 +2191,73 @@ func (m *home) View() string {
 	}
 
 	return mainView
+}
+
+// keyToBytes translates a Bubble Tea key message to raw bytes for PTY forwarding.
+func keyToBytes(msg tea.KeyMsg) []byte {
+	switch msg.Type {
+	case tea.KeyRunes:
+		return []byte(string(msg.Runes))
+	case tea.KeyEnter:
+		return []byte{0x0D}
+	case tea.KeyBackspace:
+		return []byte{0x7F}
+	case tea.KeyTab:
+		return []byte{0x09}
+	case tea.KeySpace:
+		return []byte{0x20}
+	case tea.KeyUp:
+		return []byte("\x1b[A")
+	case tea.KeyDown:
+		return []byte("\x1b[B")
+	case tea.KeyRight:
+		return []byte("\x1b[C")
+	case tea.KeyLeft:
+		return []byte("\x1b[D")
+	case tea.KeyCtrlC:
+		return []byte{0x03}
+	case tea.KeyCtrlD:
+		return []byte{0x04}
+	case tea.KeyCtrlA:
+		return []byte{0x01}
+	case tea.KeyCtrlE:
+		return []byte{0x05}
+	case tea.KeyCtrlL:
+		return []byte{0x0C}
+	case tea.KeyCtrlU:
+		return []byte{0x15}
+	case tea.KeyCtrlK:
+		return []byte{0x0B}
+	case tea.KeyCtrlW:
+		return []byte{0x17}
+	case tea.KeyDelete:
+		return []byte("\x1b[3~")
+	default:
+		return nil
+	}
+}
+
+// spawnGitTab spawns lazygit for the selected instance and starts the render ticker.
+func (m *home) spawnGitTab() tea.Cmd {
+	selected := m.list.GetSelectedInstance()
+	if selected == nil || !selected.Started() || selected.Paused() {
+		return nil
+	}
+
+	worktree, err := selected.GetGitWorktree()
+	if err != nil {
+		return m.handleError(err)
+	}
+
+	gitPane := m.tabbedWindow.GetGitPane()
+	gitPane.Spawn(worktree.GetWorktreePath(), selected.Title)
+
+	return func() tea.Msg {
+		return gitTabTickMsg{}
+	}
+}
+
+// killGitTab kills the lazygit subprocess.
+func (m *home) killGitTab() {
+	m.tabbedWindow.GetGitPane().Kill()
 }
