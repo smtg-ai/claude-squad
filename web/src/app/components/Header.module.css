@@ -18,6 +18,13 @@
   border-bottom-color: rgba(255, 255, 255, 0.05);
 }
 
+.logoWrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
 .logo {
   font-size: 20px;
   font-weight: 700;

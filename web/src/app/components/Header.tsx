@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import styles from "./Header.module.css";
+import PixelBee from "./PixelBee";
 
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
@@ -14,8 +15,9 @@ export default function Header() {
 
   return (
     <header className={`${styles.header} ${scrolled ? styles.scrolled : ""}`}>
-      <a href="#" className={styles.logo}>
-        hivemind
+      <a href="#" className={styles.logoWrapper}>
+        <PixelBee scale={2} bob={false} />
+        <span className={styles.logo}>hivemind</span>
       </a>
       <nav className={styles.nav}>
         <a

@@ -47,6 +47,10 @@
   position: relative;
 }
 
+.heroBee {
+  margin-bottom: 24px;
+}
+
 .heroTitle {
   font-size: clamp(48px, 10vw, 96px);
   font-weight: 800;

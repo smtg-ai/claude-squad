@@ -8,6 +8,7 @@ import ScrollReveal from "./ScrollReveal";
 import FeatureCard from "./FeatureCard";
 import InstallTabs from "./InstallTabs";
 import Header from "./Header";
+import PixelBee from "./PixelBee";
 
 const features = [
   {
@@ -68,6 +69,7 @@ export default function PageContent() {
 
         {/* Hero */}
         <section className={styles.hero}>
+          <PixelBee scale={6} bob className={styles.heroBee} />
           <GradientText as="h1" className={styles.heroTitle}>
             hivemind
           </GradientText>

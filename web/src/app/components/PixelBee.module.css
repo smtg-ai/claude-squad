@@ -1,0 +1,26 @@
+.beeContainer {
+  display: inline-block;
+  position: relative;
+  image-rendering: pixelated;
+}
+
+.bob {
+  animation: bob 2s ease-in-out infinite;
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.pixel {
+  width: 1px;
+  height: 1px;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.hoverGlow:hover {
+  filter: drop-shadow(0 0 20px rgba(240, 168, 104, 0.4));
+}
