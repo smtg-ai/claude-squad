@@ -11,20 +11,27 @@ var sidebarTitleStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("62")).
 	Foreground(lipgloss.Color("230"))
 
+// sidebarBorderStyle wraps the entire sidebar content in a subtle rounded border
+var sidebarBorderStyle = lipgloss.NewStyle().
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.AdaptiveColor{Light: "#d0d0d0", Dark: "#3a3a3a"}).
+	Padding(0, 1)
+
 var topicItemStyle = lipgloss.NewStyle().
 	Padding(0, 1).
 	Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#dddddd"})
 
+// selectedTopicStyle — focused: white bg (dark) / black bg (light)
 var selectedTopicStyle = lipgloss.NewStyle().
 	Padding(0, 1).
-	Background(lipgloss.Color("#dde4f0")).
-	Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#1a1a1a"})
+	Background(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#ffffff"}).
+	Foreground(lipgloss.AdaptiveColor{Light: "#ffffff", Dark: "#1a1a1a"})
 
-// activeTopicStyle is for the selected topic when sidebar is NOT focused (topic is still active)
+// activeTopicStyle — unfocused: 50% transparent version (muted)
 var activeTopicStyle = lipgloss.NewStyle().
 	Padding(0, 1).
-	Background(lipgloss.Color("#3a3a5c")).
-	Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#dddddd"})
+	Background(lipgloss.AdaptiveColor{Light: "#b0b0b0", Dark: "#666666"}).
+	Foreground(lipgloss.AdaptiveColor{Light: "#ffffff", Dark: "#1a1a1a"})
 
 var sectionHeaderStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.AdaptiveColor{Light: "#888888", Dark: "#666666"}).
@@ -167,27 +174,32 @@ func (s *Sidebar) GetSearchQuery() string { return s.searchQuery }
 func (s *Sidebar) SetSearchQuery(q string) { s.searchQuery = q }
 
 func (s *Sidebar) String() string {
+	// Inner width accounts for border (2) + border padding (2)
+	innerWidth := s.width - 6
+	if innerWidth < 8 {
+		innerWidth = 8
+	}
+
 	var b strings.Builder
-	b.WriteString("\n")
 
 	// Search bar
-	barWidth := s.width - 4
-	if barWidth < 4 {
-		barWidth = 4
+	searchWidth := innerWidth - 4 // search bar has its own border+padding
+	if searchWidth < 4 {
+		searchWidth = 4
 	}
 	if s.searchActive {
 		searchText := s.searchQuery
 		if searchText == "" {
 			searchText = " "
 		}
-		b.WriteString(searchActiveBarStyle.Width(barWidth).Render(searchText))
+		b.WriteString(searchActiveBarStyle.Width(searchWidth).Render(searchText))
 	} else {
-		b.WriteString(searchBarStyle.Width(barWidth).Render("/ search"))
+		b.WriteString(searchBarStyle.Width(searchWidth).Render("/ search"))
 	}
 	b.WriteString("\n\n")
 
-	// Items — padding takes 1 col each side = 2 total
-	itemWidth := s.width - 2
+	// Items
+	itemWidth := innerWidth - 2 // item padding
 	if itemWidth < 4 {
 		itemWidth = 4
 	}
@@ -213,5 +225,7 @@ func (s *Sidebar) String() string {
 		b.WriteString("\n")
 	}
 
-	return lipgloss.Place(s.width, s.height, lipgloss.Left, lipgloss.Top, b.String())
+	// Wrap content in the subtle rounded border
+	bordered := sidebarBorderStyle.Width(innerWidth).Render(b.String())
+	return lipgloss.Place(s.width, s.height, lipgloss.Left, lipgloss.Top, bordered)
 }
