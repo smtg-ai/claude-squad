@@ -1,7 +1,7 @@
 package git
 
 import (
-	"claude-squad/log"
+	"hivemind/log"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -74,6 +74,70 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 			log.ErrorLog.Printf("failed to open branch URL: %v", err)
 		}
 	}
+
+	return nil
+}
+
+// GeneratePRBody assembles a markdown PR description from the branch's
+// changed files, commit history, and diff stats.
+func (g *GitWorktree) GeneratePRBody(commitMsg string) (string, error) {
+	base := g.GetBaseCommitSHA()
+	if base == "" {
+		return "", fmt.Errorf("no base commit SHA available")
+	}
+
+	var sections []string
+
+	// Changed files
+	files, err := g.runGitCommand(g.worktreePath, "diff", "--name-only", base)
+	if err == nil && strings.TrimSpace(files) != "" {
+		sections = append(sections, "## Changes\n\n"+strings.TrimSpace(files))
+	}
+
+	// Commit messages on the branch
+	commits, err := g.runGitCommand(g.worktreePath, "log", "--oneline", base+"..HEAD")
+	if err == nil && strings.TrimSpace(commits) != "" {
+		sections = append(sections, "## Commits\n\n"+strings.TrimSpace(commits))
+	}
+
+	// Diff stats summary
+	stats, err := g.runGitCommand(g.worktreePath, "diff", "--stat", base)
+	if err == nil && strings.TrimSpace(stats) != "" {
+		sections = append(sections, "## Stats\n\n"+strings.TrimSpace(stats))
+	}
+
+	if len(sections) == 0 {
+		return "", nil
+	}
+
+	return strings.Join(sections, "\n\n"), nil
+}
+
+// CreatePR pushes changes and creates a pull request on GitHub.
+func (g *GitWorktree) CreatePR(title, body, commitMsg string) error {
+	// Push changes first (without opening browser)
+	if err := g.PushChanges(commitMsg, false); err != nil {
+		return fmt.Errorf("failed to push changes: %w", err)
+	}
+
+	// Create the pull request
+	prCmd := exec.Command("gh", "pr", "create", "--title", title, "--body", body, "--head", g.branchName)
+	prCmd.Dir = g.worktreePath
+	if output, err := prCmd.CombinedOutput(); err != nil {
+		// If PR already exists, just open it
+		if strings.Contains(string(output), "already exists") {
+			viewCmd := exec.Command("gh", "pr", "view", "--web", g.branchName)
+			viewCmd.Dir = g.worktreePath
+			_ = viewCmd.Run()
+			return nil
+		}
+		return fmt.Errorf("failed to create PR: %s (%w)", output, err)
+	}
+
+	// Open the PR in browser
+	viewCmd := exec.Command("gh", "pr", "view", "--web", g.branchName)
+	viewCmd.Dir = g.worktreePath
+	_ = viewCmd.Run()
 
 	return nil
 }

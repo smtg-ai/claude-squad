@@ -55,6 +55,8 @@ const (
 	stateMoveTo
 	// statePRTitle is the state when the user is entering a PR title.
 	statePRTitle
+	// statePRBody is the state when the user is editing the PR body/description.
+	statePRBody
 	// stateRenameInstance is the state when the user is renaming an instance.
 	stateRenameInstance
 	// stateRenameTopic is the state when the user is renaming a topic.
@@ -121,6 +123,8 @@ type home struct {
 	focusedPanel int
 	// pendingTopicName stores the topic name during the two-step creation flow
 	pendingTopicName string
+	// pendingPRTitle stores the PR title during the two-step PR creation flow
+	pendingPRTitle string
 
 	// contextMenu is the right-click context menu overlay
 	contextMenu *overlay.ContextMenu
@@ -340,7 +344,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -970,7 +974,50 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				prTitle := m.textInputOverlay.GetValue()
 				selected := m.list.GetSelectedInstance()
 				if selected != nil && prTitle != "" {
+					m.pendingPRTitle = prTitle
 					m.textInputOverlay = nil
+
+					// Generate a PR body from git data
+					commitMsg := fmt.Sprintf("[hivemind] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
+					generatedBody := ""
+					worktree, err := selected.GetGitWorktree()
+					if err == nil {
+						body, genErr := worktree.GeneratePRBody(commitMsg)
+						if genErr == nil {
+							generatedBody = body
+						}
+					}
+
+					// Transition to PR body editing state
+					m.state = statePRBody
+					m.textInputOverlay = overlay.NewTextInputOverlay("PR description (edit or submit)", generatedBody)
+					m.textInputOverlay.SetSize(80, 20)
+					return m, nil
+				}
+			}
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, tea.WindowSize()
+		}
+		return m, nil
+	}
+
+	// Handle PR body input state
+	if m.state == statePRBody {
+		if m.textInputOverlay == nil {
+			m.state = stateDefault
+			return m, nil
+		}
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			if m.textInputOverlay.IsSubmitted() {
+				prBody := m.textInputOverlay.GetValue()
+				prTitle := m.pendingPRTitle
+				selected := m.list.GetSelectedInstance()
+				if selected != nil && prTitle != "" {
+					m.textInputOverlay = nil
+					m.pendingPRTitle = ""
 					m.state = stateDefault
 					m.menu.SetState(ui.StateDefault)
 					return m, tea.Batch(tea.WindowSize(), func() tea.Msg {
@@ -979,7 +1026,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						if err != nil {
 							return err
 						}
-						if err := worktree.CreatePR(prTitle, commitMsg); err != nil {
+						if err := worktree.CreatePR(prTitle, prBody, commitMsg); err != nil {
 							return err
 						}
 						return nil
@@ -987,6 +1034,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				}
 			}
 			m.textInputOverlay = nil
+			m.pendingPRTitle = ""
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 			return m, tea.WindowSize()
@@ -1773,6 +1821,8 @@ func (m *home) View() string {
 	if m.state == stateSendPrompt && m.textInputOverlay != nil {
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	} else if m.state == statePRTitle && m.textInputOverlay != nil {
+		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	} else if m.state == statePRBody && m.textInputOverlay != nil {
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	} else if m.state == stateRenameInstance && m.textInputOverlay != nil {
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
