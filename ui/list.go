@@ -63,6 +63,9 @@ type List struct {
 	// map of repo name to number of instances using it. Used to display the repo name only if there are
 	// multiple repos in play.
 	repos map[string]int
+
+	filter   string // topic name filter (empty = show all)
+	allItems []*session.Instance
 }
 
 func NewList(spinner *spinner.Model, autoYes bool) *List {
@@ -84,7 +87,7 @@ func (l *List) SetSize(width, height int) {
 // SetSessionPreviewSize sets the height and width for the tmux sessions. This makes the stdout line have the correct
 // width and height.
 func (l *List) SetSessionPreviewSize(width, height int) (err error) {
-	for i, item := range l.items {
+	for i, item := range l.allItems {
 		if !item.Started() || item.Paused() {
 			continue
 		}
@@ -278,7 +281,7 @@ func (l *List) Down() {
 	}
 }
 
-// Kill selects the next item in the list.
+// Kill removes and kills the currently selected instance.
 func (l *List) Kill() {
 	if len(l.items) == 0 {
 		return
@@ -303,8 +306,14 @@ func (l *List) Kill() {
 		l.rmRepo(repoName)
 	}
 
-	// Since there's items after this, the selectedIdx can stay the same.
+	// Remove from both items and allItems
 	l.items = append(l.items[:l.selectedIdx], l.items[l.selectedIdx+1:]...)
+	for i, inst := range l.allItems {
+		if inst == targetInstance {
+			l.allItems = append(l.allItems[:i], l.allItems[i+1:]...)
+			break
+		}
+	}
 }
 
 func (l *List) Attach() (chan struct{}, error) {
@@ -344,7 +353,8 @@ func (l *List) rmRepo(repo string) {
 // is started. If the instance was restored from storage or is paused, you can call the finalizer immediately.
 // When creating a new one and entering the name, you want to call the finalizer once the name is done.
 func (l *List) AddInstance(instance *session.Instance) (finalize func()) {
-	l.items = append(l.items, instance)
+	l.allItems = append(l.allItems, instance)
+	l.rebuildFilteredItems()
 	// The finalizer registers the repo name once the instance is started.
 	return func() {
 		repoName, err := instance.RepoName()
@@ -373,7 +383,66 @@ func (l *List) SetSelectedInstance(idx int) {
 	l.selectedIdx = idx
 }
 
-// GetInstances returns all instances in the list
+// GetInstances returns all instances (unfiltered) for persistence and metadata updates.
 func (l *List) GetInstances() []*session.Instance {
-	return l.items
+	return l.allItems
+}
+
+// TotalInstances returns the total number of instances regardless of filter.
+func (l *List) TotalInstances() int {
+	return len(l.allItems)
+}
+
+// SetFilter filters the displayed instances by topic name.
+// Empty string shows all. SidebarUngrouped shows only ungrouped instances.
+func (l *List) SetFilter(topicFilter string) {
+	l.filter = topicFilter
+	l.rebuildFilteredItems()
+}
+
+// SetSearchFilter filters instances by search query across all topics.
+func (l *List) SetSearchFilter(query string) {
+	l.filter = ""
+	filtered := make([]*session.Instance, 0)
+	for _, inst := range l.allItems {
+		if strings.Contains(strings.ToLower(inst.Title), query) ||
+			strings.Contains(strings.ToLower(inst.TopicName), query) {
+			filtered = append(filtered, inst)
+		}
+	}
+	l.items = filtered
+	if l.selectedIdx >= len(l.items) {
+		l.selectedIdx = len(l.items) - 1
+	}
+	if l.selectedIdx < 0 {
+		l.selectedIdx = 0
+	}
+}
+
+func (l *List) rebuildFilteredItems() {
+	if l.filter == "" {
+		l.items = l.allItems
+	} else if l.filter == SidebarUngrouped {
+		filtered := make([]*session.Instance, 0)
+		for _, inst := range l.allItems {
+			if inst.TopicName == "" {
+				filtered = append(filtered, inst)
+			}
+		}
+		l.items = filtered
+	} else {
+		filtered := make([]*session.Instance, 0)
+		for _, inst := range l.allItems {
+			if inst.TopicName == l.filter {
+				filtered = append(filtered, inst)
+			}
+		}
+		l.items = filtered
+	}
+	if l.selectedIdx >= len(l.items) {
+		l.selectedIdx = len(l.items) - 1
+	}
+	if l.selectedIdx < 0 {
+		l.selectedIdx = 0
+	}
 }

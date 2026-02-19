@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -43,6 +44,10 @@ const (
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
+	// stateNewTopic is the state when the user is creating a new topic.
+	stateNewTopic
+	// stateSearch is the state when the user is searching topics/instances.
+	stateSearch
 )
 
 type home struct {
@@ -92,6 +97,15 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+
+	// sidebar displays the topic sidebar
+	sidebar *ui.Sidebar
+	// topics is the list of all topics
+	topics []*session.Topic
+	// focusedPanel tracks which panel has keyboard focus (0=sidebar, 1=instance list)
+	focusedPanel int
+	// pendingTopicName stores the topic name during the two-step creation flow
+	pendingTopicName string
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -122,6 +136,9 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		appState:     appState,
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
+	h.sidebar = ui.NewSidebar()
+	h.focusedPanel = 1 // Start with instance list focused
+	h.sidebar.SetFocused(false)
 
 	// Load saved instances
 	instances, err := storage.LoadInstances()
@@ -139,15 +156,28 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		}
 	}
 
+	// Load topics
+	topics, err := storage.LoadTopics()
+	if err != nil {
+		log.ErrorLog.Printf("Failed to load topics: %v", err)
+		topics = []*session.Topic{}
+	}
+	h.topics = topics
+	h.updateSidebarItems()
+
 	return h
 }
 
 // updateHandleWindowSizeEvent sets the sizes of the components.
 // The components will try to render inside their bounds.
 func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
-	// List takes 30% of width, preview takes 70%
-	listWidth := int(float32(msg.Width) * 0.3)
-	tabsWidth := msg.Width - listWidth
+	// Three-column layout: sidebar (15%), instance list (20%), preview (remaining)
+	sidebarWidth := int(float32(msg.Width) * 0.15)
+	if sidebarWidth < 16 {
+		sidebarWidth = 16
+	}
+	listWidth := int(float32(msg.Width) * 0.20)
+	tabsWidth := msg.Width - sidebarWidth - listWidth
 
 	// Menu takes 10% of height, list and window take 90%
 	contentHeight := int(float32(msg.Height) * 0.9)
@@ -156,6 +186,7 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 
 	m.tabbedWindow.SetSize(tabsWidth, contentHeight)
 	m.list.SetSize(listWidth, contentHeight)
+	m.sidebar.SetSize(sidebarWidth, contentHeight)
 
 	if m.textInputOverlay != nil {
 		m.textInputOverlay.SetSize(int(float32(msg.Width)*0.6), int(float32(msg.Height)*0.4))
@@ -248,6 +279,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleError(msg)
 	case instanceChangedMsg:
 		// Handle instance changed after confirmation action
+		m.updateSidebarItems()
 		return m, m.instanceChanged()
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -261,6 +293,9 @@ func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
 		return m, m.handleError(err)
 	}
+	if err := m.storage.SaveTopics(m.topics); err != nil {
+		return m, m.handleError(err)
+	}
 	return m, tea.Quit
 }
 
@@ -271,7 +306,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateSearch {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -323,7 +358,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			)
 		}
 
-		instance := m.list.GetInstances()[m.list.NumInstances()-1]
+		instance := m.list.GetInstances()[m.list.TotalInstances()-1]
 		switch msg.Type {
 		// Start the instance (enable previews etc) and go back to the main menu state.
 		case tea.KeyEnter:
@@ -331,15 +366,32 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
-			if err := instance.Start(true); err != nil {
+			// Check if instance belongs to a shared-worktree topic
+			var startErr error
+			var topic *session.Topic
+			for _, t := range m.topics {
+				if t.Name == instance.TopicName {
+					topic = t
+					break
+				}
+			}
+
+			if topic != nil && topic.SharedWorktree && topic.Started() {
+				startErr = instance.StartInSharedWorktree(topic.GetGitWorktree(), topic.Branch)
+			} else {
+				startErr = instance.Start(true)
+			}
+
+			if startErr != nil {
 				m.list.Kill()
 				m.state = stateDefault
-				return m, m.handleError(err)
+				return m, m.handleError(startErr)
 			}
 			// Save after adding new instance
 			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
 				return m, m.handleError(err)
 			}
+			m.updateSidebarItems()
 			// Instance added successfully, call the finalizer.
 			m.newInstanceFinalizer()
 			if m.autoYes {
@@ -439,6 +491,75 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle new topic creation state
+	if m.state == stateNewTopic {
+		if msg.String() == "ctrl+c" || msg.String() == "esc" {
+			m.state = stateDefault
+			m.pendingTopicName = ""
+			m.menu.SetState(ui.StateDefault)
+			return m, tea.WindowSize()
+		}
+
+		switch msg.Type {
+		case tea.KeyEnter:
+			if m.pendingTopicName == "" {
+				return m, m.handleError(fmt.Errorf("topic name cannot be empty"))
+			}
+			topic := session.NewTopic(session.TopicOptions{
+				Name: m.pendingTopicName,
+				Path: ".",
+			})
+			topic.Setup()
+			m.topics = append(m.topics, topic)
+			m.updateSidebarItems()
+			if err := m.storage.SaveTopics(m.topics); err != nil {
+				return m, m.handleError(err)
+			}
+			m.pendingTopicName = ""
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, tea.WindowSize()
+		case tea.KeyRunes:
+			m.pendingTopicName += string(msg.Runes)
+		case tea.KeyBackspace:
+			if len(m.pendingTopicName) > 0 {
+				runes := []rune(m.pendingTopicName)
+				m.pendingTopicName = string(runes[:len(runes)-1])
+			}
+		case tea.KeySpace:
+			m.pendingTopicName += " "
+		}
+		return m, nil
+	}
+
+	// Handle search state
+	if m.state == stateSearch {
+		switch {
+		case msg.String() == "esc":
+			m.sidebar.DeactivateSearch()
+			m.state = stateDefault
+			m.filterInstancesByTopic()
+			return m, nil
+		case msg.String() == "enter":
+			m.sidebar.DeactivateSearch()
+			m.state = stateDefault
+			return m, nil
+		case msg.Type == tea.KeyBackspace:
+			q := m.sidebar.GetSearchQuery()
+			if len(q) > 0 {
+				runes := []rune(q)
+				m.sidebar.SetSearchQuery(string(runes[:len(runes)-1]))
+			}
+			m.filterBySearch()
+			return m, nil
+		case msg.Type == tea.KeyRunes:
+			m.sidebar.SetSearchQuery(m.sidebar.GetSearchQuery() + string(msg.Runes))
+			m.filterBySearch()
+			return m, nil
+		}
+		return m, nil
+	}
+
 	// Exit scrolling mode when ESC is pressed and preview pane is in scrolling mode
 	// Check if Escape key was pressed and we're not in the diff tab (meaning we're in preview tab)
 	// Always check for escape key first to ensure it doesn't get intercepted elsewhere
@@ -469,14 +590,22 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyHelp:
 		return m.showHelpScreen(helpTypeGeneral{}, nil)
 	case keys.KeyPrompt:
-		if m.list.NumInstances() >= GlobalInstanceLimit {
+		if m.list.TotalInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
+		topicName := ""
+		if m.focusedPanel == 0 {
+			selectedID := m.sidebar.GetSelectedID()
+			if selectedID != ui.SidebarAll && selectedID != ui.SidebarUngrouped {
+				topicName = selectedID
+			}
+		}
 		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
+			Title:     "",
+			Path:      ".",
+			Program:   m.program,
+			TopicName: topicName,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -490,14 +619,22 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		return m, nil
 	case keys.KeyNew:
-		if m.list.NumInstances() >= GlobalInstanceLimit {
+		if m.list.TotalInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
+		topicName := ""
+		if m.focusedPanel == 0 {
+			selectedID := m.sidebar.GetSelectedID()
+			if selectedID != ui.SidebarAll && selectedID != ui.SidebarUngrouped {
+				topicName = selectedID
+			}
+		}
 		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
+			Title:     "",
+			Path:      ".",
+			Program:   m.program,
+			TopicName: topicName,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -510,15 +647,23 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		return m, nil
 	case keys.KeyNewSkipPermissions:
-		if m.list.NumInstances() >= GlobalInstanceLimit {
+		if m.list.TotalInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
+		}
+		topicName := ""
+		if m.focusedPanel == 0 {
+			selectedID := m.sidebar.GetSelectedID()
+			if selectedID != ui.SidebarAll && selectedID != ui.SidebarUngrouped {
+				topicName = selectedID
+			}
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:           "",
 			Path:            ".",
 			Program:         m.program,
 			SkipPermissions: true,
+			TopicName:       topicName,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -531,10 +676,20 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		return m, nil
 	case keys.KeyUp:
-		m.list.Up()
+		if m.focusedPanel == 0 {
+			m.sidebar.Up()
+			m.filterInstancesByTopic()
+		} else {
+			m.list.Up()
+		}
 		return m, m.instanceChanged()
 	case keys.KeyDown:
-		m.list.Down()
+		if m.focusedPanel == 0 {
+			m.sidebar.Down()
+			m.filterInstancesByTopic()
+		} else {
+			m.list.Down()
+		}
 		return m, m.instanceChanged()
 	case keys.KeyShiftUp:
 		m.tabbedWindow.ScrollUp()
@@ -647,9 +802,68 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.state = stateDefault
 		})
 		return m, nil
+	case keys.KeyLeft:
+		m.focusedPanel = 0
+		m.sidebar.SetFocused(true)
+		return m, nil
+	case keys.KeyRight:
+		m.focusedPanel = 1
+		m.sidebar.SetFocused(false)
+		return m, nil
+	case keys.KeyNewTopic:
+		m.state = stateNewTopic
+		m.menu.SetState(ui.StateNewInstance)
+		return m, nil
+	case keys.KeySearch:
+		m.sidebar.ActivateSearch()
+		m.state = stateSearch
+		m.focusedPanel = 0
+		m.sidebar.SetFocused(true)
+		return m, nil
 	default:
 		return m, nil
 	}
+}
+
+func (m *home) updateSidebarItems() {
+	topicNames := make([]string, len(m.topics))
+	countByTopic := make(map[string]int)
+	ungroupedCount := 0
+
+	for i, t := range m.topics {
+		topicNames[i] = t.Name
+	}
+
+	for _, inst := range m.list.GetInstances() {
+		if inst.TopicName == "" {
+			ungroupedCount++
+		} else {
+			countByTopic[inst.TopicName]++
+		}
+	}
+
+	m.sidebar.SetItems(topicNames, countByTopic, ungroupedCount)
+}
+
+func (m *home) filterInstancesByTopic() {
+	selectedID := m.sidebar.GetSelectedID()
+	switch selectedID {
+	case ui.SidebarAll:
+		m.list.SetFilter("")
+	case ui.SidebarUngrouped:
+		m.list.SetFilter(ui.SidebarUngrouped)
+	default:
+		m.list.SetFilter(selectedID)
+	}
+}
+
+func (m *home) filterBySearch() {
+	query := strings.ToLower(m.sidebar.GetSearchQuery())
+	if query == "" {
+		m.filterInstancesByTopic()
+		return
+	}
+	m.list.SetSearchFilter(query)
 }
 
 // instanceChanged updates the preview pane, menu, and diff pane based on the selected instance. It returns an error
@@ -743,9 +957,10 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 }
 
 func (m *home) View() string {
+	sidebarView := lipgloss.NewStyle().PaddingTop(1).Render(m.sidebar.String())
 	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.list.String())
 	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.tabbedWindow.String())
-	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, listWithPadding, previewWithPadding)
+	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, listWithPadding, previewWithPadding)
 
 	mainView := lipgloss.JoinVertical(
 		lipgloss.Center,

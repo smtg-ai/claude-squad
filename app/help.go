@@ -57,6 +57,12 @@ func (h helpTypeGeneral) toContent() string {
 		keyStyle.Render("tab")+descStyle.Render("       - Switch between preview and diff tabs"),
 		keyStyle.Render("shift-↓/↑")+descStyle.Render(" - Scroll in diff view"),
 		keyStyle.Render("q")+descStyle.Render("         - Quit the application"),
+		"",
+		headerStyle.Render("Topics:"),
+		keyStyle.Render("T")+descStyle.Render("         - Create a new topic"),
+		keyStyle.Render("m")+descStyle.Render("         - Move instance to a topic"),
+		keyStyle.Render("/")+descStyle.Render("         - Search topics and instances"),
+		keyStyle.Render("←/h, →/l")+descStyle.Render("  - Switch sidebar and instance list"),
 	)
 	return content
 }
