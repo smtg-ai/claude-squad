@@ -353,7 +353,8 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.updateSidebarItems()
 			return m, m.handleError(msg.err)
 		}
-		// Instance started successfully — save and finalize
+		// Instance started successfully — add to master list, save and finalize
+		m.allInstances = append(m.allInstances, msg.instance)
 		if err := m.saveAllInstances(); err != nil {
 			return m, m.handleError(err)
 		}
@@ -1395,7 +1396,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:     "",
-			Path:      ".",
+			Path:      m.activeRepoPath,
 			Program:   m.program,
 			TopicName: topicName,
 		})
@@ -1422,7 +1423,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:     "",
-			Path:      ".",
+			Path:      m.activeRepoPath,
 			Program:   m.program,
 			TopicName: topicName,
 		})
@@ -1448,7 +1449,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:           "",
-			Path:            ".",
+			Path:            m.activeRepoPath,
 			Program:         m.program,
 			SkipPermissions: true,
 			TopicName:       topicName,
