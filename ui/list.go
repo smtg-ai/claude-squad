@@ -154,12 +154,16 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		skipPermsIndicator = " ⚡"
 	}
 
-	title := titleS.Render(lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		lipgloss.Place(r.width-3, 1, lipgloss.Left, lipgloss.Center, fmt.Sprintf("%s %s%s", prefix, titleText, skipPermsIndicator)),
-		" ",
-		join,
-	))
+	titleContent := fmt.Sprintf("%s %s%s", prefix, titleText, skipPermsIndicator)
+	// Build title line: content + spaces + status icon, all fitting within r.width
+	titleContentWidth := runewidth.StringWidth(titleContent)
+	joinWidth := runewidth.StringWidth(join)
+	titlePad := r.width - titleContentWidth - joinWidth - 2 // 2 for left/right padding in style
+	if titlePad < 1 {
+		titlePad = 1
+	}
+	titleLine := titleContent + strings.Repeat(" ", titlePad) + join
+	title := titleS.Width(r.width).Render(titleLine)
 
 	stat := i.GetDiffStats()
 
@@ -224,11 +228,11 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 
 	branchLine := fmt.Sprintf("%s %s-%s%s%s", strings.Repeat(" ", len(prefix)), branchIcon, branch, spaces, diff)
 
-	// join title and subtitle
+	// join title and subtitle — use same width for uniform background
 	text := lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
-		descS.Render(branchLine),
+		descS.Width(r.width).Render(branchLine),
 	)
 
 	return text

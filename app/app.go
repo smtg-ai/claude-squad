@@ -1335,7 +1335,7 @@ func (m *home) View() string {
 	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, listWithPadding, previewWithPadding)
 
 	mainView := lipgloss.JoinVertical(
-		lipgloss.Center,
+		lipgloss.Left,
 		listAndPreview,
 		m.menu.String(),
 		m.errBox.String(),
