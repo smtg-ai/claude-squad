@@ -903,6 +903,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			m.filterBySearch()
 			return m, nil
+		case msg.Type == tea.KeySpace:
+			m.sidebar.SetSearchQuery(m.sidebar.GetSearchQuery() + " ")
+			m.filterBySearch()
+			return m, nil
 		case msg.Type == tea.KeyRunes:
 			m.sidebar.SetSearchQuery(m.sidebar.GetSearchQuery() + string(msg.Runes))
 			m.filterBySearch()
@@ -1373,11 +1377,11 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 }
 
 func (m *home) View() string {
-	colStyle := lipgloss.NewStyle().PaddingTop(1).Height(m.contentHeight + 1)
-	// Sidebar gets extra top padding to align with preview pane's tab row
-	sidebarView := lipgloss.NewStyle().PaddingTop(3).Height(m.contentHeight + 1).Render(m.sidebar.String())
-	listWithPadding := colStyle.Render(m.list.String())
-	previewWithPadding := colStyle.Render(m.tabbedWindow.String())
+	colHeight := m.contentHeight + 3
+	// All columns same total height. Sidebar gets extra top padding to align with preview tabs.
+	sidebarView := lipgloss.NewStyle().PaddingTop(3).Height(colHeight).Render(m.sidebar.String())
+	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Height(colHeight).Render(m.list.String())
+	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Height(colHeight).Render(m.tabbedWindow.String())
 	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, listWithPadding, previewWithPadding)
 
 	mainView := lipgloss.JoinVertical(
