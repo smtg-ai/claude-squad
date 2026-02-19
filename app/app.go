@@ -222,6 +222,12 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		log.ErrorLog.Printf("Failed to load topics: %v", err)
 		topics = []*session.Topic{}
 	}
+	// Migrate legacy topics that used "." as their path
+	for _, t := range topics {
+		if t.Path == "" || t.Path == "." {
+			t.Path = activeRepoPath
+		}
+	}
 	h.allTopics = topics
 	h.topics = h.filterTopicsByRepo(topics, activeRepoPath)
 	h.updateSidebarItems()
@@ -2067,7 +2073,7 @@ func (m *home) removeFromAllInstances(title string) {
 func (m *home) filterTopicsByRepo(topics []*session.Topic, repoPath string) []*session.Topic {
 	var filtered []*session.Topic
 	for _, t := range topics {
-		if t.Path == "" || t.Path == "." || t.Path == repoPath {
+		if t.Path == repoPath {
 			filtered = append(filtered, t)
 		}
 	}
