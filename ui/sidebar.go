@@ -210,6 +210,7 @@ func (s *Sidebar) String() string {
 		} else {
 			b.WriteString(topicItemStyle.Width(itemWidth).Render("  " + display))
 		}
+		b.WriteString("\n")
 	}
 
 	return lipgloss.Place(s.width, s.height, lipgloss.Left, lipgloss.Top, b.String())
