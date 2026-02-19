@@ -37,13 +37,16 @@ var listDescStyle = lipgloss.NewStyle().
 
 var selectedTitleStyle = lipgloss.NewStyle().
 	Padding(1, 1, 0, 1).
-	Background(lipgloss.Color("#dde4f0")).
 	Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#1a1a1a"})
 
 var selectedDescStyle = lipgloss.NewStyle().
 	Padding(0, 1, 1, 1).
-	Background(lipgloss.Color("#dde4f0")).
 	Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#1a1a1a"})
+
+var selectedItemStyle = lipgloss.NewStyle().
+	Background(lipgloss.Color("#dde4f0")).
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.Color("#dde4f0"))
 
 var mainTitle = lipgloss.NewStyle().
 	Background(lipgloss.Color("62")).
@@ -230,6 +233,10 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		title,
 		descS.Render(branchLine),
 	)
+
+	if selected {
+		text = selectedItemStyle.Width(r.width).Render(text)
+	}
 
 	return text
 }

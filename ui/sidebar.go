@@ -13,10 +13,14 @@ var sidebarTitleStyle = lipgloss.NewStyle().
 
 var topicItemStyle = lipgloss.NewStyle().
 	Padding(0, 1).
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.AdaptiveColor{Light: "#e0e0e0", Dark: "#333333"}).
 	Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#dddddd"})
 
 var selectedTopicStyle = lipgloss.NewStyle().
 	Padding(0, 1).
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(lipgloss.Color("#dde4f0")).
 	Background(lipgloss.Color("#dde4f0")).
 	Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#1a1a1a"})
 
@@ -180,8 +184,8 @@ func (s *Sidebar) String() string {
 	}
 	b.WriteString("\n\n")
 
-	// Items
-	itemWidth := s.width - 2
+	// Items — border takes 2 cols each side + 1 padding each side = 6 total
+	itemWidth := s.width - 6
 	if itemWidth < 4 {
 		itemWidth = 4
 	}
@@ -202,7 +206,6 @@ func (s *Sidebar) String() string {
 		} else {
 			b.WriteString(topicItemStyle.Width(itemWidth).Render("  " + display))
 		}
-		b.WriteString("\n")
 	}
 
 	return lipgloss.Place(s.width, s.height, lipgloss.Left, lipgloss.Top, b.String())
