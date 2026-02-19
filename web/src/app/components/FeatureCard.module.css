@@ -1,0 +1,40 @@
+.card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 32px;
+  backdrop-filter: blur(12px);
+  transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+}
+
+.card:hover {
+  border-color: rgba(240, 168, 104, 0.3);
+  box-shadow: 0 0 30px rgba(240, 168, 104, 0.08);
+  transform: translateY(-4px);
+}
+
+.icon {
+  font-size: 28px;
+  margin-bottom: 16px;
+  display: flex;
+  width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(240, 168, 104, 0.1);
+  border-radius: 12px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #ededed;
+}
+
+.description {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #888888;
+  margin: 0;
+}

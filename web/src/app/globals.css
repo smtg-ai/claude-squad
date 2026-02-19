@@ -1,37 +1,22 @@
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --accent-color: #4a55af;
-  --accent-light: #7983d8;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --accent-color: #6e79d8;
-    --accent-light: #9098e9;
-  }
-}
-
-html[data-theme="light"] {
-  --background: #ffffff;
-  --foreground: #171717;
-  --accent-color: #4a55af;
-  --accent-light: #7983d8;
-}
-
-html[data-theme="dark"] {
-  --background: #0a0a0a;
+  --background: #0a0b14;
   --foreground: #ededed;
-  --accent-color: #6e79d8;
-  --accent-light: #9098e9;
+  --foreground-secondary: #888888;
+  --foreground-tertiary: #555555;
+  --accent-amber: #F0A868;
+  --accent-teal: #7EC8D8;
+  --card-bg: rgba(255, 255, 255, 0.03);
+  --card-border: rgba(255, 255, 255, 0.06);
+  --card-border-hover: rgba(240, 168, 104, 0.3);
+  --glow-amber: rgba(240, 168, 104, 0.15);
+  --glow-teal: rgba(126, 200, 216, 0.15);
 }
 
 html,
 body {
   max-width: 100vw;
   overflow-x: hidden;
+  color-scheme: dark;
 }
 
 body {
@@ -45,7 +30,6 @@ body {
   box-sizing: border-box;
   padding: 0;
   margin: 0;
-  margin-bottom: 1%;
 }
 
 a {
@@ -62,12 +46,7 @@ pre, code {
   font-family: var(--font-geist-mono), monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme="light"]) {
-    color-scheme: dark;
-  }
-}
-
-html[data-theme="dark"] {
-  color-scheme: dark;
+::selection {
+  background: rgba(240, 168, 104, 0.3);
+  color: #fff;
 }
