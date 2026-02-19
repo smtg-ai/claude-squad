@@ -220,9 +220,9 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	}
 
 	if firstTimeSetup {
-		i.LoadingTotal = 7
+		i.LoadingTotal = 8
 	} else {
-		i.LoadingTotal = 5
+		i.LoadingTotal = 6
 	}
 	i.LoadingStage = 0
 	i.LoadingMessage = "Initializing..."
@@ -305,7 +305,7 @@ func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch strin
 		return fmt.Errorf("instance title cannot be empty")
 	}
 
-	i.LoadingTotal = 5
+	i.LoadingTotal = 6
 	i.setLoadingProgress(1, "Connecting to shared worktree...")
 
 	i.gitWorktree = worktree

@@ -77,7 +77,11 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 			stepText = "Starting..."
 		}
 
-		progressText := fmt.Sprintf("Step %d of %d", stage, total)
+		pct := 0
+		if total > 0 {
+			pct = (stage * 100) / total
+		}
+		progressText := fmt.Sprintf("%d%%", pct)
 
 		p.setFallbackState(lipgloss.JoinVertical(lipgloss.Center,
 			"",
