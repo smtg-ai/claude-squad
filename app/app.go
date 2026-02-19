@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -68,6 +69,8 @@ const (
 	stateFocusAgent
 	// stateContextMenu is the state when a right-click context menu is shown.
 	stateContextMenu
+	// stateRepoSwitch is the state when the user is switching repos via picker.
+	stateRepoSwitch
 )
 
 type home struct {
@@ -283,8 +286,18 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			},
 		)
 	case focusPreviewTickMsg:
-		// No-op: focus mode now uses direct tmux attach for native performance.
-		return m, nil
+		if m.state != stateFocusAgent {
+			return m, nil
+		}
+		// Minimal 30fps refresh: ONLY capture pane content. No diff, no menu, no sidebar.
+		selected := m.list.GetSelectedInstance()
+		if selected != nil {
+			_ = m.tabbedWindow.UpdatePreview(selected)
+		}
+		return m, func() tea.Msg {
+			time.Sleep(33 * time.Millisecond)
+			return focusPreviewTickMsg{}
+		}
 	case keyupMsg:
 		m.menu.ClearKeydown()
 		return m, nil
@@ -377,7 +390,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt || m.state == stateFocusAgent {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -1277,6 +1290,28 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	// Handle repo switch state (picker overlay)
+	if m.state == stateRepoSwitch {
+		shouldClose := m.pickerOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			if m.pickerOverlay.IsSubmitted() {
+				selected := m.pickerOverlay.Value()
+				if selected != "" {
+					if selected == "Open folder..." {
+						// TODO: Will be wired to native folder picker in Task 7
+						m.state = stateDefault
+						m.pickerOverlay = nil
+						return m, nil
+					}
+					m.switchToRepo(selected)
+				}
+			}
+			m.state = stateDefault
+			m.pickerOverlay = nil
+		}
+		return m, nil
+	}
+
 	// Handle search state — allows typing to filter AND arrow keys to navigate topics
 	if m.state == stateSearch {
 		switch {
@@ -1460,6 +1495,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyFilterActive:
 		m.list.SetStatusFilter(ui.StatusFilterActive)
 		return m, m.instanceChanged()
+	case keys.KeyCycleSort:
+		m.list.CycleSortMode()
+		return m, m.instanceChanged()
 	case keys.KeySpace:
 		return m.openContextMenu()
 	case keys.KeySendPrompt:
@@ -1625,6 +1663,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		message := fmt.Sprintf("[!] Kill all instances in topic '%s'?", selectedID)
 		return m, m.confirmAction(message, killAction)
+	case keys.KeyRepoSwitch:
+		m.state = stateRepoSwitch
+		m.pickerOverlay = overlay.NewPickerOverlay("Switch repo", m.buildRepoPickerItems())
+		return m, nil
 	case keys.KeySearch:
 		m.sidebar.ActivateSearch()
 		m.sidebar.SelectFirst() // Reset to "All" when starting search
@@ -1777,6 +1819,62 @@ func (m *home) rebuildInstanceList() {
 	m.updateSidebarItems()
 }
 
+// getKnownRepos returns distinct repo paths from allInstances plus activeRepoPath.
+func (m *home) getKnownRepos() []string {
+	seen := make(map[string]bool)
+	seen[m.activeRepoPath] = true
+	for _, inst := range m.allInstances {
+		rp := inst.GetRepoPath()
+		if rp != "" {
+			seen[rp] = true
+		}
+	}
+	repos := make([]string, 0, len(seen))
+	for rp := range seen {
+		repos = append(repos, rp)
+	}
+	sort.Strings(repos)
+	return repos
+}
+
+// buildRepoPickerItems returns display strings for the repo picker.
+func (m *home) buildRepoPickerItems() []string {
+	repos := m.getKnownRepos()
+	countByRepo := make(map[string]int)
+	for _, inst := range m.allInstances {
+		rp := inst.GetRepoPath()
+		if rp != "" {
+			countByRepo[rp]++
+		}
+	}
+	items := make([]string, 0, len(repos)+1)
+	for _, rp := range repos {
+		name := filepath.Base(rp)
+		count := countByRepo[rp]
+		if rp == m.activeRepoPath {
+			items = append(items, fmt.Sprintf("%s (%d) ●", name, count))
+		} else {
+			items = append(items, fmt.Sprintf("%s (%d)", name, count))
+		}
+	}
+	items = append(items, "Open folder...")
+	return items
+}
+
+// switchToRepo switches the active repo based on picker selection text.
+func (m *home) switchToRepo(selection string) {
+	repos := m.getKnownRepos()
+	for _, rp := range repos {
+		name := filepath.Base(rp)
+		if strings.HasPrefix(selection, name+" (") {
+			m.activeRepoPath = rp
+			m.sidebar.SetRepoName(name)
+			m.rebuildInstanceList()
+			return
+		}
+	}
+}
+
 // saveAllInstances saves allInstances (all repos) to storage.
 func (m *home) saveAllInstances() error {
 	return m.storage.SaveInstances(m.allInstances)
@@ -1924,6 +2022,8 @@ func (m *home) View() string {
 	} else if m.state == stateRenameTopic && m.textInputOverlay != nil {
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	} else if m.state == stateMoveTo && m.pickerOverlay != nil {
+		return overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
+	} else if m.state == stateRepoSwitch && m.pickerOverlay != nil {
 		return overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
 	} else if m.state == stateNewTopic && m.textInputOverlay != nil {
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
