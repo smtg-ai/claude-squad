@@ -14,20 +14,20 @@ import (
 type ToastType int
 
 const (
-	ToastInfo    ToastType = iota
-	ToastSuccess ToastType = iota
-	ToastError   ToastType = iota
-	ToastLoading ToastType = iota
+	ToastInfo ToastType = iota
+	ToastSuccess
+	ToastError
+	ToastLoading
 )
 
 // AnimPhase represents the current animation phase of a toast.
 type AnimPhase int
 
 const (
-	PhaseSlidingIn  AnimPhase = iota
-	PhaseVisible    AnimPhase = iota
-	PhaseSlidingOut AnimPhase = iota
-	PhaseDone       AnimPhase = iota
+	PhaseSlidingIn AnimPhase = iota
+	PhaseVisible
+	PhaseSlidingOut
+	PhaseDone
 )
 
 // Animation and display constants.
@@ -261,7 +261,7 @@ func (tm *ToastManager) toastIcon(typ ToastType) string {
 }
 
 // slideOffset returns the horizontal offset for a toast's slide animation.
-func (t *toast) slideOffset(screenWidth int) int {
+func (t *toast) slideOffset() int {
 	fullOffset := ToastWidth + 4
 	switch t.Phase {
 	case PhaseSlidingIn:
@@ -329,7 +329,7 @@ func (tm *ToastManager) GetPosition() (int, int) {
 	// Find the maximum slide offset among all animating toasts.
 	maxOffset := 0
 	for _, t := range tm.toasts {
-		offset := t.slideOffset(tm.width)
+		offset := t.slideOffset()
 		if offset > maxOffset {
 			maxOffset = offset
 		}
