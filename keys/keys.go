@@ -42,6 +42,7 @@ const (
 	// Instance filter keybindings
 	KeyFilterAll    // Key for showing all instances
 	KeyFilterActive // Key for showing only active instances
+	KeyRepoSwitch   // Key for switching repos
 
 	// Diff keybindings
 	KeyShiftUp
@@ -81,6 +82,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	" ":     KeySpace,
 	"1":     KeyFilterAll,
 	"2":     KeyFilterActive,
+	"R":     KeyRepoSwitch,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -175,7 +177,7 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeySendPrompt: key.NewBinding(
 		key.WithKeys("i"),
-		key.WithHelp("i", "send prompt"),
+		key.WithHelp("i", "focus agent"),
 	),
 	KeySpace: key.NewBinding(
 		key.WithKeys(" "),
@@ -188,6 +190,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyFilterActive: key.NewBinding(
 		key.WithKeys("2"),
 		key.WithHelp("2", "active"),
+	),
+	KeyRepoSwitch: key.NewBinding(
+		key.WithKeys("R"),
+		key.WithHelp("R", "switch repo"),
 	),
 
 	// -- Special keybindings --
