@@ -144,9 +144,16 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	if widthAvail > 0 && runewidth.StringWidth(titleText) > widthAvail {
 		titleText = runewidth.Truncate(titleText, widthAvail-3, "...")
 	}
+
+	// Add skip-permissions indicator
+	skipPermsIndicator := ""
+	if i.SkipPermissions {
+		skipPermsIndicator = " ⚡"
+	}
+
 	title := titleS.Render(lipgloss.JoinHorizontal(
 		lipgloss.Left,
-		lipgloss.Place(r.width-3, 1, lipgloss.Left, lipgloss.Center, fmt.Sprintf("%s %s", prefix, titleText)),
+		lipgloss.Place(r.width-3, 1, lipgloss.Left, lipgloss.Center, fmt.Sprintf("%s %s%s", prefix, titleText, skipPermsIndicator)),
 		" ",
 		join,
 	))

@@ -23,7 +23,8 @@ const (
 	KeyCheckout
 	KeyResume
 	KeyPrompt // New key for entering a prompt
-	KeyHelp   // Key for showing help screen
+	KeyHelp              // Key for showing help screen
+	KeyNewSkipPermissions // Key for creating instance with --dangerously-skip-permissions
 
 	// Diff keybindings
 	KeyShiftUp
@@ -49,6 +50,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"r":          KeyResume,
 	"p":          KeySubmit,
 	"?":          KeyHelp,
+	"S":          KeyNewSkipPermissions,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -108,6 +110,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyResume: key.NewBinding(
 		key.WithKeys("r"),
 		key.WithHelp("r", "resume"),
+	),
+	KeyNewSkipPermissions: key.NewBinding(
+		key.WithKeys("S"),
+		key.WithHelp("S", "new (skip permissions)"),
 	),
 
 	// -- Special keybindings --
