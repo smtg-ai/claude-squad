@@ -44,18 +44,8 @@ func checkGHCLI() error {
 
 // IsGitRepo checks if the given path is within a git repository
 func IsGitRepo(path string) bool {
-	for {
-		_, err := git.PlainOpen(path)
-		if err == nil {
-			return true
-		}
-
-		parent := filepath.Dir(path)
-		if parent == path {
-			return false
-		}
-		path = parent
-	}
+	_, err := findGitRepoRoot(path)
+	return err == nil
 }
 
 func findGitRepoRoot(path string) (string, error) {

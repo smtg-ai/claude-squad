@@ -2,7 +2,7 @@ package git
 
 import (
 	"fmt"
-	"hivemind/log"
+	"github.com/ByteMirror/hivemind/log"
 	"os/exec"
 	"strings"
 )
@@ -26,24 +26,8 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 		return err
 	}
 
-	// Check if there are any changes to commit
-	isDirty, err := g.IsDirty()
-	if err != nil {
-		return fmt.Errorf("failed to check for changes: %w", err)
-	}
-
-	if isDirty {
-		// Stage all changes
-		if _, err := g.runGitCommand(g.worktreePath, "add", "."); err != nil {
-			log.ErrorLog.Print(err)
-			return fmt.Errorf("failed to stage changes: %w", err)
-		}
-
-		// Create commit
-		if _, err := g.runGitCommand(g.worktreePath, "commit", "-m", commitMessage, "--no-verify"); err != nil {
-			log.ErrorLog.Print(err)
-			return fmt.Errorf("failed to commit changes: %w", err)
-		}
+	if err := g.CommitChanges(commitMessage); err != nil {
+		return err
 	}
 
 	// First push the branch to remote to ensure it exists

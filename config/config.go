@@ -3,7 +3,7 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"hivemind/log"
+	"github.com/ByteMirror/hivemind/log"
 	"os"
 	"os/exec"
 	"os/user"

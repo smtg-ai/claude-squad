@@ -2,7 +2,7 @@ package ui
 
 import (
 	"fmt"
-	"hivemind/session"
+	"github.com/ByteMirror/hivemind/session"
 	"path/filepath"
 	"strings"
 

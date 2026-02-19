@@ -2,7 +2,7 @@ package tmux
 
 import (
 	"fmt"
-	cmd2 "hivemind/cmd"
+	cmd2 "github.com/ByteMirror/hivemind/cmd"
 	"math/rand"
 	"os"
 	"os/exec"
@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"hivemind/cmd/cmd_test"
+	"github.com/ByteMirror/hivemind/cmd/cmd_test"
 
 	"github.com/stretchr/testify/require"
 )

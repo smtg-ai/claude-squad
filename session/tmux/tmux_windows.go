@@ -3,7 +3,7 @@
 package tmux
 
 import (
-	"hivemind/log"
+	"github.com/ByteMirror/hivemind/log"
 	"os"
 	"time"
 

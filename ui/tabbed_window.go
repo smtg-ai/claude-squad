@@ -1,9 +1,9 @@
 package ui
 
 import (
+	"github.com/ByteMirror/hivemind/log"
+	"github.com/ByteMirror/hivemind/session"
 	"github.com/charmbracelet/lipgloss"
-	"hivemind/log"
-	"hivemind/session"
 )
 
 func tabBorderWithBottom(left, middle, right string) lipgloss.Border {

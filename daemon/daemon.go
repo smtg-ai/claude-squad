@@ -2,9 +2,9 @@ package daemon
 
 import (
 	"fmt"
-	"hivemind/config"
-	"hivemind/log"
-	"hivemind/session"
+	"github.com/ByteMirror/hivemind/config"
+	"github.com/ByteMirror/hivemind/log"
+	"github.com/ByteMirror/hivemind/session"
 	"os"
 	"os/exec"
 	"os/signal"

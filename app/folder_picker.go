@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"strings"
 
-	"hivemind/session/git"
+	"github.com/ByteMirror/hivemind/session/git"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

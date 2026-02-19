@@ -12,10 +12,23 @@ A TUI-based agent-driven IDE that manages multiple [Claude Code](https://github.
 
 ### Installation
 
-#### Homebrew
+#### Homebrew (macOS / Linux)
 
 ```bash
 brew install ByteMirror/tap/hivemind
+```
+
+#### Scoop (Windows)
+
+```powershell
+scoop bucket add bytemirror https://github.com/ByteMirror/scoop-bucket
+scoop install hivemind
+```
+
+#### Go Install
+
+```bash
+go install github.com/ByteMirror/hivemind@latest
 ```
 
 #### Install Script

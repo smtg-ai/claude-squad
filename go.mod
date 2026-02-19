@@ -1,11 +1,11 @@
-module hivemind
+module github.com/ByteMirror/hivemind
 
 go 1.24.4
 
 require (
 	github.com/atotto/clipboard v0.1.4
 	github.com/charmbracelet/bubbles v0.20.0
-	github.com/charmbracelet/bubbletea v1.3.4
+	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/vt v0.0.0-20260216111343-536eb63c1f4c
 	github.com/creack/pty v1.1.24

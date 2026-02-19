@@ -2,10 +2,10 @@ package ui
 
 import (
 	"fmt"
-	"hivemind/cmd/cmd_test"
-	"hivemind/log"
-	"hivemind/session"
-	"hivemind/session/tmux"
+	"github.com/ByteMirror/hivemind/cmd/cmd_test"
+	"github.com/ByteMirror/hivemind/log"
+	"github.com/ByteMirror/hivemind/session"
+	"github.com/ByteMirror/hivemind/session/tmux"
 	"os"
 	"os/exec"
 	"path/filepath"

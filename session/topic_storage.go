@@ -1,7 +1,7 @@
 package session
 
 import (
-	"hivemind/session/git"
+	"github.com/ByteMirror/hivemind/session/git"
 	"time"
 )
 

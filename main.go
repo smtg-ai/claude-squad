@@ -4,21 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hivemind/app"
-	cmd2 "hivemind/cmd"
-	"hivemind/config"
-	"hivemind/daemon"
-	"hivemind/log"
-	"hivemind/session"
-	"hivemind/session/git"
-	"hivemind/session/tmux"
+	"github.com/ByteMirror/hivemind/app"
+	cmd2 "github.com/ByteMirror/hivemind/cmd"
+	"github.com/ByteMirror/hivemind/config"
+	"github.com/ByteMirror/hivemind/daemon"
+	"github.com/ByteMirror/hivemind/log"
+	"github.com/ByteMirror/hivemind/session"
+	"github.com/ByteMirror/hivemind/session/git"
+	"github.com/ByteMirror/hivemind/session/tmux"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	version     = "0.1.0"
+	version     = "0.2.0"
 	programFlag string
 	autoYesFlag bool
 	daemonFlag  bool

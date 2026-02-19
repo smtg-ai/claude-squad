@@ -3,7 +3,7 @@ package git
 import (
 	"errors"
 	"fmt"
-	"hivemind/log"
+	"github.com/ByteMirror/hivemind/log"
 	"os"
 	"os/exec"
 	"path/filepath"

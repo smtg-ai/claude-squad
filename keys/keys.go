@@ -93,9 +93,9 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"3":          KeyCycleSort,
 	"R":          KeyRepoSwitch,
 	"g":          KeyGitTab,
-	"!":          KeyTabAgent,
-	"@":          KeyTabDiff,
-	"#":          KeyTabGit,
+	"f1":         KeyTabAgent,
+	"f2":         KeyTabDiff,
+	"f3":         KeyTabGit,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -217,16 +217,16 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithHelp("g", "git tab"),
 	),
 	KeyTabAgent: key.NewBinding(
-		key.WithKeys("!"),
-		key.WithHelp("!/#/@", "switch tab"),
+		key.WithKeys("f1"),
+		key.WithHelp("F1/2/3", "switch tab"),
 	),
 	KeyTabDiff: key.NewBinding(
-		key.WithKeys("@"),
-		key.WithHelp("@", "diff tab"),
+		key.WithKeys("f2"),
+		key.WithHelp("F2", "diff tab"),
 	),
 	KeyTabGit: key.NewBinding(
-		key.WithKeys("#"),
-		key.WithHelp("#", "git tab"),
+		key.WithKeys("f3"),
+		key.WithHelp("F3", "git tab"),
 	),
 
 	// -- Special keybindings --

@@ -3,7 +3,7 @@ package session
 import (
 	"encoding/json"
 	"fmt"
-	"hivemind/config"
+	"github.com/ByteMirror/hivemind/config"
 	"time"
 )
 

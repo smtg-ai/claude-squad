@@ -62,6 +62,22 @@ export default function Home() {
             <CopyButton textToCopy="brew install ByteMirror/tap/hivemind" />
           </div>
           <br></br>
+          <h3>Via Scoop (Windows)</h3>
+          <div className={styles.codeBlockWrapper}>
+            <pre className={styles.codeBlock}>
+              <code>scoop bucket add bytemirror https://github.com/ByteMirror/scoop-bucket{"\n"}scoop install hivemind</code>
+            </pre>
+            <CopyButton textToCopy="scoop bucket add bytemirror https://github.com/ByteMirror/scoop-bucket && scoop install hivemind" />
+          </div>
+          <br></br>
+          <h3>Via Go Install</h3>
+          <div className={styles.codeBlockWrapper}>
+            <pre className={styles.codeBlock}>
+              <code>go install github.com/ByteMirror/hivemind@latest</code>
+            </pre>
+            <CopyButton textToCopy="go install github.com/ByteMirror/hivemind@latest" />
+          </div>
+          <br></br>
           <h3>Via Shell Script</h3>
           <div className={styles.codeBlockWrapper}>
             <pre className={styles.codeBlock}>

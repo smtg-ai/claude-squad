@@ -3,11 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
-	"hivemind/config"
-	"hivemind/log"
-	"hivemind/session"
-	"hivemind/ui"
-	"hivemind/ui/overlay"
+	"github.com/ByteMirror/hivemind/config"
+	"github.com/ByteMirror/hivemind/log"
+	"github.com/ByteMirror/hivemind/session"
+	"github.com/ByteMirror/hivemind/ui"
+	"github.com/ByteMirror/hivemind/ui/overlay"
 	"os"
 	"testing"
 

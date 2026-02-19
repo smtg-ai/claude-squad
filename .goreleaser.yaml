@@ -34,6 +34,16 @@ brews:
     test: |
       system "#{bin}/hivemind", "version"
 
+scoops:
+  - repository:
+      owner: ByteMirror
+      name: scoop-bucket
+      token: "{{ .Env.HOMEBREW_REPO_TOKEN }}"
+    name: hivemind
+    homepage: "https://github.com/ByteMirror/hivemind"
+    description: "Hivemind - A TUI-based agent-driven IDE for managing multiple AI agents"
+    license: AGPL-3.0
+
 release:
   prerelease: auto
   draft: true

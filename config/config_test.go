@@ -1,7 +1,7 @@
 package config
 
 import (
-	"hivemind/log"
+	"github.com/ByteMirror/hivemind/log"
 	"os"
 	"path/filepath"
 	"regexp"

@@ -1,10 +1,10 @@
 package ui
 
 import (
-	"hivemind/keys"
+	"github.com/ByteMirror/hivemind/keys"
 	"strings"
 
-	"hivemind/session"
+	"github.com/ByteMirror/hivemind/session"
 
 	"github.com/charmbracelet/lipgloss"
 )
