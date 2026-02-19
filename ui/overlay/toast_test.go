@@ -1,6 +1,7 @@
 package overlay
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -169,4 +170,57 @@ func TestToastViewStacking(t *testing.T) {
 	view := tm.View()
 	assert.Contains(t, view, "first message", "View() should contain the first toast message")
 	assert.Contains(t, view, "second message", "View() should contain the second toast message")
+}
+
+func TestToastMaxLimit(t *testing.T) {
+	s := spinner.New()
+	tm := NewToastManager(&s)
+
+	// Add 10 info toasts — should never exceed MaxToasts.
+	for i := 0; i < 10; i++ {
+		_ = tm.Info(fmt.Sprintf("toast %d", i))
+		assert.LessOrEqual(t, len(tm.toasts), MaxToasts,
+			"toast count should never exceed MaxToasts (iteration %d)", i)
+	}
+
+	assert.Equal(t, MaxToasts, len(tm.toasts),
+		"after adding 10 toasts, exactly MaxToasts should remain")
+}
+
+func TestToastResolveUpdatesTypeAndMessage(t *testing.T) {
+	s := spinner.New()
+	tm := NewToastManager(&s)
+
+	id := tm.Loading("loading...")
+	require.Len(t, tm.toasts, 1)
+
+	// Fast-forward past slide-in so the toast is visible.
+	tm.toasts[0].PhaseStart = time.Now().Add(-SlideInDuration - time.Millisecond)
+	tm.Tick()
+	require.Len(t, tm.toasts, 1)
+	assert.Equal(t, PhaseVisible, tm.toasts[0].Phase)
+
+	// Resolve to error with a new message.
+	tm.Resolve(id, ToastError, "something went wrong")
+
+	assert.Equal(t, ToastError, tm.toasts[0].Type, "type should be updated to ToastError")
+	assert.Equal(t, "something went wrong", tm.toasts[0].Message, "message should be updated")
+	assert.Equal(t, PhaseVisible, tm.toasts[0].Phase, "phase should be PhaseVisible after resolve")
+}
+
+func TestToastSmallScreenClamp(t *testing.T) {
+	s := spinner.New()
+	tm := NewToastManager(&s)
+
+	tm.SetSize(20, 10)
+	_ = tm.Info("small screen toast")
+	require.Len(t, tm.toasts, 1)
+
+	// Force visible phase so there is no slide offset.
+	tm.toasts[0].Phase = PhaseVisible
+	tm.toasts[0].PhaseStart = time.Now()
+
+	x, y := tm.GetPosition()
+	assert.GreaterOrEqual(t, x, 0, "x should be clamped to >= 0 on small screens")
+	assert.Equal(t, 1, y, "y should always be 1")
 }
