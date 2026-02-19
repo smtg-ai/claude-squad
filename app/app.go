@@ -776,34 +776,31 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle new topic creation state
 	if m.state == stateNewTopic {
-		if msg.String() == "ctrl+c" || msg.String() == "esc" {
+		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			if m.textInputOverlay.IsSubmitted() {
+				m.pendingTopicName = m.textInputOverlay.GetValue()
+				if m.pendingTopicName == "" {
+					m.state = stateDefault
+					m.menu.SetState(ui.StateDefault)
+					m.textInputOverlay = nil
+					return m, m.handleError(fmt.Errorf("topic name cannot be empty"))
+				}
+				// Show shared worktree confirmation
+				m.textInputOverlay = nil
+				m.confirmationOverlay = overlay.NewConfirmationOverlay(
+					fmt.Sprintf("Create shared worktree for topic '%s'?\nAll instances will share one branch and directory.", m.pendingTopicName),
+				)
+				m.confirmationOverlay.SetWidth(60)
+				m.state = stateNewTopicConfirm
+				return m, nil
+			}
+			// Cancelled
 			m.state = stateDefault
-			m.pendingTopicName = ""
 			m.menu.SetState(ui.StateDefault)
+			m.pendingTopicName = ""
+			m.textInputOverlay = nil
 			return m, tea.WindowSize()
-		}
-
-		switch msg.Type {
-		case tea.KeyEnter:
-			if m.pendingTopicName == "" {
-				return m, m.handleError(fmt.Errorf("topic name cannot be empty"))
-			}
-			// Show shared worktree confirmation
-			m.confirmationOverlay = overlay.NewConfirmationOverlay(
-				fmt.Sprintf("Create shared worktree for topic '%s'?\nAll instances will share one branch and directory.", m.pendingTopicName),
-			)
-			m.confirmationOverlay.SetWidth(60)
-			m.state = stateNewTopicConfirm
-			return m, nil
-		case tea.KeyRunes:
-			m.pendingTopicName += string(msg.Runes)
-		case tea.KeyBackspace:
-			if len(m.pendingTopicName) > 0 {
-				runes := []rune(m.pendingTopicName)
-				m.pendingTopicName = string(runes[:len(runes)-1])
-			}
-		case tea.KeySpace:
-			m.pendingTopicName += " "
 		}
 		return m, nil
 	}
@@ -1159,7 +1156,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyNewTopic:
 		m.state = stateNewTopic
-		m.menu.SetState(ui.StateNewInstance)
+		m.textInputOverlay = overlay.NewTextInputOverlay("Topic name", "")
 		return m, nil
 	case keys.KeyMoveTo:
 		selected := m.list.GetSelectedInstance()
@@ -1393,6 +1390,8 @@ func (m *home) View() string {
 
 	if m.state == stateMoveTo && m.pickerOverlay != nil {
 		return overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
+	} else if m.state == stateNewTopic && m.textInputOverlay != nil {
+		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	} else if m.state == statePrompt {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
