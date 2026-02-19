@@ -51,6 +51,8 @@ type Instance struct {
 	AutoYes bool
 	// SkipPermissions is true if the instance should run Claude with --dangerously-skip-permissions.
 	SkipPermissions bool
+	// TopicName is the name of the topic this instance belongs to (empty = ungrouped).
+	TopicName string
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
 
@@ -80,6 +82,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 		Program:         i.Program,
 		AutoYes:         i.AutoYes,
 		SkipPermissions: i.SkipPermissions,
+		TopicName:       i.TopicName,
 	}
 
 	// Only include worktree data if gitWorktree is initialized
@@ -118,6 +121,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		UpdatedAt: data.UpdatedAt,
 		Program:         data.Program,
 		SkipPermissions: data.SkipPermissions,
+		TopicName:       data.TopicName,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,
@@ -156,6 +160,8 @@ type InstanceOptions struct {
 	AutoYes bool
 	// SkipPermissions enables --dangerously-skip-permissions for Claude instances.
 	SkipPermissions bool
+	// TopicName assigns this instance to a topic.
+	TopicName string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -178,6 +184,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		UpdatedAt: t,
 		AutoYes:         false,
 		SkipPermissions: opts.SkipPermissions,
+		TopicName:       opts.TopicName,
 	}, nil
 }
 

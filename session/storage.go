@@ -19,6 +19,7 @@ type InstanceData struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	AutoYes         bool   `json:"auto_yes"`
 	SkipPermissions bool   `json:"skip_permissions"`
+	TopicName       string `json:"topic_name,omitempty"`
 
 	Program   string          `json:"program"`
 	Worktree  GitWorktreeData `json:"worktree"`
