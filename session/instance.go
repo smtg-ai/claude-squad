@@ -49,6 +49,8 @@ type Instance struct {
 	UpdatedAt time.Time
 	// AutoYes is true if the instance should automatically press enter when prompted.
 	AutoYes bool
+	// SkipPermissions is true if the instance should run Claude with --dangerously-skip-permissions.
+	SkipPermissions bool
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
 
@@ -75,8 +77,9 @@ func (i *Instance) ToInstanceData() InstanceData {
 		Width:     i.Width,
 		CreatedAt: i.CreatedAt,
 		UpdatedAt: time.Now(),
-		Program:   i.Program,
-		AutoYes:   i.AutoYes,
+		Program:         i.Program,
+		AutoYes:         i.AutoYes,
+		SkipPermissions: i.SkipPermissions,
 	}
 
 	// Only include worktree data if gitWorktree is initialized
@@ -113,7 +116,8 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		Width:     data.Width,
 		CreatedAt: data.CreatedAt,
 		UpdatedAt: data.UpdatedAt,
-		Program:   data.Program,
+		Program:         data.Program,
+		SkipPermissions: data.SkipPermissions,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,
@@ -130,7 +134,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 
 	if instance.Paused() {
 		instance.started = true
-		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, false)
+		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)
 	} else {
 		if err := instance.Start(false); err != nil {
 			return nil, err
@@ -150,6 +154,8 @@ type InstanceOptions struct {
 	Program string
 	// If AutoYes is true, then
 	AutoYes bool
+	// SkipPermissions enables --dangerously-skip-permissions for Claude instances.
+	SkipPermissions bool
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -170,7 +176,8 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		Width:     0,
 		CreatedAt: t,
 		UpdatedAt: t,
-		AutoYes:   false,
+		AutoYes:         false,
+		SkipPermissions: opts.SkipPermissions,
 	}, nil
 }
 
@@ -197,7 +204,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		tmuxSession = i.tmuxSession
 	} else {
 		// Create new tmux session
-		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, false)
+		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
 	}
 	i.tmuxSession = tmuxSession
 
