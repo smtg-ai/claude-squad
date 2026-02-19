@@ -1373,9 +1373,9 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 }
 
 func (m *home) View() string {
-	sidebarView := lipgloss.NewStyle().PaddingTop(1).Render(m.sidebar.String())
-	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.list.String())
-	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.tabbedWindow.String())
+	sidebarView := lipgloss.NewStyle().PaddingTop(1).Height(m.contentHeight + 1).Render(m.sidebar.String())
+	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Height(m.contentHeight + 1).Render(m.list.String())
+	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Height(m.contentHeight + 1).Render(m.tabbedWindow.String())
 	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, sidebarView, listWithPadding, previewWithPadding)
 
 	mainView := lipgloss.JoinVertical(

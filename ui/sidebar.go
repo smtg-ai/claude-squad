@@ -244,6 +244,16 @@ func (s *Sidebar) String() string {
 		itemWidth = 4
 	}
 	for i, item := range s.items {
+		// During search, hide section headers and topics with 0 matches
+		if s.searchActive && s.searchQuery != "" {
+			if item.IsSection {
+				continue // hide section headers during search
+			}
+			if item.ID != SidebarAll && item.MatchCount == 0 {
+				continue // hide topics with no matches
+			}
+		}
+
 		if item.IsSection {
 			b.WriteString(sectionHeaderStyle.Render("── " + item.Name + " ──"))
 			b.WriteString("\n")
@@ -266,15 +276,10 @@ func (s *Sidebar) String() string {
 			display = fmt.Sprintf("%s (%d)", display, displayCount)
 		}
 
-		// Dim topics with no matches during search
-		isDimmed := s.searchActive && item.MatchCount == 0
-
 		if i == s.selectedIdx && s.focused {
 			b.WriteString(selectedTopicStyle.Width(itemWidth).Render("▸" + icon + display))
 		} else if i == s.selectedIdx && !s.focused {
 			b.WriteString(activeTopicStyle.Width(itemWidth).Render("▸" + icon + display))
-		} else if isDimmed {
-			b.WriteString(dimmedTopicStyle.Width(itemWidth).Render(" " + icon + display))
 		} else {
 			b.WriteString(topicItemStyle.Width(itemWidth).Render(" " + icon + display))
 		}
