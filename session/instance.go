@@ -56,6 +56,9 @@ type Instance struct {
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
 
+	// sharedWorktree is true if this instance uses a topic's shared worktree (should not clean it up).
+	sharedWorktree bool
+
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
 
@@ -265,6 +268,34 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	return nil
 }
 
+// StartInSharedWorktree starts the instance using a topic's shared worktree.
+// Unlike Start(), this does NOT create a new git worktree — it uses the one provided.
+func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch string) error {
+	if i.Title == "" {
+		return fmt.Errorf("instance title cannot be empty")
+	}
+
+	i.gitWorktree = worktree
+	i.Branch = branch
+	i.sharedWorktree = true
+
+	var tmuxSession *tmux.TmuxSession
+	if i.tmuxSession != nil {
+		tmuxSession = i.tmuxSession
+	} else {
+		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.SkipPermissions)
+	}
+	i.tmuxSession = tmuxSession
+
+	if err := i.tmuxSession.Start(worktree.GetWorktreePath()); err != nil {
+		return fmt.Errorf("failed to start session in shared worktree: %w", err)
+	}
+
+	i.started = true
+	i.SetStatus(Running)
+	return nil
+}
+
 // Kill terminates the instance and cleans up all resources
 func (i *Instance) Kill() error {
 	if !i.started {
@@ -282,8 +313,8 @@ func (i *Instance) Kill() error {
 		}
 	}
 
-	// Then clean up git worktree
-	if i.gitWorktree != nil {
+	// Then clean up git worktree (skip if shared — topic owns the worktree)
+	if i.gitWorktree != nil && !i.sharedWorktree {
 		if err := i.gitWorktree.Cleanup(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to cleanup git worktree: %w", err))
 		}
@@ -389,18 +420,20 @@ func (i *Instance) Pause() error {
 
 	var errs []error
 
-	// Check if there are any changes to commit
-	if dirty, err := i.gitWorktree.IsDirty(); err != nil {
-		errs = append(errs, fmt.Errorf("failed to check if worktree is dirty: %w", err))
-		log.ErrorLog.Print(err)
-	} else if dirty {
-		// Commit changes locally (without pushing to GitHub)
-		commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s (paused)", i.Title, time.Now().Format(time.RFC822))
-		if err := i.gitWorktree.CommitChanges(commitMsg); err != nil {
-			errs = append(errs, fmt.Errorf("failed to commit changes: %w", err))
+	if !i.sharedWorktree {
+		// Check if there are any changes to commit
+		if dirty, err := i.gitWorktree.IsDirty(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to check if worktree is dirty: %w", err))
 			log.ErrorLog.Print(err)
-			// Return early if we can't commit changes to avoid corrupted state
-			return i.combineErrors(errs)
+		} else if dirty {
+			// Commit changes locally (without pushing to GitHub)
+			commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s (paused)", i.Title, time.Now().Format(time.RFC822))
+			if err := i.gitWorktree.CommitChanges(commitMsg); err != nil {
+				errs = append(errs, fmt.Errorf("failed to commit changes: %w", err))
+				log.ErrorLog.Print(err)
+				// Return early if we can't commit changes to avoid corrupted state
+				return i.combineErrors(errs)
+			}
 		}
 	}
 
@@ -411,20 +444,22 @@ func (i *Instance) Pause() error {
 		// Continue with pause process even if detach fails
 	}
 
-	// Check if worktree exists before trying to remove it
-	if _, err := os.Stat(i.gitWorktree.GetWorktreePath()); err == nil {
-		// Remove worktree but keep branch
-		if err := i.gitWorktree.Remove(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to remove git worktree: %w", err))
-			log.ErrorLog.Print(err)
-			return i.combineErrors(errs)
-		}
+	if !i.sharedWorktree {
+		// Check if worktree exists before trying to remove it
+		if _, err := os.Stat(i.gitWorktree.GetWorktreePath()); err == nil {
+			// Remove worktree but keep branch
+			if err := i.gitWorktree.Remove(); err != nil {
+				errs = append(errs, fmt.Errorf("failed to remove git worktree: %w", err))
+				log.ErrorLog.Print(err)
+				return i.combineErrors(errs)
+			}
 
-		// Only prune if remove was successful
-		if err := i.gitWorktree.Prune(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to prune git worktrees: %w", err))
-			log.ErrorLog.Print(err)
-			return i.combineErrors(errs)
+			// Only prune if remove was successful
+			if err := i.gitWorktree.Prune(); err != nil {
+				errs = append(errs, fmt.Errorf("failed to prune git worktrees: %w", err))
+				log.ErrorLog.Print(err)
+				return i.combineErrors(errs)
+			}
 		}
 	}
 
