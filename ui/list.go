@@ -45,6 +45,17 @@ var selectedDescStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("#dde4f0")).
 	Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#1a1a1a"})
 
+// Active (unfocused) styles — muted version of selected
+var activeTitleStyle = lipgloss.NewStyle().
+	Padding(1, 1, 0, 1).
+	Background(lipgloss.AdaptiveColor{Light: "#b0b0b0", Dark: "#666666"}).
+	Foreground(lipgloss.AdaptiveColor{Light: "#ffffff", Dark: "#1a1a1a"})
+
+var activeDescStyle = lipgloss.NewStyle().
+	Padding(0, 1, 1, 1).
+	Background(lipgloss.AdaptiveColor{Light: "#b0b0b0", Dark: "#666666"}).
+	Foreground(lipgloss.AdaptiveColor{Light: "#ffffff", Dark: "#1a1a1a"})
+
 var mainTitle = lipgloss.NewStyle().
 	Background(lipgloss.Color("62")).
 	Foreground(lipgloss.Color("230"))
@@ -59,6 +70,7 @@ type List struct {
 	height, width int
 	renderer      *InstanceRenderer
 	autoyes       bool
+	focused       bool
 
 	// map of repo name to number of instances using it. Used to display the repo name only if there are
 	// multiple repos in play.
@@ -74,7 +86,12 @@ func NewList(spinner *spinner.Model, autoYes bool) *List {
 		renderer: &InstanceRenderer{spinner: spinner},
 		repos:    make(map[string]int),
 		autoyes:  autoYes,
+		focused:  true,
 	}
+}
+
+func (l *List) SetFocused(focused bool) {
+	l.focused = focused
 }
 
 // SetSize sets the height and width of the list.
@@ -117,14 +134,18 @@ func (r *InstanceRenderer) setWidth(width int) {
 // ɹ and ɻ are other options.
 const branchIcon = "Ꮧ"
 
-func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, hasMultipleRepos bool) string {
+func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, focused bool, hasMultipleRepos bool) string {
 	prefix := fmt.Sprintf(" %d. ", idx)
 	if idx >= 10 {
 		prefix = prefix[:len(prefix)-1]
 	}
 	titleS := selectedTitleStyle
 	descS := selectedDescStyle
-	if !selected {
+	if selected && !focused {
+		// Active but unfocused — muted highlight
+		titleS = activeTitleStyle
+		descS = activeDescStyle
+	} else if !selected {
 		titleS = titleStyle
 		descS = listDescStyle
 	}
@@ -267,7 +288,7 @@ func (l *List) String() string {
 
 	// Render the list.
 	for i, item := range l.items {
-		b.WriteString(l.renderer.Render(item, i+1, i == l.selectedIdx, len(l.repos) > 1))
+		b.WriteString(l.renderer.Render(item, i+1, i == l.selectedIdx, l.focused, len(l.repos) > 1))
 		if i != len(l.items)-1 {
 			b.WriteString("\n\n")
 		}

@@ -153,8 +153,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 	h.sidebar = ui.NewSidebar()
-	h.focusedPanel = 1 // Start with instance list focused
-	h.sidebar.SetFocused(false)
+	h.setFocus(1) // Start with instance list focused
 
 	// Load saved instances
 	instances, err := storage.LoadInstances()
@@ -404,8 +403,7 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	// Determine which column was clicked
 	if x < m.sidebarWidth {
 		// Click in sidebar
-		m.focusedPanel = 0
-		m.sidebar.SetFocused(true)
+		m.setFocus(0)
 
 		// Search bar is at rows 0-2 in the sidebar content (border takes 3 rows)
 		if contentY >= 0 && contentY <= 2 {
@@ -423,8 +421,7 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 	} else if x < m.sidebarWidth+m.listWidth {
 		// Click in instance list
-		m.focusedPanel = 1
-		m.sidebar.SetFocused(false)
+		m.setFocus(1)
 
 		// Instance list items: each takes ~4 rows (title padding + title + desc + gap)
 		// First 2 rows are the header ("Instances" title + blank lines)
@@ -439,8 +436,7 @@ func (m *home) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 	} else {
 		// Click in preview/diff area — just switch focus to instance list
-		m.focusedPanel = 1
-		m.sidebar.SetFocused(false)
+		m.setFocus(1)
 	}
 
 	return m, nil
@@ -1152,12 +1148,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		})
 		return m, nil
 	case keys.KeyLeft:
-		m.focusedPanel = 0
-		m.sidebar.SetFocused(true)
+		m.setFocus(0)
 		return m, nil
 	case keys.KeyRight:
-		m.focusedPanel = 1
-		m.sidebar.SetFocused(false)
+		m.setFocus(1)
 		return m, nil
 	case keys.KeyNewTopic:
 		m.state = stateNewTopic
@@ -1183,8 +1177,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.sidebar.ActivateSearch()
 		m.sidebar.SelectFirst() // Reset to "All" when starting search
 		m.state = stateSearch
-		m.focusedPanel = 0
-		m.sidebar.SetFocused(true)
+		m.setFocus(0)
 		m.list.SetFilter("") // Show all instances
 		return m, nil
 	default:
@@ -1223,6 +1216,13 @@ func (m *home) getMovableTopicNames() []string {
 		names = append(names, t.Name)
 	}
 	return names
+}
+
+// setFocus updates which panel has focus and syncs the focused state to sidebar and list.
+func (m *home) setFocus(panel int) {
+	m.focusedPanel = panel
+	m.sidebar.SetFocused(panel == 0)
+	m.list.SetFocused(panel == 1)
 }
 
 func (m *home) filterInstancesByTopic() {
