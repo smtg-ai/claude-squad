@@ -81,6 +81,12 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 			return setupErr
 		}
 
+		if isClaudeProgram(i.Program) {
+			if err := writeMCPConfig(i.gitWorktree.GetWorktreePath(), i.Title); err != nil {
+				log.WarningLog.Printf("failed to write MCP config: %v", err)
+			}
+		}
+
 		i.setLoadingProgress(4, "Starting tmux session...")
 		// Create new session
 		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
@@ -124,6 +130,12 @@ func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch strin
 	i.tmuxSession = tmuxSession
 
 	i.setLoadingProgress(2, "Starting tmux session...")
+
+	if isClaudeProgram(i.Program) {
+		if err := writeMCPConfig(worktree.GetWorktreePath(), i.Title); err != nil {
+			log.WarningLog.Printf("failed to write MCP config: %v", err)
+		}
+	}
 
 	if err := i.tmuxSession.Start(worktree.GetWorktreePath()); err != nil {
 		return fmt.Errorf("failed to start session in shared worktree: %w", err)
@@ -246,6 +258,12 @@ func (i *Instance) Resume() error {
 	if err := i.gitWorktree.Setup(); err != nil {
 		log.ErrorLog.Print(err)
 		return fmt.Errorf("failed to setup git worktree: %w", err)
+	}
+
+	if isClaudeProgram(i.Program) {
+		if err := writeMCPConfig(i.gitWorktree.GetWorktreePath(), i.Title); err != nil {
+			log.WarningLog.Printf("failed to write MCP config: %v", err)
+		}
 	}
 
 	// Check if tmux session still exists from pause, otherwise create new one
