@@ -3,13 +3,14 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/ByteMirror/hivemind/log"
 )
 
 const (
@@ -39,6 +40,11 @@ type Config struct {
 	// NotificationsEnabled controls whether macOS/Linux desktop notifications
 	// are sent when an agent finishes (Running -> Ready).
 	NotificationsEnabled *bool `json:"notifications_enabled,omitempty"`
+	// SkipGitHooks controls whether --no-verify is passed to git commit.
+	// Defaults to true (skip hooks) for reliability — pre-commit hooks can
+	// block pause/resume. Set to false if your repo has mandatory hooks
+	// (e.g. secret scanning).
+	SkipGitHooks *bool `json:"skip_git_hooks,omitempty"`
 }
 
 // DefaultConfig returns the default configuration
@@ -73,6 +79,15 @@ func (c *Config) AreNotificationsEnabled() bool {
 		return true
 	}
 	return *c.NotificationsEnabled
+}
+
+// ShouldSkipGitHooks returns whether --no-verify should be passed to git commit.
+// Defaults to true when the field is not set.
+func (c *Config) ShouldSkipGitHooks() bool {
+	if c.SkipGitHooks == nil {
+		return true
+	}
+	return *c.SkipGitHooks
 }
 
 // GetClaudeCommand attempts to find the "claude" command in the user's shell
@@ -172,7 +187,7 @@ func saveConfig(config *Config) error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	return os.WriteFile(configPath, data, 0644)
+	return atomicWriteFile(configPath, data, 0600)
 }
 
 // SaveConfig exports the saveConfig function for use by other packages

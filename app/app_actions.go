@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+
 	"github.com/ByteMirror/hivemind/session"
 	"github.com/ByteMirror/hivemind/ui"
 	"github.com/ByteMirror/hivemind/ui/overlay"
@@ -10,18 +11,31 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// removeAgentFromBrain removes an agent's brain entry when an instance is killed or paused.
+func (m *home) removeAgentFromBrain(instance *session.Instance) {
+	if m.brainServer == nil || instance == nil {
+		return
+	}
+	repoPath := instance.GetRepoPath()
+	if repoPath == "" {
+		return
+	}
+	m.brainServer.Manager().RemoveAgent(repoPath, instance.Title)
+}
+
 // executeContextAction performs the action selected from a context menu.
 func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 	switch action {
 	case "kill_all_in_topic":
 		selectedID := m.sidebar.GetSelectedID()
-		if selectedID == ui.SidebarAll || selectedID == ui.SidebarUngrouped {
+		if selectedID == ui.SidebarAll || ui.IsUngroupedID(selectedID) {
 			return m, nil
 		}
 		killAction := func() tea.Msg {
-			// Remove from allInstances before killing
+			// Clean up brain entries and remove from allInstances before killing
 			for i := len(m.allInstances) - 1; i >= 0; i-- {
 				if m.allInstances[i].TopicName == selectedID {
+					m.removeAgentFromBrain(m.allInstances[i])
 					m.allInstances = append(m.allInstances[:i], m.allInstances[i+1:]...)
 				}
 			}
@@ -35,13 +49,14 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 
 	case "delete_topic_and_instances":
 		selectedID := m.sidebar.GetSelectedID()
-		if selectedID == ui.SidebarAll || selectedID == ui.SidebarUngrouped {
+		if selectedID == ui.SidebarAll || ui.IsUngroupedID(selectedID) {
 			return m, nil
 		}
 		deleteAction := func() tea.Msg {
-			// Remove from allInstances before killing
+			// Clean up brain entries and remove from allInstances before killing
 			for i := len(m.allInstances) - 1; i >= 0; i-- {
 				if m.allInstances[i].TopicName == selectedID {
+					m.removeAgentFromBrain(m.allInstances[i])
 					m.allInstances = append(m.allInstances[:i], m.allInstances[i+1:]...)
 				}
 			}
@@ -97,7 +112,9 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 	case "kill_instance":
 		selected := m.list.GetSelectedInstance()
 		if selected != nil {
+			m.removeAgentFromBrain(selected)
 			title := selected.Title
+			m.tabbedWindow.GetTerminalPane().KillSession(title)
 			m.removeFromAllInstances(title)
 			m.list.Kill()
 			m.saveAllInstances()
@@ -105,7 +122,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 
-	case "open_instance":
+	case "zen_mode":
 		selected := m.list.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() || !selected.TmuxAlive() {
 			return m, nil
@@ -122,6 +139,11 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 	case "pause_instance":
 		selected := m.list.GetSelectedInstance()
 		if selected != nil && selected.Status != session.Paused {
+			// Set Loading immediately to prevent the metadata tick goroutine from
+			// overwriting the status while Pause() is running.
+			selected.SetStatus(session.Loading)
+			selected.LoadingMessage = "Pausing..."
+			m.removeAgentFromBrain(selected)
 			if err := selected.Pause(); err != nil {
 				return m, m.handleError(err)
 			}
@@ -132,10 +154,26 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 	case "resume_instance":
 		selected := m.list.GetSelectedInstance()
 		if selected != nil && selected.Status == session.Paused {
-			if err := selected.Resume(); err != nil {
-				return m, m.handleError(err)
+			selected.SetStatus(session.Loading)
+			selected.LoadingMessage = "Resuming..."
+			resumeCmd := func() tea.Msg {
+				err := selected.Resume()
+				return instanceResumedMsg{instance: selected, err: err}
 			}
-			m.saveAllInstances()
+			return m, tea.Batch(tea.WindowSize(), resumeCmd)
+		}
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+
+	case "restart_instance":
+		selected := m.list.GetSelectedInstance()
+		if selected != nil && selected.IsTmuxDead() {
+			selected.SetStatus(session.Loading)
+			selected.LoadingMessage = "Restarting agent..."
+			restartCmd := func() tea.Msg {
+				err := selected.Restart()
+				return instanceResumedMsg{instance: selected, err: err, wasDead: true}
+			}
+			return m, tea.Batch(tea.WindowSize(), restartCmd)
 		}
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 
@@ -168,7 +206,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 		m.textInputOverlay.SetSize(60, 3)
 		return m, nil
 
-	case "send_prompt_instance":
+	case "focus_instance":
 		selected := m.list.GetSelectedInstance()
 		if selected == nil || !selected.Started() || selected.Paused() {
 			return m, nil
@@ -207,7 +245,7 @@ func (m *home) executeContextAction(action string) (tea.Model, tea.Cmd) {
 
 	case "rename_topic":
 		selectedID := m.sidebar.GetSelectedID()
-		if selectedID == ui.SidebarAll || selectedID == ui.SidebarUngrouped {
+		if selectedID == ui.SidebarAll || ui.IsUngroupedID(selectedID) {
 			return m, nil
 		}
 		m.state = stateRenameTopic
@@ -238,7 +276,7 @@ func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
 	if m.focusedPanel == 0 {
 		// Sidebar focused — build topic context menu
 		selectedID := m.sidebar.GetSelectedID()
-		if selectedID == ui.SidebarAll || selectedID == ui.SidebarUngrouped {
+		if selectedID == ui.SidebarAll || ui.IsUngroupedID(selectedID) {
 			return m, nil
 		}
 		var topic *session.Topic
@@ -274,16 +312,16 @@ func (m *home) openContextMenu() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	items := []overlay.ContextMenuItem{
-		{Label: "Open", Action: "open_instance"},
+		{Label: "Focus", Action: "focus_instance"},
+		{Label: "Zen mode", Action: "zen_mode"},
 		{Label: "Kill", Action: "kill_instance"},
 	}
-	if selected.Status == session.Paused {
+	if selected.IsTmuxDead() {
+		items = append(items, overlay.ContextMenuItem{Label: "Restart agent", Action: "restart_instance"})
+	} else if selected.Status == session.Paused {
 		items = append(items, overlay.ContextMenuItem{Label: "Resume", Action: "resume_instance"})
 	} else {
 		items = append(items, overlay.ContextMenuItem{Label: "Pause", Action: "pause_instance"})
-	}
-	if selected.Started() && selected.Status != session.Paused {
-		items = append(items, overlay.ContextMenuItem{Label: "Focus agent", Action: "send_prompt_instance"})
 	}
 	items = append(items, overlay.ContextMenuItem{Label: "Rename", Action: "rename_instance"})
 	items = append(items, overlay.ContextMenuItem{Label: "Move to topic", Action: "move_instance"})

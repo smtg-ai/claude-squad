@@ -3,11 +3,12 @@
 package tmux
 
 import (
-	"github.com/ByteMirror/hivemind/log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/ByteMirror/hivemind/log"
 
 	"golang.org/x/term"
 )

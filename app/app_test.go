@@ -3,13 +3,14 @@ package app
 import (
 	"context"
 	"fmt"
+	"os"
+	"testing"
+
 	"github.com/ByteMirror/hivemind/config"
 	"github.com/ByteMirror/hivemind/log"
 	"github.com/ByteMirror/hivemind/session"
 	"github.com/ByteMirror/hivemind/ui"
 	"github.com/ByteMirror/hivemind/ui/overlay"
-	"os"
-	"testing"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"

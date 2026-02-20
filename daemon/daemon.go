@@ -2,9 +2,6 @@ package daemon
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/config"
-	"github.com/ByteMirror/hivemind/log"
-	"github.com/ByteMirror/hivemind/session"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -12,6 +9,11 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/ByteMirror/hivemind/brain"
+	"github.com/ByteMirror/hivemind/config"
+	"github.com/ByteMirror/hivemind/log"
+	"github.com/ByteMirror/hivemind/session"
 )
 
 // RunDaemon runs the daemon process which iterates over all sessions and runs AutoYes mode on them.
@@ -31,6 +33,20 @@ func RunDaemon(cfg *config.Config) error {
 	for _, instance := range instances {
 		// Assume AutoYes is true if the daemon is running.
 		instance.AutoYes = true
+	}
+
+	// Start brain IPC server for multi-agent coordination
+	var brainServer *brain.Server
+	configDir, err := config.GetConfigDir()
+	if err == nil {
+		socketPath := filepath.Join(configDir, "hivemind.sock")
+		brainServer = brain.NewServer(socketPath)
+		if err := brainServer.Start(); err != nil {
+			log.WarningLog.Printf("failed to start brain server: %v", err)
+			brainServer = nil
+		} else {
+			log.InfoLog.Printf("brain server started on %s", socketPath)
+		}
 	}
 
 	pollInterval := time.Duration(cfg.DaemonPollInterval) * time.Millisecond
@@ -81,6 +97,10 @@ func RunDaemon(cfg *config.Config) error {
 	close(stopCh)
 	wg.Wait()
 
+	if brainServer != nil {
+		brainServer.Stop()
+	}
+
 	if err := storage.SaveInstances(instances); err != nil {
 		log.ErrorLog.Printf("failed to save instances when terminating daemon: %v", err)
 	}
@@ -118,7 +138,7 @@ func LaunchDaemon() error {
 	}
 
 	pidFile := filepath.Join(pidDir, "daemon.pid")
-	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0644); err != nil {
+	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0600); err != nil {
 		return fmt.Errorf("failed to write PID file: %w", err)
 	}
 

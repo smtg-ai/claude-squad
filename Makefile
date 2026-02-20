@@ -1,4 +1,4 @@
-.PHONY: run build test clean
+.PHONY: run build test clean install
 
 run: build
 	./hivemind $(ARGS)
@@ -6,6 +6,10 @@ run: build
 build:
 	go build -o hivemind .
 	go build -o hivemind-mcp ./cmd/mcp-server/
+
+install: build
+	cp hivemind hivemind-mcp "$${DESTDIR:-/usr/local/bin}/"
+	@echo "Installed to $${DESTDIR:-/usr/local/bin}/"
 
 test:
 	go test ./... -v

@@ -2,9 +2,10 @@ package ui
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/session"
 	"path/filepath"
 	"strings"
+
+	"github.com/ByteMirror/hivemind/session"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
@@ -170,8 +171,13 @@ func (d *DiffPane) String() string {
 	sidebar := d.renderSidebar()
 	diffContent := d.viewport.View()
 
-	// Join sidebar and diff horizontally
-	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, " ", diffContent)
+	// Join sidebar and diff horizontally, then truncate to exact height
+	joined := lipgloss.JoinHorizontal(lipgloss.Top, sidebar, " ", diffContent)
+	lines := strings.Split(joined, "\n")
+	if len(lines) > d.height {
+		lines = lines[:d.height]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // renderSidebar builds the left-hand file list panel.
@@ -277,7 +283,7 @@ func (d *DiffPane) renderSidebar() string {
 	}
 
 	// Hint at the bottom
-	b.WriteString(diffHintStyle.Render("shift+↑↓"))
+	b.WriteString(diffHintStyle.Render("↑↓ files  J/K scroll"))
 
 	content := b.String()
 	vertFrame := filePanelBorderStyle.GetVerticalFrameSize()
@@ -322,6 +328,15 @@ func (d *DiffPane) ScrollDown() {
 
 func (d *DiffPane) HasFiles() bool {
 	return len(d.files) > 0
+}
+
+// GetSelectedFilePath returns the relative path of the currently selected file,
+// or empty string if no specific file is selected (e.g. "All" is selected).
+func (d *DiffPane) GetSelectedFilePath() string {
+	if d.selectedFile < 0 || d.selectedFile >= len(d.files) {
+		return ""
+	}
+	return d.files[d.selectedFile].path
 }
 
 // parseFileChunks splits a unified diff into per-file chunks with stats.

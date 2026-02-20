@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+
 	"github.com/ByteMirror/hivemind/log"
 	"github.com/ByteMirror/hivemind/session"
 	"github.com/ByteMirror/hivemind/ui"
@@ -25,7 +26,7 @@ type helpTypeInstanceStart struct {
 	instance *session.Instance
 }
 
-type helpTypeInstanceAttach struct{}
+type helpTypeZenMode struct{}
 
 type helpTypeInstanceCheckout struct{}
 
@@ -43,11 +44,11 @@ func (h helpTypeGeneral) toContent() string {
 		keyStyle.Render("n")+descStyle.Render("         - Create a new session"),
 		keyStyle.Render("N")+descStyle.Render("         - Create a new session with a prompt"),
 		keyStyle.Render("S")+descStyle.Render("         - New session with --dangerously-skip-permissions"),
+		keyStyle.Render("y")+descStyle.Render("         - Toggle auto-accept on instance or topic"),
 		keyStyle.Render("D")+descStyle.Render("         - Kill (delete) the selected session"),
 		keyStyle.Render("↑/j, ↓/k")+descStyle.Render("  - Navigate between sessions"),
-		keyStyle.Render("↵/o")+descStyle.Render("       - Attach to the selected session"),
-		keyStyle.Render("i")+descStyle.Render("         - Focus agent: type in pane (ctrl+o to exit)"),
-		keyStyle.Render("ctrl-q")+descStyle.Render("    - Detach from session"),
+		keyStyle.Render("↵/o")+descStyle.Render("       - Focus agent (ctrl+o to exit)"),
+		keyStyle.Render("Z")+descStyle.Render("         - Zen mode (full terminal, ctrl+q to exit)"),
 		"",
 		headerStyle.Render("\uf126 Handoff:"),
 		keyStyle.Render("p")+descStyle.Render("         - Commit and push branch to github"),
@@ -56,11 +57,12 @@ func (h helpTypeGeneral) toContent() string {
 		keyStyle.Render("r")+descStyle.Render("         - Resume a paused session"),
 		"",
 		headerStyle.Render("\uf085 Other:"),
-		keyStyle.Render("tab")+descStyle.Render("       - Switch between preview, diff and git tabs"),
+		keyStyle.Render("tab")+descStyle.Render("       - Switch between agent, terminal, diff and git tabs"),
+		keyStyle.Render("t")+descStyle.Render("         - Open terminal tab (shell in worktree, ctrl+o to exit)"),
 		keyStyle.Render("g")+descStyle.Render("         - Open git tab (lazygit, ctrl+o to exit)"),
-		keyStyle.Render("shift-↓/↑")+descStyle.Render(" - Scroll in diff view"),
 		keyStyle.Render("q")+descStyle.Render("         - Quit the application"),
 		keyStyle.Render("R")+descStyle.Render("         - Switch repository"),
+		keyStyle.Render("e")+descStyle.Render("         - Expand/collapse sub-agent tree"),
 		"",
 		headerStyle.Render("\uf07b Topics:"),
 		keyStyle.Render("T")+descStyle.Render("         - Create a new topic"),
@@ -83,7 +85,7 @@ func (h helpTypeInstanceStart) toContent() string {
 			lipgloss.NewStyle().Bold(true).Render(h.instance.Program))),
 		"",
 		headerStyle.Render("\uf03a Managing:"),
-		keyStyle.Render("↵/o")+descStyle.Render("   - Attach to the session to interact with it directly"),
+		keyStyle.Render("↵/o")+descStyle.Render("   - Focus the agent (ctrl+o to exit)"),
 		keyStyle.Render("tab")+descStyle.Render("   - Switch preview panes to view session diff"),
 		keyStyle.Render("D")+descStyle.Render("     - Kill (delete) the selected session"),
 		"",
@@ -94,11 +96,11 @@ func (h helpTypeInstanceStart) toContent() string {
 	return content
 }
 
-func (h helpTypeInstanceAttach) toContent() string {
+func (h helpTypeZenMode) toContent() string {
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		titleStyle.Render("Attaching to Instance"),
+		titleStyle.Render("Entering Zen Mode"),
 		"",
-		descStyle.Render("To detach from a session, press ")+keyStyle.Render("ctrl-q"),
+		descStyle.Render("To exit zen mode, press ")+keyStyle.Render("ctrl-q"),
 	)
 	return content
 }
@@ -124,7 +126,7 @@ func (h helpTypeGeneral) mask() uint32 {
 func (h helpTypeInstanceStart) mask() uint32 {
 	return 1 << 1
 }
-func (h helpTypeInstanceAttach) mask() uint32 {
+func (h helpTypeZenMode) mask() uint32 {
 	return 1 << 2
 }
 func (h helpTypeInstanceCheckout) mask() uint32 {

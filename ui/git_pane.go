@@ -2,48 +2,62 @@ package ui
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/session"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/ByteMirror/hivemind/session"
+
 	"github.com/creack/pty"
 )
 
 const lazygitTmuxPrefix = "hivemind_lazygit_"
 
-// GitPane manages an interactive lazygit subprocess inside a tmux session,
-// rendered via tmux capture-pane through an EmbeddedTerminal.
+// GitPane manages a lazygit tmux session that persists across tab switches.
+// When the user switches tabs (git → agent → git), the tmux session stays alive
+// and only the EmbeddedTerminal PTY is reconnected — preserving lazygit's UI state.
+// When switching instances, the old session is killed to avoid accumulating
+// background lazygit processes (each runs file watchers and periodic git polls).
 type GitPane struct {
-	sessionName string
-	term        *session.EmbeddedTerminal
-	mu          sync.Mutex
-
+	mu              sync.Mutex
+	sessions        map[string]string // instanceTitle -> tmux session name
+	term            *session.EmbeddedTerminal
 	currentInstanceTitle string
-	worktreePath         string
-	width, height        int
-	errorMsg             string
+	width, height   int
+	errorMsg        string
 }
 
 // NewGitPane creates a new GitPane (no subprocess yet).
 func NewGitPane() *GitPane {
-	return &GitPane{}
+	return &GitPane{
+		sessions: make(map[string]string),
+	}
 }
 
-// Spawn starts a lazygit process inside a tmux session in the given worktree directory.
-// If lazygit is already running for a different instance, it kills the old one first.
-func (g *GitPane) Spawn(worktreePath, instanceTitle string) {
+// Attach creates a lazygit tmux session for the instance (if needed) and connects
+// an EmbeddedTerminal to it. If already attached to a different instance, detaches first.
+func (g *GitPane) Attach(worktreePath, instanceTitle string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	// Kill any existing subprocess first.
-	g.killLocked()
+	// Switching instances: kill the old lazygit session entirely (not just detach)
+	// to avoid accumulating background processes with active file watchers.
+	if g.currentInstanceTitle != "" && g.currentInstanceTitle != instanceTitle {
+		oldTitle := g.currentInstanceTitle
+		g.detachLocked()
+		if name, ok := g.sessions[oldTitle]; ok {
+			exec.Command("tmux", "kill-session", "-t", name).Run()
+			delete(g.sessions, oldTitle)
+		}
+	}
+	if g.term != nil {
+		return // already attached to this instance
+	}
 
-	g.worktreePath = worktreePath
-	g.currentInstanceTitle = instanceTitle
 	g.errorMsg = ""
+	g.currentInstanceTitle = instanceTitle
 
 	// Check that lazygit is installed.
 	if _, err := exec.LookPath("lazygit"); err != nil {
@@ -51,33 +65,35 @@ func (g *GitPane) Spawn(worktreePath, instanceTitle string) {
 		return
 	}
 
-	sessionName := lazygitTmuxPrefix + sanitizeForTmux(instanceTitle)
-
-	// Kill any stale session with this name.
-	exec.Command("tmux", "kill-session", "-t", sessionName).Run()
-
-	// Create a detached tmux session running lazygit with quit keybindings disabled.
-	// Quitting lazygit destroys the tmux session and crashes the TUI.
-	// Users navigate back with Escape and exit focus mode with Ctrl+O.
-	configArg := lazygitConfigArg()
-	createCmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", worktreePath,
-		"lazygit", "--use-config-file="+configArg)
-	createPtmx, err := pty.Start(createCmd)
-	if err != nil {
-		g.errorMsg = fmt.Sprintf("Failed to create tmux session: %v", err)
-		return
+	sessionName, exists := g.sessions[instanceTitle]
+	if !exists {
+		sessionName = lazygitTmuxPrefix + sanitizeForTmux(instanceTitle)
 	}
-	// Wait for the session to exist, then close the creation PTY.
-	deadline := time.Now().Add(2 * time.Second)
-	for !tmuxSessionExists(sessionName) {
-		if time.Now().After(deadline) {
-			createPtmx.Close()
-			g.errorMsg = "Timed out waiting for lazygit tmux session"
+
+	// Create tmux session if it doesn't exist yet
+	if !tmuxSessionExists(sessionName) {
+		configArg := lazygitConfigArg()
+		createCmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName, "-c", worktreePath,
+			"lazygit", "--use-config-file="+configArg)
+		createPtmx, err := pty.Start(createCmd)
+		if err != nil {
+			g.errorMsg = fmt.Sprintf("Failed to create tmux session: %v", err)
 			return
 		}
-		time.Sleep(10 * time.Millisecond)
+		deadline := time.Now().Add(2 * time.Second)
+		for !tmuxSessionExists(sessionName) {
+			if time.Now().After(deadline) {
+				createPtmx.Close()
+				g.errorMsg = "Timed out waiting for lazygit tmux session"
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		createPtmx.Close()
+		// Hide tmux status bar so only the pane content is rendered.
+		exec.Command("tmux", "set-option", "-t", sessionName, "status", "off").Run()
+		g.sessions[instanceTitle] = sessionName
 	}
-	createPtmx.Close()
 
 	cols, rows := g.width, g.height
 	if cols < 10 {
@@ -87,37 +103,53 @@ func (g *GitPane) Spawn(worktreePath, instanceTitle string) {
 		rows = 24
 	}
 
-	// NewEmbeddedTerminal creates its own tmux attach PTY + VT emulator
 	term, err := session.NewEmbeddedTerminal(sessionName, cols, rows)
 	if err != nil {
-		exec.Command("tmux", "kill-session", "-t", sessionName).Run()
-		g.errorMsg = fmt.Sprintf("Failed to create embedded terminal: %v", err)
+		g.errorMsg = fmt.Sprintf("Failed to attach to lazygit session: %v", err)
 		return
 	}
-
-	g.sessionName = sessionName
 	g.term = term
 }
 
-// Kill stops the lazygit subprocess and cleans up resources.
-func (g *GitPane) Kill() {
+// Detach closes the EmbeddedTerminal but keeps the tmux session alive.
+func (g *GitPane) Detach() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.killLocked()
+	g.detachLocked()
 }
 
-// killLocked performs the actual cleanup. Caller must hold g.mu.
-func (g *GitPane) killLocked() {
+func (g *GitPane) detachLocked() {
 	if g.term != nil {
 		g.term.Close()
 		g.term = nil
 	}
-	if g.sessionName != "" {
-		exec.Command("tmux", "kill-session", "-t", g.sessionName).Run()
-		g.sessionName = ""
-	}
 	g.currentInstanceTitle = ""
-	g.worktreePath = ""
+}
+
+// Kill detaches and kills ALL lazygit tmux sessions (app shutdown).
+func (g *GitPane) Kill() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	g.detachLocked()
+	for title, name := range g.sessions {
+		exec.Command("tmux", "kill-session", "-t", name).Run()
+		delete(g.sessions, title)
+	}
+}
+
+// KillSession kills a single instance's lazygit tmux session.
+func (g *GitPane) KillSession(instanceTitle string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if g.currentInstanceTitle == instanceTitle {
+		g.detachLocked()
+	}
+	if name, ok := g.sessions[instanceTitle]; ok {
+		exec.Command("tmux", "kill-session", "-t", name).Run()
+		delete(g.sessions, instanceTitle)
+	}
 }
 
 // SendKey forwards raw key bytes to the lazygit PTY via the embedded terminal.
@@ -129,7 +161,19 @@ func (g *GitPane) SendKey(data []byte) error {
 		return fmt.Errorf("git pane not running")
 	}
 	if err := g.term.SendKey(data); err != nil {
-		g.killLocked()
+		// Lazygit exited — detach and remove this session
+		name := g.sessions[g.currentInstanceTitle]
+		g.detachLocked()
+		if name != "" {
+			exec.Command("tmux", "kill-session", "-t", name).Run()
+		}
+		// Remove from sessions map
+		for title, n := range g.sessions {
+			if n == name {
+				delete(g.sessions, title)
+				break
+			}
+		}
 		return fmt.Errorf("lazygit session ended")
 	}
 	return nil
@@ -179,6 +223,18 @@ func (g *GitPane) String() string {
 	return content
 }
 
+// WaitForRender blocks until the embedded terminal has new content or the timeout elapses.
+func (g *GitPane) WaitForRender(timeout time.Duration) {
+	g.mu.Lock()
+	term := g.term
+	g.mu.Unlock()
+	if term != nil {
+		term.WaitForRender(timeout)
+	} else {
+		time.Sleep(timeout)
+	}
+}
+
 // tmuxSessionExists checks if a tmux session with the given name exists.
 func tmuxSessionExists(name string) bool {
 	return exec.Command("tmux", "has-session", fmt.Sprintf("-t=%s", name)).Run() == nil
@@ -191,7 +247,7 @@ func tmuxSessionExists(name string) bool {
 func lazygitOverrideConfig() string {
 	path := filepath.Join(os.TempDir(), "hivemind-lazygit-override.yml")
 	content := []byte("keybinding:\n  universal:\n    quit: ''\n    quit-alt1: ''\n    quitWithoutChangingDirectory: ''\n")
-	_ = os.WriteFile(path, content, 0644)
+	_ = os.WriteFile(path, content, 0600)
 	return path
 }
 

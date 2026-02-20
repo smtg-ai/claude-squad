@@ -3,8 +3,9 @@ package session
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ByteMirror/hivemind/config"
 	"time"
+
+	"github.com/ByteMirror/hivemind/config"
 )
 
 // InstanceData represents the serializable data of an Instance
@@ -20,6 +21,8 @@ type InstanceData struct {
 	AutoYes         bool      `json:"auto_yes"`
 	SkipPermissions bool      `json:"skip_permissions"`
 	TopicName       string    `json:"topic_name,omitempty"`
+	Role            string    `json:"role,omitempty"`
+	ParentTitle     string    `json:"parent_title,omitempty"`
 
 	Program   string          `json:"program"`
 	Worktree  GitWorktreeData `json:"worktree"`

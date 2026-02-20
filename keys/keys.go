@@ -45,12 +45,19 @@ const (
 	KeyCycleSort    // Key for cycling sort mode
 	KeyRepoSwitch   // Key for switching repos
 
-	KeyGitTab // Key for jumping directly to git tab
+	KeyTerminalTab // Key for jumping directly to terminal tab
+	KeyGitTab      // Key for jumping directly to git tab
 
-	// Tab switching keybindings (Shift+1/2/3)
-	KeyTabAgent
-	KeyTabDiff
-	KeyTabGit
+	// Tab switching keybindings (Shift+Arrow)
+	KeyShiftLeft
+	KeyShiftRight
+
+	// Sub-agent tree
+	KeyExpandCollapse // Toggle sub-agent tree expand/collapse
+
+	KeyZenMode // Key for entering zen mode (full terminal attach)
+
+	KeyAutoYes // Key for toggling auto-accept on instance or topic
 
 	// Diff keybindings
 	KeyShiftUp
@@ -59,43 +66,46 @@ const (
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
 var GlobalKeyStringsMap = map[string]KeyName{
-	"up":         KeyUp,
-	"k":          KeyUp,
-	"down":       KeyDown,
-	"j":          KeyDown,
-	"shift+up":   KeyShiftUp,
-	"shift+down": KeyShiftDown,
-	"N":          KeyPrompt,
-	"enter":      KeyEnter,
-	"o":          KeyEnter,
-	"n":          KeyNew,
-	"D":          KeyKill,
-	"q":          KeyQuit,
-	"tab":        KeyTab,
-	"c":          KeyCheckout,
-	"r":          KeyResume,
-	"p":          KeySubmit,
-	"?":          KeyHelp,
-	"S":          KeyNewSkipPermissions,
-	"T":          KeyNewTopic,
-	"m":          KeyMoveTo,
-	"/":          KeySearch,
-	"left":       KeyLeft,
-	"h":          KeyLeft,
-	"right":      KeyRight,
-	"l":          KeyRight,
-	"X":          KeyKillAllInTopic,
-	"P":          KeyCreatePR,
-	"i":          KeySendPrompt,
-	" ":          KeySpace,
-	"1":          KeyFilterAll,
-	"2":          KeyFilterActive,
-	"3":          KeyCycleSort,
-	"R":          KeyRepoSwitch,
-	"g":          KeyGitTab,
-	"f1":         KeyTabAgent,
-	"f2":         KeyTabDiff,
-	"f3":         KeyTabGit,
+	"up":          KeyUp,
+	"k":           KeyUp,
+	"down":        KeyDown,
+	"j":           KeyDown,
+	"shift+up":    KeyShiftUp,
+	"shift+down":  KeyShiftDown,
+	"N":           KeyPrompt,
+	"enter":       KeyEnter,
+	"o":           KeyEnter,
+	"n":           KeyNew,
+	"D":           KeyKill,
+	"q":           KeyQuit,
+	"tab":         KeyTab,
+	"c":           KeyCheckout,
+	"r":           KeyResume,
+	"p":           KeySubmit,
+	"?":           KeyHelp,
+	"S":           KeyNewSkipPermissions,
+	"T":           KeyNewTopic,
+	"m":           KeyMoveTo,
+	"/":           KeySearch,
+	"left":        KeyLeft,
+	"h":           KeyLeft,
+	"right":       KeyRight,
+	"l":           KeyRight,
+	"X":           KeyKillAllInTopic,
+	"P":           KeyCreatePR,
+	"i":           KeySendPrompt,
+	" ":           KeySpace,
+	"1":           KeyFilterAll,
+	"2":           KeyFilterActive,
+	"3":           KeyCycleSort,
+	"R":           KeyRepoSwitch,
+	"t":           KeyTerminalTab,
+	"g":           KeyGitTab,
+	"shift+left":  KeyShiftLeft,
+	"shift+right": KeyShiftRight,
+	"e":           KeyExpandCollapse,
+	"Z":           KeyZenMode,
+	"y":           KeyAutoYes,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -110,15 +120,15 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	),
 	KeyShiftUp: key.NewBinding(
 		key.WithKeys("shift+up"),
-		key.WithHelp("shift+↑", "scroll"),
+		key.WithHelp("⇧↑/↓", "navigate"),
 	),
 	KeyShiftDown: key.NewBinding(
 		key.WithKeys("shift+down"),
-		key.WithHelp("shift+↓", "scroll"),
+		key.WithHelp("⇧↓", "navigate"),
 	),
 	KeyEnter: key.NewBinding(
 		key.WithKeys("enter", "o"),
-		key.WithHelp("↵/o", "open"),
+		key.WithHelp("↵/o", "focus"),
 	),
 	KeyNew: key.NewBinding(
 		key.WithKeys("n"),
@@ -212,21 +222,33 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithKeys("R"),
 		key.WithHelp("R", "switch repo"),
 	),
+	KeyTerminalTab: key.NewBinding(
+		key.WithKeys("t"),
+		key.WithHelp("t", "terminal tab"),
+	),
 	KeyGitTab: key.NewBinding(
 		key.WithKeys("g"),
 		key.WithHelp("g", "git tab"),
 	),
-	KeyTabAgent: key.NewBinding(
-		key.WithKeys("f1"),
-		key.WithHelp("F1/2/3", "switch tab"),
+	KeyShiftLeft: key.NewBinding(
+		key.WithKeys("shift+left"),
+		key.WithHelp("⇧←/→", "sections"),
 	),
-	KeyTabDiff: key.NewBinding(
-		key.WithKeys("f2"),
-		key.WithHelp("F2", "diff tab"),
+	KeyShiftRight: key.NewBinding(
+		key.WithKeys("shift+right"),
+		key.WithHelp("⇧→", "sections"),
 	),
-	KeyTabGit: key.NewBinding(
-		key.WithKeys("f3"),
-		key.WithHelp("F3", "git tab"),
+	KeyExpandCollapse: key.NewBinding(
+		key.WithKeys("e"),
+		key.WithHelp("e", "expand/collapse"),
+	),
+	KeyZenMode: key.NewBinding(
+		key.WithKeys("Z"),
+		key.WithHelp("Z", "zen mode"),
+	),
+	KeyAutoYes: key.NewBinding(
+		key.WithKeys("y"),
+		key.WithHelp("y", "auto-accept"),
 	),
 
 	// -- Special keybindings --

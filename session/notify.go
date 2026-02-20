@@ -10,8 +10,16 @@ import (
 // Set from config at startup.
 var NotificationsEnabled = true
 
-// escapeAppleScript escapes backslashes and double quotes for AppleScript strings.
-func escapeAppleScript(s string) string {
+// sanitizeNotification strips control characters and escapes special chars for AppleScript strings.
+func sanitizeNotification(s string) string {
+	// Strip control characters (newlines, tabs, etc.) that could break AppleScript
+	var b strings.Builder
+	for _, r := range s {
+		if r >= 0x20 && r != 0x7F {
+			b.WriteRune(r)
+		}
+	}
+	s = b.String()
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `"`, `\"`)
 	return s
@@ -27,7 +35,7 @@ func SendNotification(title, body string) {
 	switch runtime.GOOS {
 	case "darwin":
 		cmd := exec.Command("osascript", "-e",
-			`display notification "`+escapeAppleScript(body)+`" with title "`+escapeAppleScript(title)+`"`)
+			`display notification "`+sanitizeNotification(body)+`" with title "`+sanitizeNotification(title)+`"`)
 		_ = cmd.Start()
 	case "linux":
 		if path, err := exec.LookPath("notify-send"); err == nil {

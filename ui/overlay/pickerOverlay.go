@@ -46,6 +46,8 @@ type PickerOverlay struct {
 	width       int
 	submitted   bool
 	cancelled   bool
+	toggled     bool   // true when space (secondary action) was pressed
+	hintText    string // custom hint text (empty = default)
 }
 
 // NewPickerOverlay creates a picker with a title and list of items.
@@ -68,6 +70,9 @@ func (p *PickerOverlay) HandleKeyPress(msg tea.KeyMsg) bool {
 		return true
 	case "enter":
 		p.submitted = true
+		return true
+	case " ":
+		p.toggled = true
 		return true
 	case "up", "shift+tab":
 		if p.selectedIdx > 0 {
@@ -126,6 +131,16 @@ func (p *PickerOverlay) IsSubmitted() bool {
 	return p.submitted
 }
 
+// IsToggled returns true if the user pressed Space (secondary action).
+func (p *PickerOverlay) IsToggled() bool {
+	return p.toggled
+}
+
+// SetHint overrides the default hint text shown at the bottom of the picker.
+func (p *PickerOverlay) SetHint(hint string) {
+	p.hintText = hint
+}
+
 // Render draws the picker overlay.
 func (p *PickerOverlay) Render() string {
 	var b strings.Builder
@@ -162,7 +177,11 @@ func (p *PickerOverlay) Render() string {
 	}
 
 	// Hint
-	b.WriteString(pickerHintStyle.Render("↑↓ navigate • enter select • esc cancel"))
+	hint := "↑↓ navigate • enter select • esc cancel"
+	if p.hintText != "" {
+		hint = p.hintText
+	}
+	b.WriteString(pickerHintStyle.Render(hint))
 
 	return pickerBorderStyle.Width(p.width).Render(b.String())
 }

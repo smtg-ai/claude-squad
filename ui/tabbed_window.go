@@ -26,13 +26,15 @@ var (
 			Border(activeTabBorder, true).
 			AlignHorizontal(lipgloss.Center)
 	windowBorder = lipgloss.RoundedBorder()
-	windowStyle  = lipgloss.NewStyle().
+	windowStyle = lipgloss.NewStyle().
 			BorderForeground(highlightColor).
-			Border(windowBorder, false, true, true, true)
+			Border(windowBorder, false, true, true, true).
+			Padding(0, 1, 0, 1)
 )
 
 const (
-	PreviewTab int = iota
+	PreviewTab  int = iota
+	TerminalTab     // persistent shell per instance
 	DiffTab
 	GitTab
 )
@@ -52,11 +54,14 @@ type TabbedWindow struct {
 	width     int
 
 	preview    *PreviewPane
+	terminal   *TerminalPane
 	diff       *DiffPane
 	git        *GitPane
 	instance   *session.Instance
-	focusMode  bool   // true when user is typing directly into the agent pane
-	gitContent string // cached git pane content, set by tick when changed
+	focusMode    bool   // true when user is typing directly into the agent pane
+	contentStale bool   // true when navigation changed instance but content not yet fetched
+	gitContent      string // cached git pane content, set by tick when changed
+	terminalContent string // cached terminal pane content, set by tick when changed
 }
 
 // SetFocusMode enables or disables the focus/insert mode visual indicator.
@@ -69,16 +74,18 @@ func (w *TabbedWindow) IsFocusMode() bool {
 	return w.focusMode
 }
 
-func NewTabbedWindow(preview *PreviewPane, diff *DiffPane, git *GitPane) *TabbedWindow {
+func NewTabbedWindow(preview *PreviewPane, terminal *TerminalPane, diff *DiffPane, git *GitPane) *TabbedWindow {
 	return &TabbedWindow{
 		tabs: []string{
 			"\uea85 Agent",
+			"\uf489 Terminal",
 			"\ueae1 Diff",
 			"\ue725 Git",
 		},
-		preview: preview,
-		diff:    diff,
-		git:     git,
+		preview:  preview,
+		terminal: terminal,
+		diff:     diff,
+		git:      git,
 	}
 }
 
@@ -86,9 +93,32 @@ func (w *TabbedWindow) SetInstance(instance *session.Instance) {
 	w.instance = instance
 }
 
-// AdjustPreviewWidth adjusts the width of the preview pane to be 90% of the provided width.
+// MarkContentStale flags that the selected instance changed but expensive content
+// (preview capture, diff) hasn't been fetched yet. The next tick will do the fetch.
+func (w *TabbedWindow) MarkContentStale() {
+	w.contentStale = true
+}
+
+// IsContentStale returns whether content needs to be refreshed.
+func (w *TabbedWindow) IsContentStale() bool {
+	return w.contentStale
+}
+
+// ClearContentStale marks content as up-to-date after a tick fetches it.
+func (w *TabbedWindow) ClearContentStale() {
+	w.contentStale = false
+}
+
+// ApplyPreviewContent sets preview content from an async fetch result.
+// Safe to call even if the user entered scroll mode while the fetch was in-flight.
+func (w *TabbedWindow) ApplyPreviewContent(content string) {
+	w.preview.SetAsyncContent(content)
+}
+
+// AdjustPreviewWidth returns the tab row width for the given allocation.
+// The window's border+padding is handled by windowStyle.
 func AdjustPreviewWidth(width int) int {
-	return width - 2 // just enough margin for borders
+	return width
 }
 
 func (w *TabbedWindow) SetSize(width, height int) {
@@ -98,12 +128,12 @@ func (w *TabbedWindow) SetSize(width, height int) {
 	// Calculate the content height by subtracting:
 	// 1. Tab height (including border and padding)
 	// 2. Window style vertical frame size
-	// 3. Additional padding/spacing (2 for the newline and spacing)
 	tabHeight := activeTabStyle.GetVerticalFrameSize() + 1
-	contentHeight := height - tabHeight - windowStyle.GetVerticalFrameSize() - 2
+	contentHeight := height - tabHeight - windowStyle.GetVerticalFrameSize()
 	contentWidth := w.width - windowStyle.GetHorizontalFrameSize()
 
 	w.preview.SetSize(contentWidth, contentHeight)
+	w.terminal.SetSize(contentWidth, contentHeight)
 	w.diff.SetSize(contentWidth, contentHeight)
 	w.git.SetSize(contentWidth, contentHeight)
 }
@@ -233,9 +263,29 @@ func (w *TabbedWindow) IsInGitTab() bool {
 	return w.activeTab == GitTab
 }
 
+// GetDiffPane returns the diff pane for external control.
+func (w *TabbedWindow) GetDiffPane() *DiffPane {
+	return w.diff
+}
+
 // GetGitPane returns the git pane for external control.
 func (w *TabbedWindow) GetGitPane() *GitPane {
 	return w.git
+}
+
+// GetTerminalPane returns the terminal pane for external control.
+func (w *TabbedWindow) GetTerminalPane() *TerminalPane {
+	return w.terminal
+}
+
+// IsInTerminalTab returns true if the terminal tab is currently active.
+func (w *TabbedWindow) IsInTerminalTab() bool {
+	return w.activeTab == TerminalTab
+}
+
+// SetTerminalContent caches terminal pane content to avoid re-rendering when unchanged.
+func (w *TabbedWindow) SetTerminalContent(content string) {
+	w.terminalContent = content
 }
 
 // SetActiveTab sets the active tab by index.
@@ -259,9 +309,8 @@ func (w *TabbedWindow) IsPreviewInScrollMode() bool {
 // the tabbed window's top-left) hits a tab header. Returns true and switches
 // tabs if a tab was clicked.
 func (w *TabbedWindow) HandleTabClick(localX, localY int) bool {
-	// Tab row is at row 1 (after the leading newline in String()).
-	// Accept rows 1-3 to generously cover the tab area with borders.
-	if localY < 1 || localY > 3 {
+	// Tab row is at row 0. Accept rows 0-2 to generously cover the tab area with borders.
+	if localY < 0 || localY > 2 {
 		return false
 	}
 
@@ -331,14 +380,28 @@ func (w *TabbedWindow) String() string {
 	var content string
 	switch w.activeTab {
 	case PreviewTab:
-		content = w.preview.String()
+		if w.contentStale {
+			content = lipgloss.Place(w.preview.width, w.preview.height, lipgloss.Center, lipgloss.Center, "⟳ Loading...")
+		} else {
+			content = w.preview.String()
+		}
+	case TerminalTab:
+		if w.terminalContent != "" {
+			content = w.terminalContent
+		} else {
+			content = lipgloss.Place(w.preview.width, w.preview.height, lipgloss.Center, lipgloss.Center, "⟳ Connecting...")
+		}
 	case DiffTab:
-		content = w.diff.String()
+		if w.contentStale {
+			content = lipgloss.Place(w.preview.width, w.preview.height, lipgloss.Center, lipgloss.Center, "⟳ Loading...")
+		} else {
+			content = w.diff.String()
+		}
 	case GitTab:
 		if w.gitContent != "" {
 			content = w.gitContent
 		} else {
-			content = w.git.String()
+			content = lipgloss.Place(w.preview.width, w.preview.height, lipgloss.Center, lipgloss.Center, "⟳ Loading lazygit...")
 		}
 	}
 	ws := windowStyle
@@ -348,10 +411,11 @@ func (w *TabbedWindow) String() string {
 	// Subtract the window border width so the total rendered width
 	// (content + borders) matches the tab row width.
 	innerWidth := w.width - ws.GetHorizontalFrameSize()
+	innerHeight := w.height - ws.GetVerticalFrameSize() - tabHeight
 	window := ws.Render(
 		lipgloss.Place(
-			innerWidth, w.height-2-ws.GetVerticalFrameSize()-tabHeight,
+			innerWidth, innerHeight,
 			lipgloss.Left, lipgloss.Top, content))
 
-	return lipgloss.JoinVertical(lipgloss.Left, "\n", row, window)
+	return lipgloss.JoinVertical(lipgloss.Left, row, window)
 }

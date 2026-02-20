@@ -3,9 +3,10 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
 	"os"
 	"path/filepath"
+
+	"github.com/ByteMirror/hivemind/log"
 )
 
 const (
@@ -115,7 +116,7 @@ func SaveState(state *State) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	return os.WriteFile(statePath, data, 0644)
+	return atomicWriteFile(statePath, data, 0600)
 }
 
 // InstanceStorage interface implementation

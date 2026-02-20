@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/ByteMirror/hivemind/brain"
 
 	gomcp "github.com/mark3labs/mcp-go/mcp"
 )
@@ -94,12 +98,12 @@ func TestHandleListInstances(t *testing.T) {
 		{
 			name:      "no instances returns message",
 			stateJSON: `{"instances": []}`,
-			contains:  "No Hivemind instances found.",
+			contains:  "No Hivemind instances found for this repository.",
 		},
 		{
 			name:      "missing state file returns message",
 			stateJSON: "", // no file created
-			contains:  "No Hivemind instances found.",
+			contains:  "No Hivemind instances found for this repository.",
 		},
 	}
 
@@ -115,7 +119,7 @@ func TestHandleListInstances(t *testing.T) {
 			}
 
 			reader := NewStateReader(tmpDir)
-			handler := handleListInstances(reader)
+			handler := handleListInstances(reader, "/repo")
 
 			req := gomcp.CallToolRequest{}
 			result, err := handler(context.Background(), req)
@@ -142,197 +146,554 @@ func TestHandleListInstances(t *testing.T) {
 	}
 }
 
-func TestHandleCheckFileActivity(t *testing.T) {
-	tests := []struct {
-		name      string
-		args      map[string]interface{}
-		wantErr   bool   // tool-level isError flag
-		contains  string // substring to look for in result text
-		checkJSON func(t *testing.T, text string)
-	}{
-		{
-			name: "returns checked files in response",
-			args: map[string]interface{}{
-				"files": "auth.go, main.go",
+func TestHandleUpdateStatus(t *testing.T) {
+	t.Run("sets agent status", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		handler := handleUpdateStatus(NewFileBrainClient(tmpDir), "/test-repo", "agent-1")
+
+		req := gomcp.CallToolRequest{}
+		req.Params.Arguments = map[string]interface{}{
+			"feature": "implement auth",
+			"files":   "auth.go, middleware.go",
+		}
+
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+		text := resultText(t, result)
+		if !strings.Contains(text, "No conflicts") {
+			t.Errorf("expected 'No conflicts', got: %s", text)
+		}
+
+		// Verify brain.json was written
+		brain, err := readBrain(tmpDir, "/test-repo")
+		if err != nil {
+			t.Fatalf("failed to read brain: %v", err)
+		}
+		agent, ok := brain.Agents["agent-1"]
+		if !ok {
+			t.Fatal("agent-1 not found in brain")
+		}
+		if agent.Feature != "implement auth" {
+			t.Errorf("Feature = %q, want %q", agent.Feature, "implement auth")
+		}
+		if len(agent.Files) != 2 {
+			t.Fatalf("len(Files) = %d, want 2", len(agent.Files))
+		}
+		if agent.Files[0] != "auth.go" {
+			t.Errorf("Files[0] = %q, want %q", agent.Files[0], "auth.go")
+		}
+		if agent.Files[1] != "middleware.go" {
+			t.Errorf("Files[1] = %q, want %q", agent.Files[1], "middleware.go")
+		}
+	})
+
+	t.Run("detects file conflicts", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Pre-populate brain with another agent working on auth.go
+		brain := &brainFile{
+			Agents: map[string]*agentStatus{
+				"agent-2": {
+					Feature:   "fix auth bug",
+					Files:     []string{"auth.go"},
+					UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+				},
 			},
-			checkJSON: func(t *testing.T, text string) {
-				t.Helper()
-				var result struct {
-					FilesChecked []string `json:"files_checked"`
-					Conflicts    []string `json:"conflicts"`
-					Message      string   `json:"message"`
-				}
-				if err := json.Unmarshal([]byte(text), &result); err != nil {
-					t.Fatalf("failed to parse JSON response: %v", err)
-				}
-				if len(result.FilesChecked) != 2 {
-					t.Fatalf("len(FilesChecked) = %d, want 2", len(result.FilesChecked))
-				}
-				if result.FilesChecked[0] != "auth.go" {
-					t.Errorf("FilesChecked[0] = %q, want %q", result.FilesChecked[0], "auth.go")
-				}
-				if result.FilesChecked[1] != "main.go" {
-					t.Errorf("FilesChecked[1] = %q, want %q", result.FilesChecked[1], "main.go")
-				}
-				if len(result.Conflicts) != 0 {
-					t.Errorf("len(Conflicts) = %d, want 0", len(result.Conflicts))
-				}
-				if result.Message == "" {
-					t.Error("Message is empty, expected non-empty")
-				}
-			},
-		},
-		{
-			name:     "missing files param returns error",
-			args:     map[string]interface{}{},
-			wantErr:  true,
-			contains: "missing required parameter: files",
-		},
-	}
+		}
+		if err := writeBrain(tmpDir, "/test-repo", brain); err != nil {
+			t.Fatal(err)
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			handler := handleCheckFileActivity()
+		handler := handleUpdateStatus(NewFileBrainClient(tmpDir), "/test-repo", "agent-1")
+		req := gomcp.CallToolRequest{}
+		req.Params.Arguments = map[string]interface{}{
+			"feature": "implement auth",
+			"files":   "auth.go",
+		}
 
-			req := gomcp.CallToolRequest{}
-			req.Params.Arguments = tt.args
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+		text := resultText(t, result)
+		if !strings.Contains(text, "Conflicts detected") {
+			t.Errorf("expected conflict warning, got: %s", text)
+		}
+		if !strings.Contains(text, "agent-2") {
+			t.Errorf("expected agent-2 in conflict warning, got: %s", text)
+		}
+	})
 
-			result, err := handler(context.Background(), req)
-			if err != nil {
-				t.Fatalf("handler returned error: %v", err)
-			}
+	t.Run("missing feature returns error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		handler := handleUpdateStatus(NewFileBrainClient(tmpDir), "/test-repo", "agent-1")
 
-			text := resultText(t, result)
+		req := gomcp.CallToolRequest{}
+		req.Params.Arguments = map[string]interface{}{}
 
-			if tt.wantErr {
-				if !result.IsError {
-					t.Fatalf("expected IsError=true, got false; text: %s", text)
-				}
-			}
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+		if !result.IsError {
+			t.Fatal("expected IsError=true for missing feature")
+		}
+	})
 
-			if tt.contains != "" {
-				if !strings.Contains(text, tt.contains) {
-					t.Errorf("result text %q does not contain %q", text, tt.contains)
-				}
-			}
+	t.Run("works without files parameter", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		handler := handleUpdateStatus(NewFileBrainClient(tmpDir), "/test-repo", "agent-1")
 
-			if tt.checkJSON != nil {
-				tt.checkJSON(t, text)
-			}
-		})
-	}
+		req := gomcp.CallToolRequest{}
+		req.Params.Arguments = map[string]interface{}{
+			"feature": "research task",
+		}
+
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+		if result.IsError {
+			t.Fatal("unexpected error for status without files")
+		}
+
+		brain, err := readBrain(tmpDir, "/test-repo")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(brain.Agents["agent-1"].Files) != 0 {
+			t.Errorf("expected 0 files, got %d", len(brain.Agents["agent-1"].Files))
+		}
+	})
 }
 
-func TestHandleGetSharedContext(t *testing.T) {
-	tests := []struct {
-		name        string
-		contextJSON string // if empty, no file is created
-		createFile  bool
-		wantErr     bool
-		contains    string
-		checkJSON   func(t *testing.T, text string)
-	}{
-		{
-			name:       "no shared context file returns empty array",
-			createFile: false,
-			contains:   "[]",
-		},
-		{
-			name:       "shared context with entries",
-			createFile: true,
-			contextJSON: `[
-				{
-					"instance_id": "agent-1",
-					"type": "discovery",
-					"content": "Found rate limiter in middleware.go",
-					"timestamp": "2026-02-20T10:00:00Z"
+func TestHandleGetBrain(t *testing.T) {
+	t.Run("returns empty brain when no file exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		handler := handleGetBrain(NewFileBrainClient(tmpDir), "/test-repo", "agent-1")
+
+		req := gomcp.CallToolRequest{}
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+
+		text := resultText(t, result)
+		var view brain.BrainState
+		if err := json.Unmarshal([]byte(text), &view); err != nil {
+			t.Fatalf("failed to parse brain view: %v", err)
+		}
+		if len(view.Agents) != 0 {
+			t.Errorf("expected 0 agents, got %d", len(view.Agents))
+		}
+	})
+
+	t.Run("returns agents and filtered messages", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		bf := &brainFile{
+			Agents: map[string]*agentStatus{
+				"agent-1": {
+					Feature:   "auth",
+					Files:     []string{"auth.go"},
+					UpdatedAt: time.Now().UTC().Format(time.RFC3339),
 				},
-				{
-					"instance_id": "agent-2",
-					"type": "decision",
-					"content": "Using repository pattern for data access"
-				}
-			]`,
-			checkJSON: func(t *testing.T, text string) {
-				t.Helper()
-				var entries []sharedContextEntry
-				if err := json.Unmarshal([]byte(text), &entries); err != nil {
-					t.Fatalf("failed to parse JSON response: %v", err)
-				}
-				if len(entries) != 2 {
-					t.Fatalf("len(entries) = %d, want 2", len(entries))
-				}
-				if entries[0].InstanceID != "agent-1" {
-					t.Errorf("entries[0].InstanceID = %q, want %q", entries[0].InstanceID, "agent-1")
-				}
-				if entries[0].Type != "discovery" {
-					t.Errorf("entries[0].Type = %q, want %q", entries[0].Type, "discovery")
-				}
-				if entries[0].Content != "Found rate limiter in middleware.go" {
-					t.Errorf("entries[0].Content = %q, want %q", entries[0].Content, "Found rate limiter in middleware.go")
-				}
-				if entries[0].Timestamp != "2026-02-20T10:00:00Z" {
-					t.Errorf("entries[0].Timestamp = %q, want %q", entries[0].Timestamp, "2026-02-20T10:00:00Z")
-				}
-				if entries[1].InstanceID != "agent-2" {
-					t.Errorf("entries[1].InstanceID = %q, want %q", entries[1].InstanceID, "agent-2")
-				}
-				if entries[1].Timestamp != "" {
-					t.Errorf("entries[1].Timestamp = %q, want empty", entries[1].Timestamp)
-				}
+				"agent-2": {
+					Feature:   "tests",
+					Files:     []string{"auth_test.go"},
+					UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+				},
 			},
-		},
-		{
-			name:        "empty shared context array",
-			createFile:  true,
-			contextJSON: `[]`,
-			contains:    "[]",
-		},
-		{
-			name:        "malformed shared context",
-			createFile:  true,
-			contextJSON: `{not valid json`,
-			wantErr:     true,
-			contains:    "failed to parse shared context",
-		},
-	}
+			Messages: []brainMessage{
+				{From: "agent-2", To: "agent-1", Content: "I'll handle tests", Timestamp: time.Now().UTC().Format(time.RFC3339)},
+				{From: "agent-1", To: "agent-2", Content: "Sounds good", Timestamp: time.Now().UTC().Format(time.RFC3339)},
+				{From: "agent-2", To: "", Content: "Broadcast to all", Timestamp: time.Now().UTC().Format(time.RFC3339)},
+			},
+		}
+		if err := writeBrain(tmpDir, "/test-repo", bf); err != nil {
+			t.Fatal(err)
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
+		handler := handleGetBrain(NewFileBrainClient(tmpDir), "/test-repo", "agent-1")
+		req := gomcp.CallToolRequest{}
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
 
-			if tt.createFile {
-				contextPath := filepath.Join(tmpDir, "shared_context.json")
-				if err := os.WriteFile(contextPath, []byte(tt.contextJSON), 0600); err != nil {
-					t.Fatalf("failed to write shared context file: %v", err)
-				}
-			}
+		text := resultText(t, result)
+		var view brain.BrainState
+		if err := json.Unmarshal([]byte(text), &view); err != nil {
+			t.Fatalf("failed to parse brain view: %v", err)
+		}
 
-			handler := handleGetSharedContext(tmpDir)
+		if len(view.Agents) != 2 {
+			t.Errorf("expected 2 agents, got %d", len(view.Agents))
+		}
 
+		// agent-1 should see: message to agent-1 + broadcast, NOT message to agent-2
+		if len(view.Messages) != 2 {
+			t.Fatalf("expected 2 messages for agent-1, got %d", len(view.Messages))
+		}
+		if view.Messages[0].Content != "I'll handle tests" {
+			t.Errorf("Messages[0].Content = %q, want %q", view.Messages[0].Content, "I'll handle tests")
+		}
+		if view.Messages[1].Content != "Broadcast to all" {
+			t.Errorf("Messages[1].Content = %q, want %q", view.Messages[1].Content, "Broadcast to all")
+		}
+	})
+
+	t.Run("prunes stale agents", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		bf := &brainFile{
+			Agents: map[string]*agentStatus{
+				"fresh": {
+					Feature:   "active work",
+					UpdatedAt: time.Now().UTC().Format(time.RFC3339),
+				},
+				"stale": {
+					Feature:   "old work",
+					UpdatedAt: time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339),
+				},
+			},
+		}
+		if err := writeBrain(tmpDir, "/test-repo", bf); err != nil {
+			t.Fatal(err)
+		}
+
+		handler := handleGetBrain(NewFileBrainClient(tmpDir), "/test-repo", "fresh")
+		req := gomcp.CallToolRequest{}
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+
+		text := resultText(t, result)
+		var view brain.BrainState
+		if err := json.Unmarshal([]byte(text), &view); err != nil {
+			t.Fatalf("failed to parse brain view: %v", err)
+		}
+
+		if len(view.Agents) != 1 {
+			t.Fatalf("expected 1 agent after pruning, got %d", len(view.Agents))
+		}
+		if _, ok := view.Agents["fresh"]; !ok {
+			t.Error("expected 'fresh' agent to survive pruning")
+		}
+	})
+}
+
+func TestHandleSendMessage(t *testing.T) {
+	t.Run("sends directed message", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		handler := handleSendMessage(NewFileBrainClient(tmpDir), "/test-repo", "agent-1")
+
+		req := gomcp.CallToolRequest{}
+		req.Params.Arguments = map[string]interface{}{
+			"to":      "agent-2",
+			"message": "Don't touch auth.go, I'm refactoring it",
+		}
+
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+		text := resultText(t, result)
+		if !strings.Contains(text, "agent-2") {
+			t.Errorf("expected confirmation mentioning agent-2, got: %s", text)
+		}
+
+		brain, err := readBrain(tmpDir, "/test-repo")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(brain.Messages) != 1 {
+			t.Fatalf("expected 1 message, got %d", len(brain.Messages))
+		}
+		if brain.Messages[0].From != "agent-1" {
+			t.Errorf("From = %q, want %q", brain.Messages[0].From, "agent-1")
+		}
+		if brain.Messages[0].To != "agent-2" {
+			t.Errorf("To = %q, want %q", brain.Messages[0].To, "agent-2")
+		}
+	})
+
+	t.Run("broadcasts when to is empty", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		handler := handleSendMessage(NewFileBrainClient(tmpDir), "/test-repo", "agent-1")
+
+		req := gomcp.CallToolRequest{}
+		req.Params.Arguments = map[string]interface{}{
+			"message": "Config format changed, update your parsers",
+		}
+
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+		text := resultText(t, result)
+		if !strings.Contains(text, "all agents") {
+			t.Errorf("expected confirmation mentioning 'all agents', got: %s", text)
+		}
+
+		brain, err := readBrain(tmpDir, "/test-repo")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if brain.Messages[0].To != "" {
+			t.Errorf("To = %q, want empty for broadcast", brain.Messages[0].To)
+		}
+	})
+
+	t.Run("missing message returns error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		handler := handleSendMessage(NewFileBrainClient(tmpDir), "/test-repo", "agent-1")
+
+		req := gomcp.CallToolRequest{}
+		req.Params.Arguments = map[string]interface{}{}
+
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+		if !result.IsError {
+			t.Fatal("expected IsError=true for missing message")
+		}
+	})
+
+	t.Run("caps messages at 50", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Pre-populate with 49 messages
+		brain := &brainFile{Agents: make(map[string]*agentStatus)}
+		for i := 0; i < 49; i++ {
+			brain.Messages = append(brain.Messages, brainMessage{
+				From: "old", To: "", Content: "old msg", Timestamp: time.Now().UTC().Format(time.RFC3339),
+			})
+		}
+		if err := writeBrain(tmpDir, "/test-repo", brain); err != nil {
+			t.Fatal(err)
+		}
+
+		// Send 2 more messages (total 51, should be capped to 50)
+		handler := handleSendMessage(NewFileBrainClient(tmpDir), "/test-repo", "agent-1")
+		for _, msg := range []string{"msg-50", "msg-51"} {
 			req := gomcp.CallToolRequest{}
-			result, err := handler(context.Background(), req)
-			if err != nil {
-				t.Fatalf("handler returned error: %v", err)
+			req.Params.Arguments = map[string]interface{}{"message": msg}
+			if _, err := handler(context.Background(), req); err != nil {
+				t.Fatal(err)
 			}
+		}
 
-			text := resultText(t, result)
+		brain, err := readBrain(tmpDir, "/test-repo")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(brain.Messages) != 50 {
+			t.Fatalf("expected 50 messages after cap, got %d", len(brain.Messages))
+		}
+		// The last message should be "msg-51"
+		if brain.Messages[49].Content != "msg-51" {
+			t.Errorf("last message = %q, want %q", brain.Messages[49].Content, "msg-51")
+		}
+	})
+}
 
-			if tt.wantErr {
-				if !result.IsError {
-					t.Fatalf("expected IsError=true, got false; text: %s", text)
-				}
-			}
+// setupGitWorktreeForTest creates a temporary git repo with a branch and state.json
+// pointing at it. Returns (hivemindDir, worktreePath, baseCommitSHA).
+func setupGitWorktreeForTest(t *testing.T, instanceID string) (string, string, string) {
+	t.Helper()
 
-			if tt.contains != "" {
-				if !strings.Contains(text, tt.contains) {
-					t.Errorf("result text %q does not contain %q", text, tt.contains)
-				}
-			}
+	repoDir := t.TempDir()
 
-			if tt.checkJSON != nil {
-				tt.checkJSON(t, text)
-			}
-		})
+	// Initialize git repo and make a base commit.
+	cmds := [][]string{
+		{"git", "-C", repoDir, "init"},
+		{"git", "-C", repoDir, "config", "user.email", "test@test.com"},
+		{"git", "-C", repoDir, "config", "user.name", "Test"},
 	}
+	for _, c := range cmds {
+		if out, err := exec.Command(c[0], c[1:]...).CombinedOutput(); err != nil {
+			t.Fatalf("cmd %v failed: %s (%v)", c, out, err)
+		}
+	}
+
+	// Create initial file and commit.
+	if err := os.WriteFile(filepath.Join(repoDir, "main.go"), []byte("package main\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range [][]string{
+		{"git", "-C", repoDir, "add", "."},
+		{"git", "-C", repoDir, "commit", "-m", "initial"},
+	} {
+		if out, err := exec.Command(c[0], c[1:]...).CombinedOutput(); err != nil {
+			t.Fatalf("cmd %v failed: %s (%v)", c, out, err)
+		}
+	}
+
+	// Get base commit SHA.
+	out, err := exec.Command("git", "-C", repoDir, "rev-parse", "HEAD").CombinedOutput()
+	if err != nil {
+		t.Fatalf("rev-parse failed: %s (%v)", out, err)
+	}
+	baseSHA := strings.TrimSpace(string(out))
+
+	// Create branch and add a change.
+	branch := "test-branch"
+	for _, c := range [][]string{
+		{"git", "-C", repoDir, "checkout", "-b", branch},
+	} {
+		if out, err := exec.Command(c[0], c[1:]...).CombinedOutput(); err != nil {
+			t.Fatalf("cmd %v failed: %s (%v)", c, out, err)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(repoDir, "new.go"), []byte("package main\n// new file\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range [][]string{
+		{"git", "-C", repoDir, "add", "."},
+		{"git", "-C", repoDir, "commit", "-m", "add new file"},
+	} {
+		if out, err := exec.Command(c[0], c[1:]...).CombinedOutput(); err != nil {
+			t.Fatalf("cmd %v failed: %s (%v)", c, out, err)
+		}
+	}
+
+	// Write state.json with instance pointing at this repo as its worktree.
+	hivemindDir := t.TempDir()
+	stateJSON := `{
+		"instances": [
+			{
+				"title": "` + instanceID + `",
+				"path": "` + repoDir + `",
+				"branch": "` + branch + `",
+				"status": 0,
+				"program": "claude",
+				"worktree": {
+					"repo_path": "` + repoDir + `",
+					"worktree_path": "` + repoDir + `",
+					"session_name": "` + instanceID + `",
+					"branch_name": "` + branch + `",
+					"base_commit_sha": "` + baseSHA + `"
+				},
+				"diff_stats": { "added": 2, "removed": 0 }
+			}
+		]
+	}`
+	if err := os.WriteFile(filepath.Join(hivemindDir, "state.json"), []byte(stateJSON), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	return hivemindDir, repoDir, baseSHA
+}
+
+func TestHandleGetMySessionSummary(t *testing.T) {
+	t.Run("returns summary with git data", func(t *testing.T) {
+		hivemindDir, _, _ := setupGitWorktreeForTest(t, "agent-1")
+		reader := NewStateReader(hivemindDir)
+		handler := handleGetMySessionSummary(reader, "agent-1")
+
+		req := gomcp.CallToolRequest{}
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+
+		text := resultText(t, result)
+
+		var summary struct {
+			Title        string `json:"title"`
+			Branch       string `json:"branch"`
+			Status       string `json:"status"`
+			ChangedFiles string `json:"changed_files"`
+			Commits      string `json:"commits"`
+		}
+		if err := json.Unmarshal([]byte(text), &summary); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+		if summary.Title != "agent-1" {
+			t.Errorf("Title = %q, want %q", summary.Title, "agent-1")
+		}
+		if summary.Branch != "test-branch" {
+			t.Errorf("Branch = %q, want %q", summary.Branch, "test-branch")
+		}
+		if !strings.Contains(summary.ChangedFiles, "new.go") {
+			t.Errorf("ChangedFiles %q should contain 'new.go'", summary.ChangedFiles)
+		}
+		if !strings.Contains(summary.Commits, "add new file") {
+			t.Errorf("Commits %q should contain 'add new file'", summary.Commits)
+		}
+	})
+
+	t.Run("unknown instance returns error", func(t *testing.T) {
+		hivemindDir, _, _ := setupGitWorktreeForTest(t, "agent-1")
+		reader := NewStateReader(hivemindDir)
+		handler := handleGetMySessionSummary(reader, "nonexistent")
+
+		req := gomcp.CallToolRequest{}
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+		if !result.IsError {
+			t.Fatal("expected IsError=true for unknown instance")
+		}
+	})
+
+	t.Run("empty instanceID returns error", func(t *testing.T) {
+		hivemindDir, _, _ := setupGitWorktreeForTest(t, "agent-1")
+		reader := NewStateReader(hivemindDir)
+		handler := handleGetMySessionSummary(reader, "")
+
+		req := gomcp.CallToolRequest{}
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+		if !result.IsError {
+			t.Fatal("expected IsError=true for empty instanceID")
+		}
+		text := resultText(t, result)
+		if !strings.Contains(text, "HIVEMIND_INSTANCE_ID") {
+			t.Errorf("error text %q should mention HIVEMIND_INSTANCE_ID", text)
+		}
+	})
+}
+
+func TestHandleGetMyDiff(t *testing.T) {
+	t.Run("returns diff output", func(t *testing.T) {
+		hivemindDir, _, _ := setupGitWorktreeForTest(t, "agent-1")
+		reader := NewStateReader(hivemindDir)
+		handler := handleGetMyDiff(reader, "agent-1")
+
+		req := gomcp.CallToolRequest{}
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+
+		text := resultText(t, result)
+		if !strings.Contains(text, "new.go") {
+			t.Errorf("diff %q should mention 'new.go'", text)
+		}
+	})
+
+	t.Run("unknown instance returns error", func(t *testing.T) {
+		hivemindDir, _, _ := setupGitWorktreeForTest(t, "agent-1")
+		reader := NewStateReader(hivemindDir)
+		handler := handleGetMyDiff(reader, "nonexistent")
+
+		req := gomcp.CallToolRequest{}
+		result, err := handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("handler returned error: %v", err)
+		}
+		if !result.IsError {
+			t.Fatal("expected IsError=true for unknown instance")
+		}
+	})
 }

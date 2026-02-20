@@ -5,14 +5,15 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"github.com/ByteMirror/hivemind/cmd"
-	"github.com/ByteMirror/hivemind/log"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ByteMirror/hivemind/cmd"
+	"github.com/ByteMirror/hivemind/log"
 )
 
 const ProgramClaude = "claude"
@@ -59,11 +60,19 @@ type TmuxSession struct {
 
 const TmuxPrefix = "hivemind_"
 
-var whiteSpaceRegex = regexp.MustCompile(`\s+`)
+var tmuxNameUnsafeCharsRegex = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
+
+// ansiRegex strips ANSI escape codes from terminal output.
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+// stripANSI removes ANSI escape codes from a string.
+func stripANSI(s string) string {
+	return ansiRegex.ReplaceAllString(s, "")
+}
 
 func toHivemindTmuxName(str string) string {
-	str = whiteSpaceRegex.ReplaceAllString(str, "")
-	str = strings.ReplaceAll(str, ".", "_") // tmux replaces all . with _
+	str = strings.ReplaceAll(str, " ", "-")
+	str = tmuxNameUnsafeCharsRegex.ReplaceAllString(str, "")
 	return fmt.Sprintf("%s%s", TmuxPrefix, str)
 }
 
@@ -123,16 +132,21 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
 	}
 
-	// Append --dangerously-skip-permissions for Claude programs if enabled
-	program := t.program
-	if t.skipPermissions && isClaudeProgram(program) {
-		program = program + " --dangerously-skip-permissions"
+	// Split program into command and arguments to prevent shell injection.
+	// tmux interprets a single program argument as a shell command, so we
+	// pass each part separately to avoid metacharacter expansion.
+	programParts := strings.Fields(t.program)
+	if t.skipPermissions && isClaudeProgram(t.program) {
+		programParts = append(programParts, "--dangerously-skip-permissions")
 	}
 
 	t.reportProgress(1, "Creating tmux session...")
 
-	// Create a new detached tmux session and start claude in it
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, program)
+	// Create a new detached tmux session and start the program in it.
+	// Each argument is passed separately so tmux executes directly without shell.
+	tmuxArgs := []string{"new-session", "-d", "-s", t.sanitizedName, "-c", workDir}
+	tmuxArgs = append(tmuxArgs, programParts...)
+	cmd := exec.Command("tmux", tmuxArgs...)
 
 	ptmx, err := t.ptyFactory.Start(cmd)
 	if err != nil {
@@ -180,6 +194,12 @@ func (t *TmuxSession) Start(workDir string) error {
 		log.InfoLog.Printf("Warning: failed to enable mouse scrolling for session %s: %v", t.sanitizedName, err)
 	}
 
+	// Hide tmux status bar so only pane content is rendered in focus mode
+	statusCmd := exec.Command("tmux", "set-option", "-t", t.sanitizedName, "status", "off")
+	if err := t.cmdExec.Run(statusCmd); err != nil {
+		log.InfoLog.Printf("Warning: failed to disable status bar for session %s: %v", t.sanitizedName, err)
+	}
+
 	t.reportProgress(3, "Configuring session...")
 
 	err = t.Restore()
@@ -192,40 +212,52 @@ func (t *TmuxSession) Start(workDir string) error {
 
 	if strings.HasSuffix(t.program, ProgramClaude) || strings.HasSuffix(t.program, ProgramAider) || strings.HasSuffix(t.program, ProgramGemini) {
 		t.reportProgress(4, "Waiting for program to start...")
-		searchString := "Do you trust the files in this folder?"
-		tapFunc := t.TapEnter
-		maxWaitTime := 30 * time.Second // Much longer timeout for slower systems
-		if !strings.HasSuffix(t.program, ProgramClaude) {
+
+		isClaude := isClaudeProgram(t.program)
+
+		var searchString string
+		var tapFunc func() error
+		var maxWaitTime time.Duration
+
+		if isClaude {
+			searchString = "Do you trust the files in this folder?"
+			tapFunc = t.TapEnter
+			maxWaitTime = 15 * time.Second
+			if t.skipPermissions {
+				maxWaitTime = 10 * time.Second
+			}
+		} else {
 			searchString = "Open documentation url for more info"
 			tapFunc = t.TapDAndEnter
-			maxWaitTime = 45 * time.Second // Aider/Gemini take longer to start
+			maxWaitTime = 45 * time.Second
 		}
 
-		// Deal with "do you trust the files" screen by sending an enter keystroke.
-		// Use exponential backoff with longer timeout for reliability on slow systems
 		startTime := time.Now()
-		sleepDuration := 100 * time.Millisecond
-		attempt := 0
-
 		for time.Since(startTime) < maxWaitTime {
-			attempt++
-			time.Sleep(sleepDuration)
+			time.Sleep(250 * time.Millisecond)
 			content, err := t.CapturePaneContent()
 			if err != nil {
-				// Session might not be ready yet, continue waiting
-			} else {
-				if strings.Contains(content, searchString) {
-					if err := tapFunc(); err != nil {
-						log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
-					}
-					break
-				}
+				continue
 			}
 
-			// Exponential backoff with cap at 1 second
-			sleepDuration = time.Duration(float64(sleepDuration) * 1.2)
-			if sleepDuration > time.Second {
-				sleepDuration = time.Second
+			clean := strings.TrimSpace(stripANSI(content))
+			if len(clean) == 0 {
+				continue // Program hasn't produced output yet
+			}
+
+			// When skipPermissions is active, skip trust prompt matching —
+			// just wait for substantial output indicating the program started.
+			if !(isClaude && t.skipPermissions) && strings.Contains(clean, searchString) {
+				if err := tapFunc(); err != nil {
+					log.ErrorLog.Printf("could not dismiss prompt: %v", err)
+				}
+				break
+			}
+
+			// Substantial content without the prompt means the program
+			// started and moved past any trust screen (or never showed one).
+			if len(clean) > 100 {
+				break
 			}
 		}
 	}

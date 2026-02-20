@@ -1,12 +1,13 @@
 package config
 
 import (
-	"github.com/ByteMirror/hivemind/log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/ByteMirror/hivemind/log"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

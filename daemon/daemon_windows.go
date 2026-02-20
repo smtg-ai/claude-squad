@@ -3,8 +3,9 @@
 package daemon
 
 import (
-	"golang.org/x/sys/windows"
 	"syscall"
+
+	"golang.org/x/sys/windows"
 )
 
 // getSysProcAttr returns platform-specific process attributes for detaching the child process

@@ -15,6 +15,9 @@ export default function PixelBee({ scale = 3, bob = true, className }: PixelBeeP
   const [wingUp, setWingUp] = useState(true);
   const sprite1Ref = useRef<HTMLCanvasElement | null>(null);
   const sprite2Ref = useRef<HTMLCanvasElement | null>(null);
+  const blinkCounterRef = useRef(0);
+  const blinkActiveRef = useRef(0);
+  const nextBlinkRef = useRef(20 + Math.floor(Math.random() * 10));
 
   // Pre-render sprites once on mount
   useEffect(() => {
@@ -37,9 +40,29 @@ export default function PixelBee({ scale = 3, bob = true, className }: PixelBeeP
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Blink timing (piggybacks on wing flutter ticks, ~150ms each)
+    blinkCounterRef.current++;
+    if (blinkActiveRef.current > 0) {
+      blinkActiveRef.current--;
+    } else if (blinkCounterRef.current >= nextBlinkRef.current) {
+      blinkActiveRef.current = 2; // blink for 2 ticks (~300ms)
+      blinkCounterRef.current = 0;
+      nextBlinkRef.current = 20 + Math.floor(Math.random() * 10); // 3-4.5s
+    }
+
+    ctx.clearRect(0, 0, 32, 32);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(sprite, 0, 0);
+
+    // Draw closed eyes overlay when blinking
+    if (blinkActiveRef.current > 0) {
+      ctx.fillStyle = "#F0A868";
+      ctx.fillRect(11, 7, 4, 2);
+      ctx.fillRect(17, 7, 4, 2);
+      ctx.fillStyle = "#2a2a3a";
+      ctx.fillRect(11, 9, 4, 1);
+      ctx.fillRect(17, 9, 4, 1);
+    }
   }, [wingUp]);
 
   return (

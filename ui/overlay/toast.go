@@ -2,12 +2,13 @@ package overlay
 
 import (
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-runewidth"
+	"github.com/muesli/reflow/wordwrap"
 )
 
 // ToastType identifies the kind of toast notification.
@@ -39,8 +40,9 @@ const (
 	SuccessDismissAfter = 3 * time.Second
 	ErrorDismissAfter   = 5 * time.Second
 
-	ToastWidth = 38
-	MaxToasts  = 5
+	MinToastWidth = 38
+	MaxToastWidth = 55
+	MaxToasts     = 5
 )
 
 // idCounter is a global atomic counter used to generate unique toast IDs.
@@ -77,6 +79,18 @@ func NewToastManager(s *spinner.Model) *ToastManager {
 func (tm *ToastManager) SetSize(width, height int) {
 	tm.width = width
 	tm.height = height
+}
+
+// toastWidth returns the dynamic toast width based on the viewport.
+func (tm *ToastManager) toastWidth() int {
+	w := tm.width * 40 / 100
+	if w < MinToastWidth {
+		return MinToastWidth
+	}
+	if w > MaxToastWidth {
+		return MaxToastWidth
+	}
+	return w
 }
 
 // Info creates an informational toast and returns its ID.
@@ -233,13 +247,13 @@ func toastColor(typ ToastType) string {
 }
 
 // toastStyle returns a lipgloss style for rendering a toast of the given type.
-func toastStyle(typ ToastType) lipgloss.Style {
+func toastStyle(typ ToastType, width int) lipgloss.Style {
 	color := toastColor(typ)
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(color)).
 		Padding(0, 1).
-		Width(ToastWidth)
+		Width(width)
 }
 
 // toastIcon returns a styled icon string for the given toast type.
@@ -261,8 +275,8 @@ func (tm *ToastManager) toastIcon(typ ToastType) string {
 }
 
 // slideOffset returns the horizontal offset for a toast's slide animation.
-func (t *toast) slideOffset() int {
-	fullOffset := ToastWidth + 4
+func (t *toast) slideOffset(toastWidth int) int {
+	fullOffset := toastWidth + 4
 	switch t.Phase {
 	case PhaseSlidingIn:
 		elapsed := time.Since(t.PhaseStart)
@@ -289,15 +303,22 @@ func (t *toast) slideOffset() int {
 
 // renderToast renders a single toast notification as a styled string.
 func (tm *ToastManager) renderToast(t *toast) string {
+	tw := tm.toastWidth()
 	icon := tm.toastIcon(t.Type)
-	// ToastWidth - 4 accounts for border (2) + padding (2), then subtract icon width + space.
-	maxMsgWidth := ToastWidth - 4 - runewidth.StringWidth(icon) - 1
-	msg := t.Message
-	if runewidth.StringWidth(msg) > maxMsgWidth {
-		msg = runewidth.Truncate(msg, maxMsgWidth, "...")
+	// tw - 4 accounts for border (2) + padding (2), then subtract icon width + space.
+	maxMsgWidth := tw - 4 - lipgloss.Width(icon) - 1
+	if maxMsgWidth < 10 {
+		maxMsgWidth = 10
 	}
-	content := icon + " " + msg
-	return toastStyle(t.Type).Render(content)
+	msg := wordwrap.String(t.Message, maxMsgWidth)
+	// Indent wrapped lines to align with the first line (after the icon).
+	lines := strings.Split(msg, "\n")
+	indent := strings.Repeat(" ", lipgloss.Width(icon)+1)
+	for i := 1; i < len(lines); i++ {
+		lines[i] = indent + lines[i]
+	}
+	content := icon + " " + strings.Join(lines, "\n")
+	return toastStyle(t.Type, tw).Render(content)
 }
 
 // View renders all active toasts stacked vertically.
@@ -320,7 +341,8 @@ func (tm *ToastManager) View() string {
 
 // GetPosition returns the x, y coordinates for placing the toast overlay.
 func (tm *ToastManager) GetPosition() (int, int) {
-	x := tm.width - ToastWidth - 4
+	tw := tm.toastWidth()
+	x := tm.width - tw - 4
 	if x < 0 {
 		x = 0
 	}
@@ -329,7 +351,7 @@ func (tm *ToastManager) GetPosition() (int, int) {
 	// Find the maximum slide offset among all animating toasts.
 	maxOffset := 0
 	for _, t := range tm.toasts {
-		offset := t.slideOffset()
+		offset := t.slideOffset(tw)
 		if offset > maxOffset {
 			maxOffset = offset
 		}

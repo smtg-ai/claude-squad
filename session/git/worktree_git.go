@@ -1,10 +1,15 @@
 package git
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+
+	"github.com/ByteMirror/hivemind/config"
+	"github.com/ByteMirror/hivemind/log"
 )
 
 // runGitCommand executes a git command and returns any error
@@ -90,11 +95,43 @@ func (g *GitWorktree) GeneratePRBody() (string, error) {
 		sections = append(sections, "## Stats\n\n"+strings.TrimSpace(stats))
 	}
 
+	// Shared context from the swarm (best-effort)
+	if contextSection := loadSharedContextSection(); contextSection != "" {
+		sections = append(sections, contextSection)
+	}
+
 	if len(sections) == 0 {
 		return "", nil
 	}
 
 	return strings.Join(sections, "\n\n"), nil
+}
+
+// loadSharedContextSection reads shared_context.json and formats it for the PR body.
+func loadSharedContextSection() string {
+	configDir, err := config.GetConfigDir()
+	if err != nil {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(configDir, "shared_context.json"))
+	if err != nil {
+		return ""
+	}
+
+	var entries []struct {
+		InstanceID string `json:"instance_id"`
+		Type       string `json:"type"`
+		Content    string `json:"content"`
+	}
+	if err := json.Unmarshal(data, &entries); err != nil || len(entries) == 0 {
+		return ""
+	}
+
+	var lines []string
+	for _, e := range entries {
+		lines = append(lines, fmt.Sprintf("- **[%s]** %s (%s)", e.Type, e.Content, e.InstanceID))
+	}
+	return "## Swarm Context\n\n" + strings.Join(lines, "\n")
 }
 
 // CreatePR pushes changes and creates a pull request on GitHub.
@@ -142,7 +179,11 @@ func (g *GitWorktree) CommitChanges(commitMessage string) error {
 		}
 
 		// Create commit (local only)
-		if _, err := g.runGitCommand(g.worktreePath, "commit", "-m", commitMessage, "--no-verify"); err != nil {
+		commitArgs := []string{"commit", "-m", commitMessage}
+		if g.skipGitHooks {
+			commitArgs = append(commitArgs, "--no-verify")
+		}
+		if _, err := g.runGitCommand(g.worktreePath, commitArgs...); err != nil {
 			log.ErrorLog.Print(err)
 			return fmt.Errorf("failed to commit changes: %w", err)
 		}

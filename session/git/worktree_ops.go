@@ -3,11 +3,12 @@ package git
 import (
 	"errors"
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/ByteMirror/hivemind/log"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -221,7 +222,7 @@ func CleanupWorktrees() error {
 			for path, branch := range worktreeBranches {
 				if strings.Contains(path, entry.Name()) {
 					// Delete the branch
-					deleteCmd := exec.Command("git", "branch", "-D", branch)
+					deleteCmd := exec.Command("git", "branch", "-D", "--", branch)
 					if err := deleteCmd.Run(); err != nil {
 						// Log the error but continue with other worktrees
 						log.ErrorLog.Printf("failed to delete branch %s: %v", branch, err)
@@ -230,8 +231,20 @@ func CleanupWorktrees() error {
 				}
 			}
 
-			// Remove the worktree directory
-			os.RemoveAll(worktreePath)
+			// Remove the worktree directory after validating the path
+			absWorktree, err := filepath.Abs(worktreePath)
+			if err != nil {
+				log.ErrorLog.Printf("failed to resolve worktree path %s: %v", worktreePath, err)
+				continue
+			}
+			absWorktreesDir, _ := filepath.Abs(worktreesDir)
+			if !strings.HasPrefix(absWorktree, absWorktreesDir+string(filepath.Separator)) {
+				log.ErrorLog.Printf("refusing to remove path outside worktrees dir: %s", absWorktree)
+				continue
+			}
+			if err := os.RemoveAll(absWorktree); err != nil {
+				log.ErrorLog.Printf("failed to remove worktree directory %s: %v", absWorktree, err)
+			}
 		}
 	}
 

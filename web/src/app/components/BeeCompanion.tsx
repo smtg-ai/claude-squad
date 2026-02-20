@@ -63,6 +63,15 @@ export default function BeeCompanion() {
     let wingTimer = 0;
     let frameCount = 0;
 
+    // Eye animation
+    let blinkTimer = 0;
+    let blinkDuration = 0;
+    let nextBlinkIn = 180 + Math.floor(Math.random() * 120);
+    let eyeLookX = 0;
+    let eyeLookY = 0;
+    let idleLookTimer = 0;
+    let idleLookDuration = 60 + Math.floor(Math.random() * 120);
+
     // Particles
     const isMobile = "ontouchstart" in window;
     const maxParticles = isMobile ? 30 : MAX_PARTICLES;
@@ -182,10 +191,73 @@ export default function BeeCompanion() {
       // Draw bee sprite
       const frameKey = `${STATE_PREFIX[beeState]}${wingFrame + 1}`;
       const sprite = spriteFrames.get(frameKey);
+      const size = 32 * BEE_SCALE;
       if (sprite) {
         ctx.imageSmoothingEnabled = false;
-        const size = 32 * BEE_SCALE;
         ctx.drawImage(sprite, beePos.x - size / 2, beePos.y - size / 2, size, size);
+      }
+
+      // ─── Eye Animation (skip when sleeping — eyes already closed) ──
+      if (sprite && beeState !== "sleeping") {
+        const px = BEE_SCALE;
+        const sx = beePos.x - size / 2;
+        const sy = beePos.y - size / 2;
+
+        // Blink timing
+        if (blinkDuration > 0) {
+          blinkDuration--;
+          ctx.fillStyle = "#F0A868";
+          const eyeTop = beeState === "excited" ? 6 : 7;
+          const eyeH = beeState === "excited" ? 3 : 2;
+          ctx.fillRect(sx + 11 * px, sy + eyeTop * px, 4 * px, eyeH * px);
+          ctx.fillRect(sx + 17 * px, sy + eyeTop * px, 4 * px, eyeH * px);
+          ctx.fillStyle = "#2a2a3a";
+          ctx.fillRect(sx + 11 * px, sy + 9 * px, 4 * px, px);
+          ctx.fillRect(sx + 17 * px, sy + 9 * px, 4 * px, px);
+        } else {
+          blinkTimer++;
+          if (blinkTimer >= nextBlinkIn) {
+            blinkDuration = 6 + Math.floor(Math.random() * 4);
+            blinkTimer = 0;
+            nextBlinkIn = 150 + Math.floor(Math.random() * 150);
+          }
+
+          // Eye tracking when moving, random look when idle
+          if (speed > 2) {
+            const lookDx = mousePos.x - beePos.x;
+            const lookDy = mousePos.y - beePos.y;
+            eyeLookX = lookDx > 40 ? 1 : lookDx < -40 ? -1 : 0;
+            eyeLookY = lookDy < -40 ? -1 : 0;
+            idleLookTimer = 0;
+          } else {
+            idleLookTimer++;
+            if (idleLookTimer >= idleLookDuration) {
+              const r = Math.random();
+              if (r < 0.25) { eyeLookX = -1; eyeLookY = 0; }
+              else if (r < 0.5) { eyeLookX = 1; eyeLookY = 0; }
+              else if (r < 0.7) { eyeLookX = 0; eyeLookY = -1; }
+              else { eyeLookX = 0; eyeLookY = 0; }
+              idleLookDuration = 60 + Math.floor(Math.random() * 120);
+              idleLookTimer = 0;
+            }
+          }
+
+          if (eyeLookX !== 0 || eyeLookY !== 0) {
+            // Clear eye areas to white
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(sx + 11 * px, sy + 7 * px, 4 * px, 3 * px);
+            ctx.fillRect(sx + 17 * px, sy + 7 * px, 4 * px, 3 * px);
+            // Draw pupils at offset position
+            ctx.fillStyle = "#1a1a2e";
+            const lpx = Math.max(11, Math.min(13, 12 + eyeLookX));
+            const lpy = Math.max(7, Math.min(8, 8 + eyeLookY));
+            ctx.fillRect(sx + lpx * px, sy + lpy * px, px, px);
+            ctx.fillRect(sx + lpx * px, sy + (lpy + 1) * px, 2 * px, px);
+            const rpx = Math.max(17, Math.min(19, 18 + eyeLookX));
+            ctx.fillRect(sx + rpx * px, sy + lpy * px, px, px);
+            ctx.fillRect(sx + rpx * px, sy + (lpy + 1) * px, 2 * px, px);
+          }
+        }
       }
 
       animationId = requestAnimationFrame(draw);

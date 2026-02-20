@@ -3,11 +3,12 @@ package tmux
 import (
 	"context"
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
 	"io"
 	"os"
 	"sync"
 	"time"
+
+	"github.com/ByteMirror/hivemind/log"
 
 	"github.com/creack/pty"
 )

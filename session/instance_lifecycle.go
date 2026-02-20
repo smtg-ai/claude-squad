@@ -16,7 +16,7 @@ import (
 // firstTimeSetup is true if this is a new instance. Otherwise, it's one loaded from storage.
 func (i *Instance) Start(firstTimeSetup bool) error {
 	if i.Title == "" {
-		return fmt.Errorf("instance title cannot be empty")
+		return ErrTitleEmpty
 	}
 
 	if firstTimeSetup {
@@ -62,7 +62,9 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 				setupErr = fmt.Errorf("%v (cleanup error: %v)", setupErr, cleanupErr)
 			}
 		} else {
-			i.started = true
+			// Store with release semantics: tmuxSession and gitWorktree are
+			// guaranteed to be visible to any goroutine that observes started==true.
+			i.started.Store(true)
 		}
 	}()
 
@@ -82,9 +84,14 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 
 		if isClaudeProgram(i.Program) {
-			if err := writeMCPConfig(i.gitWorktree.GetWorktreePath(), i.Title); err != nil {
-				log.WarningLog.Printf("failed to write MCP config: %v", err)
-			}
+			worktreePath := i.gitWorktree.GetWorktreePath()
+			repoPath := i.Path
+			title := i.Title
+			go func() {
+				if err := registerMCPServer(worktreePath, repoPath, title); err != nil {
+					log.WarningLog.Printf("failed to write MCP config: %v", err)
+				}
+			}()
 		}
 
 		i.setLoadingProgress(4, "Starting tmux session...")
@@ -108,7 +115,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 // Unlike Start(), this does NOT create a new git worktree — it uses the one provided.
 func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch string) error {
 	if i.Title == "" {
-		return fmt.Errorf("instance title cannot be empty")
+		return ErrTitleEmpty
 	}
 
 	i.LoadingTotal = 6
@@ -129,26 +136,40 @@ func (i *Instance) StartInSharedWorktree(worktree *git.GitWorktree, branch strin
 	}
 	i.tmuxSession = tmuxSession
 
-	i.setLoadingProgress(2, "Starting tmux session...")
+	// Ensure the shared worktree directory exists — it may have been
+	// cleaned up if all previous instances in the topic were killed.
+	if _, err := os.Stat(worktree.GetWorktreePath()); err != nil {
+		i.setLoadingProgress(2, "Recreating shared worktree...")
+		if err := worktree.Setup(); err != nil {
+			return fmt.Errorf("failed to recreate shared worktree: %w", err)
+		}
+	}
+
+	i.setLoadingProgress(3, "Starting tmux session...")
 
 	if isClaudeProgram(i.Program) {
-		if err := writeMCPConfig(worktree.GetWorktreePath(), i.Title); err != nil {
-			log.WarningLog.Printf("failed to write MCP config: %v", err)
-		}
+		wtPath := worktree.GetWorktreePath()
+		repoPath := i.Path
+		title := i.Title
+		go func() {
+			if err := registerMCPServer(wtPath, repoPath, title); err != nil {
+				log.WarningLog.Printf("failed to write MCP config: %v", err)
+			}
+		}()
 	}
 
 	if err := i.tmuxSession.Start(worktree.GetWorktreePath()); err != nil {
 		return fmt.Errorf("failed to start session in shared worktree: %w", err)
 	}
 
-	i.started = true
+	i.started.Store(true)
 	i.SetStatus(Running)
 	return nil
 }
 
 // Kill terminates the instance and cleans up all resources
 func (i *Instance) Kill() error {
-	if !i.started {
+	if !i.started.Load() {
 		// If instance was never started, just return success
 		return nil
 	}
@@ -175,11 +196,11 @@ func (i *Instance) Kill() error {
 
 // Pause stops the tmux session and removes the worktree, preserving the branch
 func (i *Instance) Pause() error {
-	if !i.started {
-		return fmt.Errorf("cannot pause instance that has not been started")
+	if !i.started.Load() {
+		return ErrInstanceNotStarted
 	}
 	if i.Status == Paused {
-		return fmt.Errorf("instance is already paused")
+		return ErrInstanceAlreadyPaused
 	}
 
 	var errs []error
@@ -239,20 +260,28 @@ func (i *Instance) Pause() error {
 
 // Resume recreates the worktree and restarts the tmux session
 func (i *Instance) Resume() error {
-	if !i.started {
-		return fmt.Errorf("cannot resume instance that has not been started")
+	if !i.started.Load() {
+		return ErrInstanceNotStarted
 	}
-	if i.Status != Paused {
+	if i.Status != Paused && i.Status != Loading {
 		return fmt.Errorf("can only resume paused instances")
 	}
+
+	// Reset the dead flag so the resumed session will be polled normally.
+	i.tmuxDead.Store(false)
+
+	i.LoadingTotal = 4
+	i.setLoadingProgress(1, "Checking branch...")
 
 	// Check if branch is checked out
 	if checked, err := i.gitWorktree.IsBranchCheckedOut(); err != nil {
 		log.ErrorLog.Print(err)
 		return fmt.Errorf("failed to check if branch is checked out: %w", err)
 	} else if checked {
-		return fmt.Errorf("cannot resume: branch is checked out, please switch to a different branch")
+		return ErrBranchCheckedOut
 	}
+
+	i.setLoadingProgress(2, "Setting up worktree...")
 
 	// Setup git worktree
 	if err := i.gitWorktree.Setup(); err != nil {
@@ -261,16 +290,24 @@ func (i *Instance) Resume() error {
 	}
 
 	if isClaudeProgram(i.Program) {
-		if err := writeMCPConfig(i.gitWorktree.GetWorktreePath(), i.Title); err != nil {
-			log.WarningLog.Printf("failed to write MCP config: %v", err)
-		}
+		worktreePath := i.gitWorktree.GetWorktreePath()
+		repoPath := i.Path
+		title := i.Title
+		go func() {
+			if err := registerMCPServer(worktreePath, repoPath, title); err != nil {
+				log.WarningLog.Printf("failed to write MCP config: %v", err)
+			}
+		}()
 	}
+
+	i.setLoadingProgress(3, "Restoring session...")
 
 	// Check if tmux session still exists from pause, otherwise create new one
 	if i.tmuxSession.DoesSessionExist() {
 		// Session exists, just restore PTY connection to it
 		if err := i.tmuxSession.Restore(); err != nil {
 			log.ErrorLog.Print(err)
+			i.setLoadingProgress(3, "Creating new session...")
 			// If restore fails, fall back to creating new session
 			if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 				log.ErrorLog.Print(err)
@@ -283,6 +320,7 @@ func (i *Instance) Resume() error {
 			}
 		}
 	} else {
+		i.setLoadingProgress(3, "Creating new session...")
 		// Create new tmux session
 		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 			log.ErrorLog.Print(err)
@@ -295,6 +333,54 @@ func (i *Instance) Resume() error {
 		}
 	}
 
+	i.setLoadingProgress(4, "Ready")
+	i.SetStatus(Running)
+	return nil
+}
+
+// Restart recreates the tmux session for an instance whose agent process has
+// exited (tmuxDead). If the worktree directory still exists it is reused;
+// otherwise the worktree is recreated from the branch (like Resume).
+func (i *Instance) Restart() error {
+	if !i.started.Load() {
+		return ErrInstanceNotStarted
+	}
+	if !i.tmuxDead.Load() {
+		return fmt.Errorf("instance is not dead, use Resume for paused instances")
+	}
+
+	i.LoadingTotal = 4
+	i.setLoadingProgress(1, "Restarting agent...")
+
+	worktreePath := i.gitWorktree.GetWorktreePath()
+
+	// If the worktree directory is gone, recreate it from the branch
+	if _, err := os.Stat(worktreePath); err != nil {
+		i.setLoadingProgress(2, "Recreating worktree...")
+		if err := i.gitWorktree.Setup(); err != nil {
+			return fmt.Errorf("failed to recreate worktree: %w", err)
+		}
+	}
+
+	if isClaudeProgram(i.Program) {
+		repoPath := i.Path
+		title := i.Title
+		go func() {
+			if err := registerMCPServer(worktreePath, repoPath, title); err != nil {
+				log.WarningLog.Printf("failed to write MCP config: %v", err)
+			}
+		}()
+	}
+
+	i.setLoadingProgress(3, "Creating new session...")
+
+	// The old tmux session is dead, create a fresh one with the same name
+	if err := i.tmuxSession.Start(worktreePath); err != nil {
+		return fmt.Errorf("failed to restart session: %w", err)
+	}
+
+	i.tmuxDead.Store(false)
+	i.setLoadingProgress(4, "Ready")
 	i.SetStatus(Running)
 	return nil
 }

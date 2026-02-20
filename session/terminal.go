@@ -3,9 +3,12 @@ package session
 import (
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
 )
@@ -39,6 +42,9 @@ type EmbeddedTerminal struct {
 	dataReady   chan struct{}
 	renderReady chan struct{}
 
+	// Cursor visibility tracked via emulator callback. Default visible (1).
+	cursorVisible atomic.Int32
+
 	// Render cache — written by renderLoop, read by Render().
 	// cacheMu is only held for the time it takes to swap a string and
 	// flip a bool, so it never blocks the Bubble Tea event loop.
@@ -71,6 +77,18 @@ func NewEmbeddedTerminal(sessionName string, cols, rows int) (*EmbeddedTerminal,
 		dataReady:   make(chan struct{}, 1),
 		renderReady: make(chan struct{}, 1),
 	}
+	t.cursorVisible.Store(1) // visible by default
+
+	// Track cursor visibility changes from the emulator.
+	emu.Emulator.SetCallbacks(vt.Callbacks{
+		CursorVisibility: func(visible bool) {
+			if visible {
+				t.cursorVisible.Store(1)
+			} else {
+				t.cursorVisible.Store(0)
+			}
+		},
+	})
 
 	go t.readLoop()
 	go t.responseLoop()
@@ -140,6 +158,11 @@ func (t *EmbeddedTerminal) renderLoop() {
 		// That's fine — it doesn't block the Bubble Tea event loop.
 		content := t.emu.Render()
 
+		// Overlay cursor if visible
+		if t.cursorVisible.Load() != 0 {
+			content = overlayCursor(content, t.emu.CursorPosition())
+		}
+
 		if content != lastRender {
 			t.cacheMu.Lock()
 			t.cached = content
@@ -154,6 +177,41 @@ func (t *EmbeddedTerminal) renderLoop() {
 			}
 		}
 	}
+}
+
+// overlayCursor inserts a reverse-video block at the cursor position.
+// It uses ANSI-aware string functions to correctly handle styled text.
+func overlayCursor(content string, pos struct{ X, Y int }) string {
+	lines := strings.Split(content, "\n")
+	if pos.Y < 0 || pos.Y >= len(lines) {
+		return content
+	}
+
+	line := lines[pos.Y]
+	curX := pos.X
+	if curX < 0 {
+		return content
+	}
+
+	// Split the line at the cursor column using ANSI-aware functions.
+	// Truncate gives us everything before the cursor.
+	left := ansi.Truncate(line, curX, "")
+	// Cut gives us just the character at the cursor position.
+	cursorChar := ansi.Cut(line, curX, curX+1)
+	if cursorChar == "" {
+		cursorChar = " " // cursor on empty space
+	}
+	// Everything after the cursor character.
+	right := ""
+	lineWidth := ansi.StringWidth(line)
+	if curX+1 < lineWidth {
+		right = ansi.Cut(line, curX+1, lineWidth)
+	}
+
+	// Reverse video on, character, reverse video off, then reset to avoid bleed.
+	lines[pos.Y] = left + "\x1b[7m" + cursorChar + "\x1b[27m" + right
+
+	return strings.Join(lines, "\n")
 }
 
 // drainChannel discards any pending signals on a buffered channel.

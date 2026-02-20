@@ -3,6 +3,7 @@ package session
 import (
 	"fmt"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/ByteMirror/hivemind/session/git"
@@ -21,6 +22,15 @@ const (
 	// Paused is if the instance is paused (worktree removed but branch preserved).
 	Paused
 )
+
+// SubAgentInfo holds metadata about a detected sub-agent process.
+type SubAgentInfo struct {
+	PID      int
+	Name     string  // process name (e.g. "node")
+	Activity string  // what the sub-agent is doing (e.g. "running git diff", "thinking")
+	CPU      float64 // CPU% for this sub-agent's process tree
+	MemMB    float64 // memory in MB for this sub-agent's process tree
+}
 
 // Instance is a running instance of claude code.
 type Instance struct {
@@ -48,6 +58,15 @@ type Instance struct {
 	SkipPermissions bool
 	// TopicName is the name of the topic this instance belongs to (empty = ungrouped).
 	TopicName string
+	// Role is the agent's role (coder, reviewer, architect, tester, etc.).
+	// Set when created via brain action. Empty for manually created instances.
+	Role string
+	// ParentTitle is the title of the agent that spawned this instance via brain create_instance.
+	// Empty for manually created (top-level) instances.
+	ParentTitle string
+
+	// BrainChildCount is the number of brain-spawned child instances (set by TUI, not persisted).
+	BrainChildCount int
 
 	// sharedWorktree is true if this instance uses a topic's shared worktree (should not clean it up).
 	sharedWorktree bool
@@ -70,10 +89,15 @@ type Instance struct {
 	// persistently show a running indicator without flickering.
 	PromptDetected bool
 
-	// CPUPercent is the current CPU usage of the instance's process.
+	// CPUPercent is the current CPU usage of the instance's process tree.
 	CPUPercent float64
-	// MemMB is the current memory usage in megabytes.
+	// MemMB is the current memory usage in megabytes (aggregated across process tree).
 	MemMB float64
+
+	// SubAgentCount is the number of detected sub-agent processes (e.g. spawned Claude Code tasks).
+	SubAgentCount int
+	// SubAgents holds details of each detected sub-agent process.
+	SubAgents []SubAgentInfo
 
 	// LastActivity is the most recently detected agent activity (ephemeral, not persisted).
 	LastActivity *Activity
@@ -82,8 +106,14 @@ type Instance struct {
 	diffStats *git.DiffStats
 
 	// The below fields are initialized upon calling Start().
-
-	started bool
+	// started is accessed atomically to prevent races between the async
+	// Start() goroutine and the UI tick handler that reads instance state.
+	started atomic.Bool
+	// tmuxDead is set when CapturePaneContent fails and DoesSessionExist
+	// returns false, indicating the agent process exited and the tmux
+	// session was destroyed. This prevents repeated failed capture attempts
+	// (and the resulting error toast spam) on every tick.
+	tmuxDead atomic.Bool
 	// tmuxSession is the tmux session for the instance.
 	tmuxSession *tmux.TmuxSession
 	// gitWorktree is the git worktree for the instance.
@@ -105,6 +135,8 @@ func (i *Instance) ToInstanceData() InstanceData {
 		AutoYes:         i.AutoYes,
 		SkipPermissions: i.SkipPermissions,
 		TopicName:       i.TopicName,
+		Role:            i.Role,
+		ParentTitle:     i.ParentTitle,
 	}
 
 	// Only include worktree data if gitWorktree is initialized
@@ -142,8 +174,11 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		CreatedAt:       data.CreatedAt,
 		UpdatedAt:       data.UpdatedAt,
 		Program:         data.Program,
+		AutoYes:         data.AutoYes,
 		SkipPermissions: data.SkipPermissions,
 		TopicName:       data.TopicName,
+		Role:            data.Role,
+		ParentTitle:     data.ParentTitle,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,
@@ -159,8 +194,8 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 	}
 
 	if instance.Paused() {
-		instance.started = true
 		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.SkipPermissions)
+		instance.started.Store(true)
 	} else {
 		if err := instance.Start(false); err != nil {
 			return nil, err
@@ -184,6 +219,10 @@ type InstanceOptions struct {
 	SkipPermissions bool
 	// TopicName assigns this instance to a topic.
 	TopicName string
+	// Role is the agent's role (coder, reviewer, architect, tester, etc.).
+	Role string
+	// ParentTitle is the title of the parent agent that spawned this instance.
+	ParentTitle string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -207,19 +246,21 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		AutoYes:         opts.AutoYes,
 		SkipPermissions: opts.SkipPermissions,
 		TopicName:       opts.TopicName,
+		Role:            opts.Role,
+		ParentTitle:     opts.ParentTitle,
 	}, nil
 }
 
 func (i *Instance) RepoName() (string, error) {
-	if !i.started {
-		return "", fmt.Errorf("cannot get repo name for instance that has not been started")
+	if !i.started.Load() {
+		return "", ErrInstanceNotStarted
 	}
 	return i.gitWorktree.GetRepoName(), nil
 }
 
 // GetRepoPath returns the repo path for this instance, or empty string if not started.
 func (i *Instance) GetRepoPath() string {
-	if !i.started || i.gitWorktree == nil {
+	if !i.started.Load() || i.gitWorktree == nil {
 		return ""
 	}
 	return i.gitWorktree.GetRepoPath()
@@ -244,14 +285,14 @@ func (i *Instance) setLoadingProgress(stage int, message string) {
 }
 
 func (i *Instance) Started() bool {
-	return i.started
+	return i.started.Load()
 }
 
 // SetTitle sets the title of the instance. Returns an error if the instance has started.
 // We cant change the title once it's been used for a tmux session etc.
 func (i *Instance) SetTitle(title string) error {
-	if i.started {
-		return fmt.Errorf("cannot change title of a started instance")
+	if i.started.Load() {
+		return ErrTitleImmutable
 	}
 	i.Title = title
 	return nil
@@ -264,4 +305,10 @@ func (i *Instance) Paused() bool {
 // TmuxAlive returns true if the tmux session is alive. This is a sanity check before attaching.
 func (i *Instance) TmuxAlive() bool {
 	return i.tmuxSession.DoesSessionExist()
+}
+
+// IsTmuxDead returns true if the tmux session has been detected as dead.
+// The UI uses this to show a "session ended" message instead of the preview.
+func (i *Instance) IsTmuxDead() bool {
+	return i.tmuxDead.Load()
 }

@@ -75,6 +75,9 @@ var resourceStyle = lipgloss.NewStyle().
 var activityStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.AdaptiveColor{Light: "#aaaaaa", Dark: "#666666"})
 
+var loadingStepStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.AdaptiveColor{Light: "#808080", Dark: "#808080"})
+
 // Status filter tab styles
 var activeFilterTab = lipgloss.NewStyle().
 	Background(lipgloss.Color("216")).
@@ -115,4 +118,45 @@ var sortDropdownStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("#7EC8D8")).
 	Padding(0, 1)
 
+var subAgentCountStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.AdaptiveColor{Light: "#7EC8D8", Dark: "#7EC8D8"})
+
+var subAgentRowStyle = lipgloss.NewStyle().
+	Padding(0, 1).
+	Foreground(lipgloss.AdaptiveColor{Light: "#999999", Dark: "#666666"})
+
 const branchIcon = "\uf126"
+
+// roleIcons maps agent roles to Nerd Font icons.
+var roleIcons = map[string]string{
+	"coder":     "\uf121",  //  (code)
+	"reviewer":  "\uf002",  //  (search/review)
+	"architect": "\uf1b2",  //  (cube/architecture)
+	"tester":    "\uf0c3",  //  (flask/test)
+	"writer":    "\uf040",  //  (pencil/edit)
+}
+
+// roleIconFallback is used when role is set but not in the map.
+const roleIconFallback = "\uf007" //  (user)
+
+var roleIconStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.AdaptiveColor{Light: "#7EC8D8", Dark: "#7EC8D8"})
+
+// Child instance styles for brain-spawned sub-agent rows.
+var childTitleStyle = lipgloss.NewStyle().
+	Padding(1, 1, 0, 1).
+	Foreground(lipgloss.AdaptiveColor{Light: "#888888", Dark: "#999999"})
+
+var childDescStyle = lipgloss.NewStyle().
+	Padding(0, 1, 1, 1).
+	Foreground(lipgloss.AdaptiveColor{Light: "#aaaaaa", Dark: "#777777"})
+
+var childSelectedTitleStyle = lipgloss.NewStyle().
+	Padding(1, 1, 0, 1).
+	Background(lipgloss.Color("#dde4f0")).
+	Foreground(lipgloss.AdaptiveColor{Light: "#555555", Dark: "#555555"})
+
+var childSelectedDescStyle = lipgloss.NewStyle().
+	Padding(0, 1, 1, 1).
+	Background(lipgloss.Color("#dde4f0")).
+	Foreground(lipgloss.AdaptiveColor{Light: "#555555", Dark: "#555555"})

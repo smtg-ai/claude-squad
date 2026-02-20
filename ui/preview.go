@@ -2,8 +2,9 @@ package ui
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/session"
 	"strings"
+
+	"github.com/ByteMirror/hivemind/session"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
@@ -39,6 +40,16 @@ func NewPreviewPane() *PreviewPane {
 func (p *PreviewPane) SetRawContent(content string) {
 	p.previewState = previewState{text: content}
 	p.isScrolling = false
+}
+
+// SetAsyncContent applies content from an async background fetch.
+// Unlike SetRawContent, this does not reset scroll mode — the user may
+// have entered scroll mode while the fetch was in-flight.
+func (p *PreviewPane) SetAsyncContent(content string) {
+	if p.isScrolling {
+		return
+	}
+	p.previewState = previewState{text: content}
 }
 
 func (p *PreviewPane) SetSize(width, maxHeight int) {
@@ -83,6 +94,14 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 			stepText = "Starting..."
 		}
 
+		// Distinguish between starting, resuming, and restarting
+		heading := "Starting instance"
+		if strings.HasPrefix(stepText, "Restarting") {
+			heading = "Restarting agent"
+		} else if strings.HasPrefix(stepText, "Resuming") || strings.HasPrefix(stepText, "Checking branch") || strings.HasPrefix(stepText, "Setting up worktree") || strings.HasPrefix(stepText, "Restoring session") {
+			heading = "Resuming instance"
+		}
+
 		pct := 0
 		if total > 0 {
 			pct = (stage * 100) / total
@@ -94,7 +113,7 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 			lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("#F0A868")).
-				Render("Starting instance"),
+				Render(heading),
 			"",
 			bar,
 			"",
@@ -119,6 +138,19 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 					"The instance can be checked out at '%s' (copied to your clipboard)",
 					instance.Branch,
 				)),
+		))
+		return nil
+	case instance.IsTmuxDead():
+		p.setFallbackState(lipgloss.JoinVertical(lipgloss.Center,
+			lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#FF6B6B")).
+				Render("Agent process has exited"),
+			"",
+			"Press 'r' to restart the agent in the same worktree.",
+			lipgloss.NewStyle().
+				Foreground(lipgloss.AdaptiveColor{Light: "#808080", Dark: "#808080"}).
+				Render("Your code changes are preserved."),
 		))
 		return nil
 	}

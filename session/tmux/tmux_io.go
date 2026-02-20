@@ -3,11 +3,12 @@ package tmux
 import (
 	"bytes"
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/ByteMirror/hivemind/log"
 )
 
 // TapEnter sends an enter keystroke to the tmux pane.
@@ -103,4 +104,48 @@ func (t *TmuxSession) GetPanePID() (int, error) {
 		return 0, fmt.Errorf("failed to parse pane PID: %w", err)
 	}
 	return pid, nil
+}
+
+// WindowInfo holds metadata about a single tmux window.
+type WindowInfo struct {
+	Index   int
+	Name    string
+	PanePID int
+}
+
+// ListWindows returns all windows in this tmux session.
+// Claude Code's tmux spawn backend creates sub-agents as additional windows
+// (index > 0) in the same session, so window count minus one equals sub-agent count.
+func (t *TmuxSession) ListWindows() ([]WindowInfo, error) {
+	cmd := exec.Command("tmux", "list-windows", "-t", t.sanitizedName,
+		"-F", "#{window_index} #{window_name} #{pane_pid}")
+	output, err := t.cmdExec.Output(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tmux windows: %w", err)
+	}
+
+	var windows []WindowInfo
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		idx, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		pid, err := strconv.Atoi(fields[2])
+		if err != nil {
+			continue
+		}
+		windows = append(windows, WindowInfo{
+			Index:   idx,
+			Name:    fields[1],
+			PanePID: pid,
+		})
+	}
+	return windows, nil
 }

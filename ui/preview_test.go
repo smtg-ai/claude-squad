@@ -2,16 +2,17 @@ package ui
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/cmd/cmd_test"
-	"github.com/ByteMirror/hivemind/log"
-	"github.com/ByteMirror/hivemind/session"
-	"github.com/ByteMirror/hivemind/session/tmux"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ByteMirror/hivemind/cmd/cmd_test"
+	"github.com/ByteMirror/hivemind/log"
+	"github.com/ByteMirror/hivemind/session"
+	"github.com/ByteMirror/hivemind/session/tmux"
 
 	"github.com/stretchr/testify/require"
 )

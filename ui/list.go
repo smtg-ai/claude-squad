@@ -3,10 +3,11 @@ package ui
 import (
 	"errors"
 	"fmt"
-	"github.com/ByteMirror/hivemind/log"
-	"github.com/ByteMirror/hivemind/session"
 	"sort"
 	"strings"
+
+	"github.com/ByteMirror/hivemind/log"
+	"github.com/ByteMirror/hivemind/session"
 
 	"github.com/charmbracelet/bubbles/spinner"
 )
@@ -24,9 +25,15 @@ type List struct {
 	repos map[string]int
 
 	filter       string       // topic name filter (empty = show all)
+	repoFilter   string       // repo path filter (empty = show all repos)
 	statusFilter StatusFilter // status filter (All or Active)
 	sortMode     SortMode     // how instances are sorted
 	allItems     []*session.Instance
+
+	// expanded tracks which instances have their sub-agent tree expanded (by title).
+	expanded map[string]bool
+	// childExpanded tracks which parent instances have their brain-spawned children visible.
+	childExpanded map[string]bool
 }
 
 func NewList(spinner *spinner.Model, autoYes bool) *List {
@@ -36,6 +43,8 @@ func NewList(spinner *spinner.Model, autoYes bool) *List {
 		repos:    make(map[string]int),
 		autoyes:  autoYes,
 		focused:  true,
+		expanded:      make(map[string]bool),
+		childExpanded: make(map[string]bool),
 	}
 }
 
@@ -78,10 +87,11 @@ const activeTabText = "2 Active"
 // list's top-left corner) hits a filter tab. Returns the filter and true if a tab was
 // clicked, or false if the click was outside the tab area.
 func (l *List) HandleTabClick(localX, localY int) (StatusFilter, bool) {
-	// The list String() starts with 2 newlines, then the tab row, then 2 more
-	// newlines. Accept clicks on rows 1-3 to cover the tab area generously,
-	// since the exact row depends on how lipgloss.Place renders the output.
-	if localY < 1 || localY > 3 {
+	// The list String() starts with a blank line, then the tab row.
+	// Accept clicks on rows 1-2 to cover the tab area.
+	log.InfoLog.Printf("HandleTabClick: localX=%d localY=%d", localX, localY)
+	if localY < 1 || localY > 2 {
+		log.InfoLog.Printf("HandleTabClick: Y out of range (need 1-2, got %d)", localY)
 		return 0, false
 	}
 
@@ -165,6 +175,24 @@ func (l *List) Kill() {
 		if inst == targetInstance {
 			l.allItems = append(l.allItems[:i], l.allItems[i+1:]...)
 			break
+		}
+	}
+}
+
+// KillInstanceByTitle kills and removes a single instance by its title.
+func (l *List) KillInstanceByTitle(title string) {
+	for i, inst := range l.allItems {
+		if inst.Title == title {
+			if err := inst.Kill(); err != nil {
+				log.ErrorLog.Printf("could not kill instance %s: %v", inst.Title, err)
+			}
+			repoName, err := inst.RepoName()
+			if err == nil {
+				l.rmRepo(repoName)
+			}
+			l.allItems = append(l.allItems[:i], l.allItems[i+1:]...)
+			l.rebuildFilteredItems()
+			return
 		}
 	}
 }
@@ -256,6 +284,59 @@ func (l *List) SetSelectedInstance(idx int) {
 	l.selectedIdx = idx
 }
 
+// SelectInstanceByRef finds an instance by pointer in the filtered list and selects it.
+func (l *List) SelectInstanceByRef(instance *session.Instance) {
+	for i, item := range l.items {
+		if item == instance {
+			l.selectedIdx = i
+			return
+		}
+	}
+}
+
+// ToggleExpanded toggles the sub-agent tree for the currently selected instance.
+// It first tries tmux sub-agents, then brain-spawned children.
+// Returns true if the toggle was meaningful.
+func (l *List) ToggleExpanded() bool {
+	inst := l.GetSelectedInstance()
+	if inst == nil {
+		return false
+	}
+	// Try tmux sub-agents first.
+	if inst.SubAgentCount > 0 {
+		l.expanded[inst.Title] = !l.expanded[inst.Title]
+		return true
+	}
+	// Then try brain-spawned children.
+	return l.ToggleChildExpanded()
+}
+
+// ToggleChildExpanded toggles whether brain-spawned children of the selected instance are shown.
+func (l *List) ToggleChildExpanded() bool {
+	inst := l.GetSelectedInstance()
+	if inst == nil {
+		return false
+	}
+	hasChildren := false
+	for _, item := range l.allItems {
+		if item.ParentTitle == inst.Title {
+			hasChildren = true
+			break
+		}
+	}
+	if !hasChildren {
+		return false
+	}
+	l.childExpanded[inst.Title] = !l.childExpanded[inst.Title]
+	l.rebuildFilteredItems()
+	return true
+}
+
+// IsExpanded returns whether the given instance title has its sub-agent tree expanded.
+func (l *List) IsExpanded(title string) bool {
+	return l.expanded[title]
+}
+
 // GetInstances returns all instances (unfiltered) for persistence and metadata updates.
 func (l *List) GetInstances() []*session.Instance {
 	return l.allItems
@@ -270,10 +351,17 @@ func (l *List) TotalInstances() int {
 // Empty string shows all. SidebarUngrouped shows only ungrouped instances.
 func (l *List) SetFilter(topicFilter string) {
 	l.filter = topicFilter
+	l.repoFilter = ""
 	l.rebuildFilteredItems()
 }
 
-// SetSearchFilter filters instances by search query across all topics.
+// SetFilterByRepoAndTopic filters instances by both topic and repo path.
+func (l *List) SetFilterByRepoAndTopic(topicFilter, repoPath string) {
+	l.filter = topicFilter
+	l.repoFilter = repoPath
+	l.rebuildFilteredItems()
+}
+
 // SetSearchFilter filters instances by search query across all topics.
 func (l *List) SetSearchFilter(query string) {
 	l.SetSearchFilterWithTopic(query, "")
@@ -282,18 +370,28 @@ func (l *List) SetSearchFilter(query string) {
 // SetSearchFilterWithTopic filters instances by search query, optionally scoped to a topic.
 // topicFilter: "" = all topics, "__ungrouped__" = ungrouped only, otherwise = specific topic.
 func (l *List) SetSearchFilterWithTopic(query string, topicFilter string) {
+	l.SetSearchFilterWithTopicAndRepo(query, topicFilter, "")
+}
+
+// SetSearchFilterWithTopicAndRepo filters instances by search query, topic, and optionally repo.
+func (l *List) SetSearchFilterWithTopicAndRepo(query string, topicFilter string, repoPath string) {
 	l.filter = ""
+	l.repoFilter = ""
 	filtered := make([]*session.Instance, 0)
 	for _, inst := range l.allItems {
 		// Check status filter
 		if l.statusFilter == StatusFilterActive && inst.Paused() {
 			continue
 		}
+		// Check repo filter
+		if repoPath != "" && l.instanceRepoPath(inst) != repoPath {
+			continue
+		}
 		// Check topic filter
 		if topicFilter != "" {
-			if topicFilter == "__ungrouped__" && inst.TopicName != "" {
+			if IsUngroupedID(topicFilter) && inst.TopicName != "" {
 				continue
-			} else if topicFilter != "__ungrouped__" && inst.TopicName != topicFilter {
+			} else if !IsUngroupedID(topicFilter) && inst.TopicName != topicFilter {
 				continue
 			}
 		}
@@ -313,32 +411,61 @@ func (l *List) SetSearchFilterWithTopic(query string, topicFilter string) {
 	}
 }
 
+// instanceRepoPath returns the repo path for an instance, falling back to inst.Path.
+func (l *List) instanceRepoPath(inst *session.Instance) string {
+	rp := inst.GetRepoPath()
+	if rp == "" {
+		return inst.Path
+	}
+	return rp
+}
+
 // Clear removes all instances from the list.
 func (l *List) Clear() {
 	l.allItems = nil
 	l.items = nil
 	l.selectedIdx = 0
 	l.filter = ""
+	l.repoFilter = ""
 }
 
 func (l *List) rebuildFilteredItems() {
-	// First apply topic filter
+	// First apply topic + repo filter.
+	// Always copy to avoid aliasing l.allItems — sorting l.items must not reorder l.allItems.
 	var topicFiltered []*session.Instance
 	if l.filter == "" {
-		topicFiltered = l.allItems
-	} else if l.filter == SidebarUngrouped {
-		topicFiltered = make([]*session.Instance, 0)
+		topicFiltered = make([]*session.Instance, 0, len(l.allItems))
 		for _, inst := range l.allItems {
-			if inst.TopicName == "" {
-				topicFiltered = append(topicFiltered, inst)
+			if l.repoFilter != "" && l.instanceRepoPath(inst) != l.repoFilter {
+				continue
 			}
+			topicFiltered = append(topicFiltered, inst)
+		}
+	} else if IsUngroupedID(l.filter) {
+		topicFiltered = make([]*session.Instance, 0)
+		repoPath := UngroupedRepoPath(l.filter)
+		for _, inst := range l.allItems {
+			if inst.TopicName != "" {
+				continue
+			}
+			if repoPath != "" && l.instanceRepoPath(inst) != repoPath {
+				continue
+			}
+			if l.repoFilter != "" && l.instanceRepoPath(inst) != l.repoFilter {
+				continue
+			}
+			topicFiltered = append(topicFiltered, inst)
 		}
 	} else {
 		topicFiltered = make([]*session.Instance, 0)
 		for _, inst := range l.allItems {
-			if inst.TopicName == l.filter {
-				topicFiltered = append(topicFiltered, inst)
+			if inst.TopicName != l.filter {
+				continue
 			}
+			if l.repoFilter != "" && l.instanceRepoPath(inst) != l.repoFilter {
+				continue
+			}
+			topicFiltered = append(topicFiltered, inst)
 		}
 	}
 
@@ -357,6 +484,9 @@ func (l *List) rebuildFilteredItems() {
 
 	// Apply sort
 	l.sortItems()
+
+	// Group brain-spawned children under their parents.
+	l.items = l.groupChildrenUnderParents(l.items)
 
 	if l.selectedIdx >= len(l.items) {
 		l.selectedIdx = len(l.items) - 1
@@ -385,4 +515,71 @@ func (l *List) sortItems() {
 			return l.items[i].Status < l.items[j].Status
 		})
 	}
+}
+
+// groupChildrenUnderParents reorders items so that child instances (ParentTitle != "")
+// appear directly after their parent, but only when the parent's children are expanded.
+// Children whose parent is not expanded are hidden from the list.
+//
+// BrainChildCount is derived from allItems (the unfiltered master list) so the expand
+// indicator is correct regardless of which topic filter is active. When a parent is
+// expanded, its children are pulled from allItems too, ensuring they appear even if
+// they wouldn't normally pass the current topic filter.
+func (l *List) groupChildrenUnderParents(items []*session.Instance) []*session.Instance {
+	// Build a lookup of ALL children from the unfiltered master list.
+	allChildrenOf := make(map[string][]*session.Instance)
+	for _, inst := range l.allItems {
+		if inst.ParentTitle != "" {
+			allChildrenOf[inst.ParentTitle] = append(allChildrenOf[inst.ParentTitle], inst)
+		}
+	}
+
+	// Separate the filtered items into parents and children.
+	var parents []*session.Instance
+	filteredChildOf := make(map[string]bool) // children already in the filtered set
+	for _, inst := range items {
+		if inst.ParentTitle == "" {
+			parents = append(parents, inst)
+		} else {
+			filteredChildOf[inst.Title] = true
+		}
+	}
+
+	// Set BrainChildCount from allItems so the count is always accurate.
+	for _, p := range parents {
+		p.BrainChildCount = len(allChildrenOf[p.Title])
+	}
+
+	// Rebuild: parent followed by its children (if expanded).
+	// Pull children from allItems so they appear even when filtered out by topic.
+	var result []*session.Instance
+	seen := make(map[string]bool) // track children added via expansion
+	for _, p := range parents {
+		result = append(result, p)
+		if l.childExpanded[p.Title] {
+			for _, child := range allChildrenOf[p.Title] {
+				result = append(result, child)
+				seen[child.Title] = true
+			}
+		}
+	}
+
+	// Orphan children (parent not in current filtered view) that were in the
+	// filtered set but not yet added — append at the end.
+	parentSeen := make(map[string]bool)
+	for _, p := range parents {
+		parentSeen[p.Title] = true
+	}
+	for parentTitle, children := range allChildrenOf {
+		if parentSeen[parentTitle] {
+			continue // parent is visible, children handled above
+		}
+		for _, child := range children {
+			if filteredChildOf[child.Title] && !seen[child.Title] {
+				result = append(result, child)
+			}
+		}
+	}
+
+	return result
 }

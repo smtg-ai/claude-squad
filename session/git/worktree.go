@@ -2,10 +2,11 @@ package git
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/config"
-	"github.com/ByteMirror/hivemind/log"
 	"path/filepath"
 	"time"
+
+	"github.com/ByteMirror/hivemind/config"
+	"github.com/ByteMirror/hivemind/log"
 )
 
 func getWorktreeDirectory() (string, error) {
@@ -29,15 +30,19 @@ type GitWorktree struct {
 	branchName string
 	// Base commit hash for the worktree
 	baseCommitSHA string
+	// skipGitHooks controls whether --no-verify is passed to git commit
+	skipGitHooks bool
 }
 
 func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string) *GitWorktree {
+	cfg := config.LoadConfig()
 	return &GitWorktree{
 		repoPath:      repoPath,
 		worktreePath:  worktreePath,
 		sessionName:   sessionName,
 		branchName:    branchName,
 		baseCommitSHA: baseCommitSHA,
+		skipGitHooks:  cfg.ShouldSkipGitHooks(),
 	}
 }
 
@@ -76,6 +81,7 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 		sessionName:  sessionName,
 		branchName:   branchName,
 		worktreePath: worktreePath,
+		skipGitHooks: cfg.ShouldSkipGitHooks(),
 	}, branchName, nil
 }
 

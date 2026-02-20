@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+
 	"github.com/ByteMirror/hivemind/app"
 	cmd2 "github.com/ByteMirror/hivemind/cmd"
 	"github.com/ByteMirror/hivemind/config"
@@ -12,7 +14,6 @@ import (
 	"github.com/ByteMirror/hivemind/session"
 	"github.com/ByteMirror/hivemind/session/git"
 	"github.com/ByteMirror/hivemind/session/tmux"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 )

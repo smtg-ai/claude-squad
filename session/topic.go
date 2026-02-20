@@ -2,14 +2,16 @@ package session
 
 import (
 	"fmt"
-	"github.com/ByteMirror/hivemind/session/git"
 	"time"
+
+	"github.com/ByteMirror/hivemind/session/git"
 )
 
 // Topic groups related instances, optionally sharing a single git worktree.
 type Topic struct {
 	Name           string
 	SharedWorktree bool
+	AutoYes        bool
 	Branch         string
 	Path           string
 	CreatedAt      time.Time
