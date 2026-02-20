@@ -30,8 +30,15 @@ func writeMCPConfig(worktreePath, instanceTitle string) error {
 
 	mcpBinary := filepath.Join(filepath.Dir(execPath), "hivemind-mcp")
 	if _, err := os.Stat(mcpBinary); err != nil {
-		// Binary doesn't exist (dev mode or not installed); skip silently.
-		return nil
+		// Try $GOPATH/bin for go install users
+		if gopath := os.Getenv("GOPATH"); gopath != "" {
+			mcpBinary = filepath.Join(gopath, "bin", "hivemind-mcp")
+		} else if home, hErr := os.UserHomeDir(); hErr == nil {
+			mcpBinary = filepath.Join(home, "go", "bin", "hivemind-mcp")
+		}
+		if _, err := os.Stat(mcpBinary); err != nil {
+			return nil // not found anywhere; skip silently
+		}
 	}
 
 	cfg := mcpConfig{

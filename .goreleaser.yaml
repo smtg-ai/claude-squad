@@ -1,7 +1,20 @@
 version: 2.9
 
 builds:
-  - binary: hivemind
+  - id: hivemind
+    binary: hivemind
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+  - id: hivemind-mcp
+    binary: hivemind-mcp
+    main: ./cmd/mcp-server/
     goos:
       - darwin
       - linux
@@ -31,6 +44,7 @@ brews:
     license: "AGPL-3.0"
     install: |
       bin.install "hivemind"
+      bin.install "hivemind-mcp"
     test: |
       system "#{bin}/hivemind", "version"
 

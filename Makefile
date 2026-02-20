@@ -5,9 +5,10 @@ run: build
 
 build:
 	go build -o hivemind .
+	go build -o hivemind-mcp ./cmd/mcp-server/
 
 test:
 	go test ./... -v
 
 clean:
-	rm -f hivemind
+	rm -f hivemind hivemind-mcp
