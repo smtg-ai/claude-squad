@@ -10,6 +10,7 @@ import (
 
 	"github.com/ByteMirror/hivemind/config"
 	"github.com/ByteMirror/hivemind/session"
+	"github.com/ByteMirror/hivemind/session/git"
 	"github.com/ByteMirror/hivemind/ui"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -880,8 +881,70 @@ func (m *home) spawnTerminalTab() tea.Cmd {
 	}
 }
 
+// buildBranchPickerItems returns sorted local branch names for the given repo path.
+func (m *home) buildBranchPickerItems(repoPath string) []string {
+	branches, err := git.ListLocalBranches(repoPath)
+	if err != nil {
+		return nil
+	}
+	sort.Strings(branches)
+	return branches
+}
+
 // killGitTab kills the lazygit subprocess.
 func (m *home) killGitTab() {
 	m.tabbedWindow.GetGitPane().Kill()
 	m.tabbedWindow.SetGitContent("")
+}
+
+// handleGitWorktreeChanged is called when the lazygit session has drifted to a
+// different worktree path than the current instance expects. This happens when
+// the user follows a lazygit "switch to worktree" prompt for a branch that is
+// checked out elsewhere.
+//
+// Because the Claude Code session's working directory is fixed at startup, it
+// remains on the original branch regardless of where lazygit navigates — causing
+// a confusing split where lazygit shows branch B but Claude Code reports branch A.
+//
+// This handler resets lazygit to the instance's own worktree so both sessions
+// stay in sync, and shows a toast explaining why.
+func (m *home) handleGitWorktreeChanged(newPath string) (tea.Model, tea.Cmd) {
+	selected := m.list.GetSelectedInstance()
+	if selected == nil {
+		return m, nil
+	}
+
+	// Identify which instance (if any) owns the destination path for the toast.
+	var otherTitle string
+	for _, inst := range m.allInstances {
+		if !inst.Started() || inst.Paused() {
+			continue
+		}
+		wt, err := inst.GetGitWorktree()
+		if err != nil {
+			continue
+		}
+		if wt.GetWorktreePath() == newPath {
+			otherTitle = inst.Title
+			break
+		}
+	}
+
+	// Exit focus mode first so the UI is in a clean state before the reset.
+	if m.state == stateFocusAgent {
+		m.exitFocusMode()
+	}
+
+	// Kill the drifted lazygit session; attachGitTab will restart it in the
+	// correct worktree path.
+	gitPane := m.tabbedWindow.GetGitPane()
+	gitPane.KillSession(selected.Title)
+
+	toastMsg := "Lazygit reset to current instance's worktree"
+	if otherTitle != "" {
+		toastMsg = fmt.Sprintf("Lazygit reset: '%s' has its own worktree", otherTitle)
+	}
+	m.toastManager.Info(toastMsg)
+
+	return m, tea.Batch(m.attachGitTab(), m.toastTickCmd())
 }

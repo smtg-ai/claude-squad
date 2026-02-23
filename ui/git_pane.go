@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -233,6 +234,23 @@ func (g *GitPane) WaitForRender(timeout time.Duration) {
 	} else {
 		time.Sleep(timeout)
 	}
+}
+
+// GetCurrentPath returns the working directory of the lazygit tmux session's
+// active pane. Returns an empty string if no session is running or the query
+// fails. Used to detect when lazygit has wandered to a different worktree.
+func (g *GitPane) GetCurrentPath() string {
+	g.mu.Lock()
+	sessionName := g.sessions[g.currentInstanceTitle]
+	g.mu.Unlock()
+	if sessionName == "" {
+		return ""
+	}
+	out, err := exec.Command("tmux", "display-message", "-p", "-t", sessionName, "#{pane_current_path}").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // tmuxSessionExists checks if a tmux session with the given name exists.

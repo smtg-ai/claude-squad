@@ -22,7 +22,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateNewTopicRepo {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateNewTopic || m.state == stateNewTopicConfirm || m.state == stateSearch || m.state == stateMoveTo || m.state == stateContextMenu || m.state == statePRTitle || m.state == statePRBody || m.state == stateRenameInstance || m.state == stateRenameTopic || m.state == stateSendPrompt || m.state == stateFocusAgent || m.state == stateRepoSwitch || m.state == stateNewTopicRepo || m.state == stateNewInstanceBranchMode || m.state == stateNewInstanceBranchPicker || m.state == stateNewTopicBranchPicker {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -333,6 +333,12 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m.handleRepoSwitchKeys(msg)
 	case stateNewTopicRepo:
 		return m.handleNewTopicRepoKeys(msg)
+	case stateNewInstanceBranchMode:
+		return m.handleNewInstanceBranchModeKeys(msg)
+	case stateNewInstanceBranchPicker:
+		return m.handleNewInstanceBranchPickerKeys(msg)
+	case stateNewTopicBranchPicker:
+		return m.handleNewTopicBranchPickerKeys(msg)
 	case stateSearch:
 		return m.handleSearchKeys(msg)
 	default:
@@ -389,22 +395,7 @@ func (m *home) handleNewInstanceKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.handleError(fmt.Errorf("title cannot be empty"))
 		}
 
-		// Set loading status and transition to default state immediately
-		instance.SetStatus(session.Loading)
-		m.state = stateDefault
-		m.pendingInstance = nil
-		m.menu.SetState(ui.StateDefault)
-
-		// Handle prompt-after-name flow
-		if m.promptAfterName {
-			m.state = statePrompt
-			m.menu.SetState(ui.StatePrompt)
-			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
-			m.textInputOverlay.SetSize(50, 5)
-			m.promptAfterName = false
-		}
-
-		// Find topic for shared worktree check
+		// Check if this instance is in a shared-worktree topic — skip branch picker in that case
 		var topic *session.Topic
 		for _, t := range m.topics {
 			if t.Name == instance.TopicName {
@@ -412,19 +403,20 @@ func (m *home) handleNewInstanceKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-
-		// Start instance asynchronously
-		startCmd := func() tea.Msg {
-			var startErr error
-			if topic != nil && topic.SharedWorktree && topic.Started() {
-				startErr = instance.StartInSharedWorktree(topic.GetGitWorktree(), topic.Branch)
-			} else {
-				startErr = instance.Start(true)
-			}
-			return instanceStartedMsg{instance: instance, err: startErr}
+		if topic != nil && topic.SharedWorktree {
+			// Shared-worktree instances always use the topic's branch — launch immediately
+			return m.launchPendingInstance("")
 		}
 
-		return m, tea.Batch(tea.WindowSize(), startCmd)
+		// Show branch mode picker: "New branch" vs "Use existing branch"
+		instance.SetStatus(session.Loading)
+		m.state = stateNewInstanceBranchMode
+		m.pickerOverlay = overlay.NewPickerOverlay("Branch mode", []string{
+			"New branch (default)",
+			"Use existing branch",
+		})
+		m.pickerOverlay.SetHint("↑↓ navigate • enter select • esc cancel")
+		return m, nil
 	case tea.KeyRunes:
 		if runewidth.StringWidth(instance.Title) >= 32 {
 			return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
@@ -785,12 +777,17 @@ func (m *home) handleNewTopicKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.textInputOverlay = nil
 				return m, m.handleError(fmt.Errorf("topic name cannot be empty"))
 			}
-			// Show shared worktree confirmation
+			// Show worktree mode picker
 			m.textInputOverlay = nil
-			m.confirmationOverlay = overlay.NewConfirmationOverlay(
-				fmt.Sprintf("Create shared worktree for topic '%s'?\nAll instances will share one branch and directory.", m.pendingTopicName),
+			m.pickerOverlay = overlay.NewPickerOverlay(
+				fmt.Sprintf("Worktree mode for '%s'", m.pendingTopicName),
+				[]string{
+					"Per-instance worktrees",
+					"Shared worktree (new branch)",
+					"Shared worktree (existing branch)",
+				},
 			)
-			m.confirmationOverlay.SetWidth(60)
+			m.pickerOverlay.SetHint("↑↓ navigate • enter select • esc cancel")
 			m.state = stateNewTopicConfirm
 			return m, nil
 		}
@@ -805,29 +802,68 @@ func (m *home) handleNewTopicKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *home) handleNewTopicConfirmKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.confirmationOverlay == nil {
+	if m.pickerOverlay == nil {
 		m.state = stateDefault
 		return m, nil
 	}
-	shouldClose := m.confirmationOverlay.HandleKeyPress(msg)
+	shouldClose := m.pickerOverlay.HandleKeyPress(msg)
 	if !shouldClose {
-		return m, nil // No decision yet
+		return m, nil
 	}
+	if !m.pickerOverlay.IsSubmitted() {
+		// Cancelled
+		m.pickerOverlay = nil
+		m.pendingTopicName = ""
+		m.pendingTopicRepoPath = ""
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		return m, tea.WindowSize()
+	}
+	picked := m.pickerOverlay.Value()
+	m.pickerOverlay = nil
+	switch picked {
+	case "Shared worktree (existing branch)":
+		// Show branch picker
+		topicRepoPath := m.pendingTopicRepoPath
+		if topicRepoPath == "" {
+			topicRepoPath = m.activeRepoPaths[0]
+		}
+		branches := m.buildBranchPickerItems(topicRepoPath)
+		if len(branches) == 0 {
+			m.pendingTopicName = ""
+			m.pendingTopicRepoPath = ""
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+			return m, m.handleError(fmt.Errorf("no local branches found in this repository"))
+		}
+		m.pendingTopicBranchMode = "shared-existing"
+		m.state = stateNewTopicBranchPicker
+		m.pickerOverlay = overlay.NewPickerOverlay("Select branch for topic", branches)
+		m.pickerOverlay.SetHint("↑↓ navigate • enter select • esc cancel")
+		return m, nil
+	case "Shared worktree (new branch)":
+		return m.finalizeTopic(true, "")
+	default: // "Per-instance worktrees"
+		return m.finalizeTopic(false, "")
+	}
+}
 
-	// Determine if confirmed (y) or cancelled (n/esc) based on which key was pressed
-	shared := msg.String() == m.confirmationOverlay.ConfirmKey
+// finalizeTopic creates and sets up the topic with the given options, then persists it.
+func (m *home) finalizeTopic(shared bool, existingBranch string) (tea.Model, tea.Cmd) {
 	topicRepoPath := m.pendingTopicRepoPath
 	if topicRepoPath == "" {
 		topicRepoPath = m.activeRepoPaths[0]
 	}
 	topic := session.NewTopic(session.TopicOptions{
-		Name:           m.pendingTopicName,
-		SharedWorktree: shared,
-		Path:           topicRepoPath,
+		Name:               m.pendingTopicName,
+		SharedWorktree:     shared,
+		Path:               topicRepoPath,
+		ExistingBranchName: existingBranch,
 	})
 	if err := topic.Setup(); err != nil {
 		m.pendingTopicName = ""
-		m.confirmationOverlay = nil
+		m.pendingTopicRepoPath = ""
+		m.pendingTopicBranchMode = ""
 		m.state = stateDefault
 		m.menu.SetState(ui.StateDefault)
 		return m, m.handleError(err)
@@ -840,7 +876,7 @@ func (m *home) handleNewTopicConfirmKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.pendingTopicName = ""
 	m.pendingTopicRepoPath = ""
-	m.confirmationOverlay = nil
+	m.pendingTopicBranchMode = ""
 	m.state = stateDefault
 	m.menu.SetState(ui.StateDefault)
 	return m, tea.WindowSize()
@@ -923,6 +959,141 @@ func (m *home) handleNewTopicRepoKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.menu.SetState(ui.StateDefault)
 	}
 	return m, nil
+}
+
+// launchPendingInstance finalizes instance creation with an optional branchOverride.
+// It transitions the app back to the appropriate state and starts the instance async.
+func (m *home) launchPendingInstance(branchOverride string) (tea.Model, tea.Cmd) {
+	instance := m.pendingInstance
+	if instance == nil {
+		m.state = stateDefault
+		return m, nil
+	}
+
+	if branchOverride != "" {
+		instance.SetBranchOverride(branchOverride)
+	}
+
+	m.state = stateDefault
+	m.pendingInstance = nil
+	m.menu.SetState(ui.StateDefault)
+
+	// Handle prompt-after-name flow
+	if m.promptAfterName {
+		m.state = statePrompt
+		m.menu.SetState(ui.StatePrompt)
+		m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+		m.textInputOverlay.SetSize(50, 5)
+		m.promptAfterName = false
+	}
+
+	// Find topic for shared worktree check
+	var topic *session.Topic
+	for _, t := range m.topics {
+		if t.Name == instance.TopicName {
+			topic = t
+			break
+		}
+	}
+
+	startCmd := func() tea.Msg {
+		var startErr error
+		if topic != nil && topic.SharedWorktree && topic.Started() {
+			startErr = instance.StartInSharedWorktree(topic.GetGitWorktree(), topic.Branch)
+		} else {
+			startErr = instance.Start(true)
+		}
+		return instanceStartedMsg{instance: instance, err: startErr}
+	}
+
+	return m, tea.Batch(tea.WindowSize(), startCmd)
+}
+
+func (m *home) handleNewInstanceBranchModeKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.pickerOverlay == nil {
+		m.state = stateDefault
+		return m, nil
+	}
+	shouldClose := m.pickerOverlay.HandleKeyPress(msg)
+	if !shouldClose {
+		return m, nil
+	}
+	if !m.pickerOverlay.IsSubmitted() {
+		// Cancelled — abort instance creation
+		m.pickerOverlay = nil
+		if m.pendingInstance != nil {
+			m.list.Kill()
+			m.pendingInstance = nil
+		}
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		return m, tea.WindowSize()
+	}
+	picked := m.pickerOverlay.Value()
+	m.pickerOverlay = nil
+	if picked == "Use existing branch" {
+		repoPath := m.repoPathForNewInstance()
+		branches := m.buildBranchPickerItems(repoPath)
+		if len(branches) == 0 {
+			return m, m.handleError(fmt.Errorf("no local branches found in this repository"))
+		}
+		m.state = stateNewInstanceBranchPicker
+		m.pickerOverlay = overlay.NewPickerOverlay("Select branch", branches)
+		m.pickerOverlay.SetHint("↑↓ navigate • enter select • esc back")
+		return m, nil
+	}
+	// "New branch (default)"
+	return m.launchPendingInstance("")
+}
+
+func (m *home) handleNewInstanceBranchPickerKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.pickerOverlay == nil {
+		m.state = stateDefault
+		return m, nil
+	}
+	shouldClose := m.pickerOverlay.HandleKeyPress(msg)
+	if !shouldClose {
+		return m, nil
+	}
+	if !m.pickerOverlay.IsSubmitted() {
+		// Cancelled — go back to branch mode picker
+		repoPath := m.repoPathForNewInstance()
+		_ = repoPath
+		m.pickerOverlay = overlay.NewPickerOverlay("Branch mode", []string{
+			"New branch (default)",
+			"Use existing branch",
+		})
+		m.pickerOverlay.SetHint("↑↓ navigate • enter select • esc cancel")
+		m.state = stateNewInstanceBranchMode
+		return m, nil
+	}
+	picked := m.pickerOverlay.Value()
+	m.pickerOverlay = nil
+	return m.launchPendingInstance(picked)
+}
+
+func (m *home) handleNewTopicBranchPickerKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.pickerOverlay == nil {
+		m.state = stateDefault
+		return m, nil
+	}
+	shouldClose := m.pickerOverlay.HandleKeyPress(msg)
+	if !shouldClose {
+		return m, nil
+	}
+	if !m.pickerOverlay.IsSubmitted() {
+		// Cancelled
+		m.pickerOverlay = nil
+		m.pendingTopicName = ""
+		m.pendingTopicRepoPath = ""
+		m.pendingTopicBranchMode = ""
+		m.state = stateDefault
+		m.menu.SetState(ui.StateDefault)
+		return m, tea.WindowSize()
+	}
+	picked := m.pickerOverlay.Value()
+	m.pickerOverlay = nil
+	return m.finalizeTopic(true, picked)
 }
 
 func (m *home) handleSearchKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

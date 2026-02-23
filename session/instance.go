@@ -70,6 +70,9 @@ type Instance struct {
 
 	// sharedWorktree is true if this instance uses a topic's shared worktree (should not clean it up).
 	sharedWorktree bool
+	// branchOverride is set when the user chooses an existing branch at creation time.
+	// If set, Start() will check out that branch instead of creating a new one.
+	branchOverride string
 	// LoadingStage tracks the current startup progress. Exported so the UI can read it.
 	LoadingStage int
 	// LoadingTotal is the total number of startup stages.
@@ -142,11 +145,12 @@ func (i *Instance) ToInstanceData() InstanceData {
 	// Only include worktree data if gitWorktree is initialized
 	if i.gitWorktree != nil {
 		data.Worktree = GitWorktreeData{
-			RepoPath:      i.gitWorktree.GetRepoPath(),
-			WorktreePath:  i.gitWorktree.GetWorktreePath(),
-			SessionName:   i.Title,
-			BranchName:    i.gitWorktree.GetBranchName(),
-			BaseCommitSHA: i.gitWorktree.GetBaseCommitSHA(),
+			RepoPath:        i.gitWorktree.GetRepoPath(),
+			WorktreePath:    i.gitWorktree.GetWorktreePath(),
+			SessionName:     i.Title,
+			BranchName:      i.gitWorktree.GetBranchName(),
+			BaseCommitSHA:   i.gitWorktree.GetBaseCommitSHA(),
+			UnmanagedBranch: !i.gitWorktree.IsManagedBranch(),
 		}
 	}
 
@@ -185,6 +189,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 			data.Worktree.SessionName,
 			data.Worktree.BranchName,
 			data.Worktree.BaseCommitSHA,
+			!data.Worktree.UnmanagedBranch,
 		),
 		diffStats: &git.DiffStats{
 			Added:   data.DiffStats.Added,
@@ -223,6 +228,8 @@ type InstanceOptions struct {
 	Role string
 	// ParentTitle is the title of the parent agent that spawned this instance.
 	ParentTitle string
+	// BranchOverride sets an existing branch to use instead of creating a new one.
+	BranchOverride string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -248,6 +255,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		TopicName:       opts.TopicName,
 		Role:            opts.Role,
 		ParentTitle:     opts.ParentTitle,
+		branchOverride:  opts.BranchOverride,
 	}, nil
 }
 
@@ -300,6 +308,12 @@ func (i *Instance) SetTitle(title string) error {
 
 func (i *Instance) Paused() bool {
 	return i.Status == Paused
+}
+
+// SetBranchOverride sets the branch override for this instance.
+// Must be called before Start().
+func (i *Instance) SetBranchOverride(branch string) {
+	i.branchOverride = branch
 }
 
 // TmuxAlive returns true if the tmux session is alive. This is a sanity check before attaching.

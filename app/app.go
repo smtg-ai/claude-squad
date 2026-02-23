@@ -72,6 +72,12 @@ const (
 	stateRepoSwitch
 	// stateNewTopicRepo is the state when the user picks a repo for the new topic (multi-repo).
 	stateNewTopicRepo
+	// stateNewInstanceBranchMode is the 2-option picker: "New branch" vs "Use existing branch".
+	stateNewInstanceBranchMode
+	// stateNewInstanceBranchPicker is the searchable branch list for instance creation.
+	stateNewInstanceBranchPicker
+	// stateNewTopicBranchPicker is the searchable branch list for topic creation.
+	stateNewTopicBranchPicker
 )
 
 type home struct {
@@ -146,6 +152,9 @@ type home struct {
 	pendingTopicName string
 	// pendingTopicRepoPath stores the repo path during multi-repo topic creation
 	pendingTopicRepoPath string
+	// pendingTopicBranchMode stores the worktree mode chosen during topic creation:
+	// "perinstance", "shared-new", or "shared-existing"
+	pendingTopicBranchMode string
 	// pendingPRTitle stores the PR title during the two-step PR creation flow
 	pendingPRTitle string
 	// pendingPRToastID stores the toast ID for the in-progress PR creation
@@ -171,6 +180,9 @@ type home struct {
 	previewGeneration uint64
 	// metadataFetching is true when the background metadata goroutine is running
 	metadataFetching bool
+	// gitCWDLastChecked is the last time we sampled the lazygit session's CWD
+	// to detect worktree drift. Throttles the tmux display-message invocation.
+	gitCWDLastChecked time.Time
 
 	// navPosition tracks the current navigation stop for Shift+Arrow traversal.
 	// 0=sidebar, 1=instances, 2=agent tab, 3=terminal tab, 4=diff tab, 5=git tab
@@ -433,10 +445,35 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if changed {
 			m.tabbedWindow.SetGitContent(content)
 		}
-		return m, func() tea.Msg {
+		// Throttled CWD drift check (every 1s): detect when lazygit has followed a
+		// "switch to worktree" prompt and landed in a different directory than the
+		// current instance's worktree. The Claude Code session is unaffected by such
+		// switches (its CWD is fixed at startup), creating a confusing split view.
+		var cwdCheckCmd tea.Cmd
+		if time.Since(m.gitCWDLastChecked) >= 1*time.Second {
+			m.gitCWDLastChecked = time.Now()
+			if sel := m.list.GetSelectedInstance(); sel != nil && sel.Started() && !sel.Paused() {
+				if wt, err := sel.GetGitWorktree(); err == nil {
+					expected := wt.GetWorktreePath()
+					cwdCheckCmd = func() tea.Msg {
+						if current := gitPane.GetCurrentPath(); current != "" && current != expected {
+							return gitWorktreeChangedMsg{newPath: current}
+						}
+						return nil
+					}
+				}
+			}
+		}
+		tickCmd := func() tea.Msg {
 			gitPane.WaitForRender(50 * time.Millisecond)
 			return gitTabTickMsg{}
 		}
+		if cwdCheckCmd != nil {
+			return m, tea.Batch(cwdCheckCmd, tickCmd)
+		}
+		return m, tickCmd
+	case gitWorktreeChangedMsg:
+		return m.handleGitWorktreeChanged(msg.newPath)
 	case terminalTabTickMsg:
 		if !m.tabbedWindow.IsInTerminalTab() {
 			return m, nil
@@ -642,6 +679,12 @@ func (m *home) View() string {
 		result = overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	case m.state == stateMoveTo && m.pickerOverlay != nil:
 		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
+	case m.state == stateNewInstanceBranchMode && m.pickerOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
+	case m.state == stateNewInstanceBranchPicker && m.pickerOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
+	case m.state == stateNewTopicBranchPicker && m.pickerOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
 	case m.state == stateRepoSwitch && m.pickerOverlay != nil:
 		// Position near the repo button at the bottom of the sidebar
 		pickerX := 1
@@ -664,7 +707,9 @@ func (m *home) View() string {
 			log.ErrorLog.Printf("text overlay is nil")
 		}
 		result = overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
-	case m.state == stateConfirm || m.state == stateNewTopicConfirm:
+	case m.state == stateNewTopicConfirm && m.pickerOverlay != nil:
+		result = overlay.PlaceOverlay(0, 0, m.pickerOverlay.Render(), mainView, true, true)
+	case m.state == stateConfirm:
 		if m.confirmationOverlay == nil {
 			log.ErrorLog.Printf("confirmation overlay is nil")
 		}
@@ -713,6 +758,14 @@ type focusPreviewTickMsg struct{}
 
 // gitTabTickMsg is a 30fps ticker for refreshing the git tab's lazygit rendering.
 type gitTabTickMsg struct{}
+
+// gitWorktreeChangedMsg is emitted when the lazygit session's CWD has drifted
+// away from the current instance's worktree (e.g. the user followed a
+// "switch to worktree" prompt inside lazygit). The UI resets lazygit to the
+// correct path so it stays in sync with the Claude Code session.
+type gitWorktreeChangedMsg struct {
+	newPath string
+}
 
 // terminalTabTickMsg is a 30fps ticker for refreshing the terminal tab rendering.
 type terminalTabTickMsg struct{}

@@ -130,22 +130,24 @@ func (g *GitWorktree) Cleanup() error {
 		errs = append(errs, fmt.Errorf("failed to check worktree path: %w", err))
 	}
 
-	// Open the repository for branch cleanup
-	repo, err := git.PlainOpen(g.repoPath)
-	if err != nil {
-		errs = append(errs, fmt.Errorf("failed to open repository for cleanup: %w", err))
-		return errors.Join(errs...)
-	}
-
-	branchRef := plumbing.NewBranchReferenceName(g.branchName)
-
-	// Check if branch exists before attempting removal
-	if _, err := repo.Reference(branchRef, false); err == nil {
-		if err := repo.Storer.RemoveReference(branchRef); err != nil {
-			errs = append(errs, fmt.Errorf("failed to remove branch %s: %w", g.branchName, err))
+	// Only delete the branch if hivemind created it (not an adopted/existing branch)
+	if g.managedBranch {
+		repo, err := git.PlainOpen(g.repoPath)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to open repository for cleanup: %w", err))
+			return errors.Join(errs...)
 		}
-	} else if err != plumbing.ErrReferenceNotFound {
-		errs = append(errs, fmt.Errorf("error checking branch %s existence: %w", g.branchName, err))
+
+		branchRef := plumbing.NewBranchReferenceName(g.branchName)
+
+		// Check if branch exists before attempting removal
+		if _, err := repo.Reference(branchRef, false); err == nil {
+			if err := repo.Storer.RemoveReference(branchRef); err != nil {
+				errs = append(errs, fmt.Errorf("failed to remove branch %s: %w", g.branchName, err))
+			}
+		} else if err != plumbing.ErrReferenceNotFound {
+			errs = append(errs, fmt.Errorf("error checking branch %s existence: %w", g.branchName, err))
+		}
 	}
 
 	// Prune the worktree to clean up any remaining references

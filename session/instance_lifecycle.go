@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/ByteMirror/hivemind/log"
@@ -44,14 +45,36 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	}
 	i.tmuxSession = tmuxSession
 
+	skipWorktreeSetup := false
 	if firstTimeSetup {
 		i.setLoadingProgress(2, "Creating git worktree...")
-		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
-		if err != nil {
-			return fmt.Errorf("failed to create git worktree: %w", err)
+		if i.branchOverride != "" {
+			absPath, _ := filepath.Abs(i.Path)
+			existingPath, _ := git.FindWorktreePathForBranch(absPath, i.branchOverride)
+			if existingPath != "" {
+				// Branch is already checked out — reuse its worktree directly
+				repoRoot, _ := git.FindGitRepoRoot(absPath)
+				i.gitWorktree = git.NewGitWorktreeReusingExisting(repoRoot, existingPath, i.branchOverride)
+				i.Branch = i.branchOverride
+				i.sharedWorktree = true // skip Kill() worktree cleanup
+				skipWorktreeSetup = true
+			} else {
+				// Branch exists but not checked out — create a new worktree for it
+				gitWorktree, err := git.NewGitWorktreeForExistingBranch(absPath, i.Title, i.branchOverride)
+				if err != nil {
+					return fmt.Errorf("failed to create worktree for existing branch: %w", err)
+				}
+				i.gitWorktree = gitWorktree
+				i.Branch = i.branchOverride
+			}
+		} else {
+			gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
+			if err != nil {
+				return fmt.Errorf("failed to create git worktree: %w", err)
+			}
+			i.gitWorktree = gitWorktree
+			i.Branch = branchName
 		}
-		i.gitWorktree = gitWorktree
-		i.Branch = branchName
 	}
 
 	// Setup error handler to cleanup resources on any error
@@ -77,10 +100,12 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 	} else {
 		i.setLoadingProgress(3, "Setting up git worktree...")
-		// Setup git worktree first
-		if err := i.gitWorktree.Setup(); err != nil {
-			setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
-			return setupErr
+		// Setup git worktree first (skip if reusing an existing checked-out worktree)
+		if !skipWorktreeSetup {
+			if err := i.gitWorktree.Setup(); err != nil {
+				setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
+				return setupErr
+			}
 		}
 
 		if isClaudeProgram(i.Program) {
