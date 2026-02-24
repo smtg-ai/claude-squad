@@ -121,6 +121,12 @@ func (m *Menu) updateOptions() {
 }
 
 func (m *Menu) addInstanceOptions() {
+	// Loading instances only get minimal options
+	if m.instance != nil && m.instance.Status == session.Loading {
+		m.options = []keys.KeyName{keys.KeyNew, keys.KeyHelp, keys.KeyQuit}
+		return
+	}
+
 	// Instance management group
 	options := []keys.KeyName{keys.KeyNew, keys.KeyKill}
 
