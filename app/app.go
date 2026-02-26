@@ -5,11 +5,14 @@ import (
 	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/session"
+	"claude-squad/session/git"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
 	"context"
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -73,6 +76,10 @@ type home struct {
 
 	// keySent is used to manage underlining menu items
 	keySent bool
+
+	// metadataUpdating is true while a background metadata update is in progress.
+	// Prevents overlapping ticks from piling up.
+	metadataUpdating bool
 
 	// -- UI Components --
 
@@ -201,22 +208,33 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.menu.ClearKeydown()
 		return m, nil
 	case tickUpdateMetadataMessage:
-		for _, instance := range m.list.GetInstances() {
-			if !instance.Started() || instance.Paused() {
-				continue
+		if m.metadataUpdating {
+			// Previous update still in progress, check again shortly.
+			return m, func() tea.Msg {
+				time.Sleep(200 * time.Millisecond)
+				return tickUpdateMetadataMessage{}
 			}
-			updated, prompt := instance.HasUpdated()
-			if updated {
-				instance.SetStatus(session.Running)
+		}
+		m.metadataUpdating = true
+		instances := m.list.GetInstances()
+		return m, runMetadataUpdateCmd(instances)
+	case metadataUpdateDoneMsg:
+		m.metadataUpdating = false
+		for _, r := range msg.results {
+			if r.updated {
+				r.instance.SetStatus(session.Running)
+			} else if r.hasPrompt {
+				r.instance.TapEnter()
 			} else {
-				if prompt {
-					instance.TapEnter()
-				} else {
-					instance.SetStatus(session.Ready)
-				}
+				r.instance.SetStatus(session.Ready)
 			}
-			if err := instance.UpdateDiffStats(); err != nil {
-				log.WarningLog.Printf("could not update diff stats: %v", err)
+			if r.diffStats != nil && r.diffStats.Error != nil {
+				if !strings.Contains(r.diffStats.Error.Error(), "base commit SHA not set") {
+					log.WarningLog.Printf("could not update diff stats: %v", r.diffStats.Error)
+				}
+				r.instance.SetDiffStats(nil)
+			} else {
+				r.instance.SetDiffStats(r.diffStats)
 			}
 		}
 		return m, tickUpdateMetadataCmd
@@ -674,11 +692,58 @@ type tickUpdateMetadataMessage struct{}
 
 type instanceChangedMsg struct{}
 
-// tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
-// overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.
+// instanceMetaResult holds the results of a single instance's metadata update,
+// computed in a background goroutine.
+type instanceMetaResult struct {
+	instance  *session.Instance
+	updated   bool
+	hasPrompt bool
+	diffStats *git.DiffStats
+}
+
+// metadataUpdateDoneMsg is sent when the background metadata update completes.
+type metadataUpdateDoneMsg struct {
+	results []instanceMetaResult
+}
+
+// tickUpdateMetadataCmd schedules the next metadata update tick after a delay.
 var tickUpdateMetadataCmd = func() tea.Msg {
 	time.Sleep(500 * time.Millisecond)
 	return tickUpdateMetadataMessage{}
+}
+
+// runMetadataUpdateCmd returns a Cmd that performs expensive metadata I/O
+// (tmux capture, git diff) in background goroutines — one per active instance
+// in parallel — so the main event loop stays responsive to input.
+func runMetadataUpdateCmd(instances []*session.Instance) tea.Cmd {
+	return func() tea.Msg {
+		// Collect active instances that need updating.
+		var active []*session.Instance
+		for _, inst := range instances {
+			if inst.Started() && !inst.Paused() {
+				active = append(active, inst)
+			}
+		}
+		if len(active) == 0 {
+			return metadataUpdateDoneMsg{}
+		}
+
+		results := make([]instanceMetaResult, len(active))
+		var wg sync.WaitGroup
+		for idx, inst := range active {
+			wg.Add(1)
+			go func(i int, instance *session.Instance) {
+				defer wg.Done()
+				r := &results[i]
+				r.instance = instance
+				r.updated, r.hasPrompt = instance.HasUpdated()
+				r.diffStats = instance.ComputeDiff()
+			}(idx, inst)
+		}
+		wg.Wait()
+
+		return metadataUpdateDoneMsg{results: results[:]}
+	}
 }
 
 // handleError handles all errors which get bubbled up to the app. sets the error message. We return a callback tea.Cmd that returns a hideErrMsg message
