@@ -81,6 +81,12 @@ type home struct {
 	// Prevents overlapping ticks from piling up.
 	metadataUpdating bool
 
+	// instanceStarting is true while a background instance start is in progress.
+	// Prevents double-submission and guards against interacting with a not-yet-started instance.
+	instanceStarting bool
+	// startingInstance holds a reference to the instance being started in the background.
+	startingInstance *session.Instance
+
 	// -- UI Components --
 
 	// list displays the list of instances
@@ -218,6 +224,32 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.metadataUpdating = true
 		instances := m.list.GetInstances()
 		return m, runMetadataUpdateCmd(instances)
+	case instanceStartDoneMsg:
+		m.instanceStarting = false
+		inst := msg.instance
+		m.startingInstance = nil
+
+		if msg.err != nil {
+			// Start failed — remove the instance from the list and show the error.
+			m.list.Kill()
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), m.handleError(msg.err))
+		}
+
+		// Save after successful start.
+		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+			return m, m.handleError(err)
+		}
+
+		if m.promptAfterName {
+			m.state = statePrompt
+			m.menu.SetState(ui.StatePrompt)
+			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+			m.promptAfterName = false
+		} else {
+			m.showHelpScreen(helpStart(inst), nil)
+		}
+
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 	case metadataUpdateDoneMsg:
 		m.metadataUpdating = false
 		for _, r := range msg.results {
@@ -349,35 +381,25 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
-			if err := instance.Start(true); err != nil {
-				m.list.Kill()
-				m.state = stateDefault
-				return m, m.handleError(err)
-			}
-			// Save after adding new instance
-			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-				return m, m.handleError(err)
-			}
-			// Instance added successfully, call the finalizer.
+			// Set loading status for visual feedback (spinner in the list).
+			instance.SetStatus(session.Loading)
+
+			// Register the instance in the list (call finalizer once).
 			m.newInstanceFinalizer()
 			if m.autoYes {
 				instance.AutoYes = true
 			}
 
-			m.newInstanceFinalizer()
-			m.state = stateDefault
-			if m.promptAfterName {
-				m.state = statePrompt
-				m.menu.SetState(ui.StatePrompt)
-				// Initialize the text input overlay
-				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
-				m.promptAfterName = false
-			} else {
-				m.menu.SetState(ui.StateDefault)
-				m.showHelpScreen(helpStart(instance), nil)
-			}
+			// Track the starting instance so the done handler can finish setup.
+			m.instanceStarting = true
+			m.startingInstance = instance
 
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+			// Transition to default state immediately so the UI stays responsive.
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+
+			// Kick off the expensive Start() in a background goroutine.
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), runInstanceStartCmd(instance))
 		case tea.KeyRunes:
 			if runewidth.StringWidth(instance.Title) >= 32 {
 				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
@@ -487,6 +509,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyHelp:
 		return m.showHelpScreen(helpTypeGeneral{}, nil)
 	case keys.KeyPrompt:
+		if m.instanceStarting {
+			return m, m.handleError(fmt.Errorf("please wait for the current session to finish starting"))
+		}
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
@@ -508,6 +533,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		return m, nil
 	case keys.KeyNew:
+		if m.instanceStarting {
+			return m, m.handleError(fmt.Errorf("please wait for the current session to finish starting"))
+		}
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
@@ -581,7 +609,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, m.confirmAction(message, killAction)
 	case keys.KeySubmit:
 		selected := m.list.GetSelectedInstance()
-		if selected == nil {
+		if selected == nil || selected.Status == session.Loading {
 			return m, nil
 		}
 
@@ -604,7 +632,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, m.confirmAction(message, pushAction)
 	case keys.KeyCheckout:
 		selected := m.list.GetSelectedInstance()
-		if selected == nil {
+		if selected == nil || selected.Status == session.Loading {
 			return m, nil
 		}
 
@@ -630,7 +658,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		selected := m.list.GetSelectedInstance()
-		if selected == nil || selected.Paused() || !selected.TmuxAlive() {
+		if selected == nil || selected.Paused() || selected.Status == session.Loading || !selected.TmuxAlive() {
 			return m, nil
 		}
 		// Show help screen before attaching
@@ -704,6 +732,21 @@ type instanceMetaResult struct {
 // metadataUpdateDoneMsg is sent when the background metadata update completes.
 type metadataUpdateDoneMsg struct {
 	results []instanceMetaResult
+}
+
+// instanceStartDoneMsg is sent when the background instance start completes.
+type instanceStartDoneMsg struct {
+	instance *session.Instance
+	err      error
+}
+
+// runInstanceStartCmd returns a Cmd that performs the expensive instance.Start(true)
+// in a background goroutine so the main event loop stays responsive.
+func runInstanceStartCmd(instance *session.Instance) tea.Cmd {
+	return func() tea.Msg {
+		err := instance.Start(true)
+		return instanceStartDoneMsg{instance: instance, err: err}
+	}
 }
 
 // tickUpdateMetadataCmd schedules the next metadata update tick after a delay.
