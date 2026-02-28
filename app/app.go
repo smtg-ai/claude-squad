@@ -670,6 +670,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			<-ch
 			m.state = stateDefault
+			m.instanceChanged()
 		})
 		return m, nil
 	default:
