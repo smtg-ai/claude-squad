@@ -5,11 +5,14 @@ import (
 	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/session"
+	"claude-squad/session/git"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
 	"context"
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -73,6 +76,16 @@ type home struct {
 
 	// keySent is used to manage underlining menu items
 	keySent bool
+
+	// metadataUpdating is true while a background metadata update is in progress.
+	// Prevents overlapping ticks from piling up.
+	metadataUpdating bool
+
+	// instanceStarting is true while a background instance start is in progress.
+	// Prevents double-submission and guards against interacting with a not-yet-started instance.
+	instanceStarting bool
+	// startingInstance holds a reference to the instance being started in the background.
+	startingInstance *session.Instance
 
 	// -- UI Components --
 
@@ -201,22 +214,59 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.menu.ClearKeydown()
 		return m, nil
 	case tickUpdateMetadataMessage:
-		for _, instance := range m.list.GetInstances() {
-			if !instance.Started() || instance.Paused() {
-				continue
+		if m.metadataUpdating {
+			// Previous update still in progress, check again shortly.
+			return m, func() tea.Msg {
+				time.Sleep(200 * time.Millisecond)
+				return tickUpdateMetadataMessage{}
 			}
-			updated, prompt := instance.HasUpdated()
-			if updated {
-				instance.SetStatus(session.Running)
+		}
+		m.metadataUpdating = true
+		instances := m.list.GetInstances()
+		return m, runMetadataUpdateCmd(instances)
+	case instanceStartDoneMsg:
+		m.instanceStarting = false
+		inst := msg.instance
+		m.startingInstance = nil
+
+		if msg.err != nil {
+			// Start failed — remove the instance from the list and show the error.
+			m.list.Kill()
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), m.handleError(msg.err))
+		}
+
+		// Save after successful start.
+		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+			return m, m.handleError(err)
+		}
+
+		if m.promptAfterName {
+			m.state = statePrompt
+			m.menu.SetState(ui.StatePrompt)
+			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+			m.promptAfterName = false
+		} else {
+			m.showHelpScreen(helpStart(inst), nil)
+		}
+
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+	case metadataUpdateDoneMsg:
+		m.metadataUpdating = false
+		for _, r := range msg.results {
+			if r.updated {
+				r.instance.SetStatus(session.Running)
+			} else if r.hasPrompt {
+				r.instance.TapEnter()
 			} else {
-				if prompt {
-					instance.TapEnter()
-				} else {
-					instance.SetStatus(session.Ready)
-				}
+				r.instance.SetStatus(session.Ready)
 			}
-			if err := instance.UpdateDiffStats(); err != nil {
-				log.WarningLog.Printf("could not update diff stats: %v", err)
+			if r.diffStats != nil && r.diffStats.Error != nil {
+				if !strings.Contains(r.diffStats.Error.Error(), "base commit SHA not set") {
+					log.WarningLog.Printf("could not update diff stats: %v", r.diffStats.Error)
+				}
+				r.instance.SetDiffStats(nil)
+			} else {
+				r.instance.SetDiffStats(r.diffStats)
 			}
 		}
 		return m, tickUpdateMetadataCmd
@@ -331,35 +381,25 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
-			if err := instance.Start(true); err != nil {
-				m.list.Kill()
-				m.state = stateDefault
-				return m, m.handleError(err)
-			}
-			// Save after adding new instance
-			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-				return m, m.handleError(err)
-			}
-			// Instance added successfully, call the finalizer.
+			// Set loading status for visual feedback (spinner in the list).
+			instance.SetStatus(session.Loading)
+
+			// Register the instance in the list (call finalizer once).
 			m.newInstanceFinalizer()
 			if m.autoYes {
 				instance.AutoYes = true
 			}
 
-			m.newInstanceFinalizer()
-			m.state = stateDefault
-			if m.promptAfterName {
-				m.state = statePrompt
-				m.menu.SetState(ui.StatePrompt)
-				// Initialize the text input overlay
-				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
-				m.promptAfterName = false
-			} else {
-				m.menu.SetState(ui.StateDefault)
-				m.showHelpScreen(helpStart(instance), nil)
-			}
+			// Track the starting instance so the done handler can finish setup.
+			m.instanceStarting = true
+			m.startingInstance = instance
 
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+			// Transition to default state immediately so the UI stays responsive.
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+
+			// Kick off the expensive Start() in a background goroutine.
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), runInstanceStartCmd(instance))
 		case tea.KeyRunes:
 			if runewidth.StringWidth(instance.Title) >= 32 {
 				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
@@ -469,6 +509,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyHelp:
 		return m.showHelpScreen(helpTypeGeneral{}, nil)
 	case keys.KeyPrompt:
+		if m.instanceStarting {
+			return m, m.handleError(fmt.Errorf("please wait for the current session to finish starting"))
+		}
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
@@ -490,6 +533,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		return m, nil
 	case keys.KeyNew:
+		if m.instanceStarting {
+			return m, m.handleError(fmt.Errorf("please wait for the current session to finish starting"))
+		}
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
@@ -563,7 +609,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, m.confirmAction(message, killAction)
 	case keys.KeySubmit:
 		selected := m.list.GetSelectedInstance()
-		if selected == nil {
+		if selected == nil || selected.Status == session.Loading {
 			return m, nil
 		}
 
@@ -586,7 +632,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, m.confirmAction(message, pushAction)
 	case keys.KeyCheckout:
 		selected := m.list.GetSelectedInstance()
-		if selected == nil {
+		if selected == nil || selected.Status == session.Loading {
 			return m, nil
 		}
 
@@ -612,7 +658,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		selected := m.list.GetSelectedInstance()
-		if selected == nil || selected.Paused() || !selected.TmuxAlive() {
+		if selected == nil || selected.Paused() || selected.Status == session.Loading || !selected.TmuxAlive() {
 			return m, nil
 		}
 		// Show help screen before attaching
@@ -624,6 +670,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			<-ch
 			m.state = stateDefault
+			m.instanceChanged()
 		})
 		return m, nil
 	default:
@@ -674,11 +721,73 @@ type tickUpdateMetadataMessage struct{}
 
 type instanceChangedMsg struct{}
 
-// tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
-// overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.
+// instanceMetaResult holds the results of a single instance's metadata update,
+// computed in a background goroutine.
+type instanceMetaResult struct {
+	instance  *session.Instance
+	updated   bool
+	hasPrompt bool
+	diffStats *git.DiffStats
+}
+
+// metadataUpdateDoneMsg is sent when the background metadata update completes.
+type metadataUpdateDoneMsg struct {
+	results []instanceMetaResult
+}
+
+// instanceStartDoneMsg is sent when the background instance start completes.
+type instanceStartDoneMsg struct {
+	instance *session.Instance
+	err      error
+}
+
+// runInstanceStartCmd returns a Cmd that performs the expensive instance.Start(true)
+// in a background goroutine so the main event loop stays responsive.
+func runInstanceStartCmd(instance *session.Instance) tea.Cmd {
+	return func() tea.Msg {
+		err := instance.Start(true)
+		return instanceStartDoneMsg{instance: instance, err: err}
+	}
+}
+
+// tickUpdateMetadataCmd schedules the next metadata update tick after a delay.
 var tickUpdateMetadataCmd = func() tea.Msg {
 	time.Sleep(500 * time.Millisecond)
 	return tickUpdateMetadataMessage{}
+}
+
+// runMetadataUpdateCmd returns a Cmd that performs expensive metadata I/O
+// (tmux capture, git diff) in background goroutines — one per active instance
+// in parallel — so the main event loop stays responsive to input.
+func runMetadataUpdateCmd(instances []*session.Instance) tea.Cmd {
+	return func() tea.Msg {
+		// Collect active instances that need updating.
+		var active []*session.Instance
+		for _, inst := range instances {
+			if inst.Started() && !inst.Paused() {
+				active = append(active, inst)
+			}
+		}
+		if len(active) == 0 {
+			return metadataUpdateDoneMsg{}
+		}
+
+		results := make([]instanceMetaResult, len(active))
+		var wg sync.WaitGroup
+		for idx, inst := range active {
+			wg.Add(1)
+			go func(i int, instance *session.Instance) {
+				defer wg.Done()
+				r := &results[i]
+				r.instance = instance
+				r.updated, r.hasPrompt = instance.HasUpdated()
+				r.diffStats = instance.ComputeDiff()
+			}(idx, inst)
+		}
+		wg.Wait()
+
+		return metadataUpdateDoneMsg{results: results[:]}
+	}
 }
 
 // handleError handles all errors which get bubbled up to the app. sets the error message. We return a callback tea.Cmd that returns a hideErrMsg message

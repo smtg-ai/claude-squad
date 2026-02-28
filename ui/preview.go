@@ -98,7 +98,9 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 
 		// Always update the preview state with content, even if empty
 		// This ensures that newly created instances will display their content immediately
-		if len(content) == 0 && !instance.Started() {
+		if len(content) == 0 && !instance.Started() && instance.Status == session.Loading {
+			p.setFallbackState("Starting session...")
+		} else if len(content) == 0 && !instance.Started() {
 			p.setFallbackState("Please enter a name for the instance.")
 		} else {
 			// Update the preview state with the current content

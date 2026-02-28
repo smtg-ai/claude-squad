@@ -506,6 +506,21 @@ func (i *Instance) UpdateDiffStats() error {
 	return nil
 }
 
+// ComputeDiff runs the expensive git diff I/O and returns the result without
+// mutating instance state. Safe to call from a background goroutine.
+func (i *Instance) ComputeDiff() *git.DiffStats {
+	if !i.started || i.Status == Paused {
+		return nil
+	}
+	return i.gitWorktree.Diff()
+}
+
+// SetDiffStats sets the diff statistics on the instance. Should be called from
+// the main event loop to avoid data races with View.
+func (i *Instance) SetDiffStats(stats *git.DiffStats) {
+	i.diffStats = stats
+}
+
 // GetDiffStats returns the current git diff statistics
 func (i *Instance) GetDiffStats() *git.DiffStats {
 	return i.diffStats
