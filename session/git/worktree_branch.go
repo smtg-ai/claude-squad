@@ -3,6 +3,7 @@ package git
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -37,7 +38,10 @@ func (g *GitWorktree) cleanupExistingBranch(repo *git.Repository) error {
 	cfg.Raw.RemoveSection(worktreeSection)
 
 	if err := repo.Storer.SetConfig(cfg); err != nil {
-		return fmt.Errorf("failed to update repository config after removing branch %s: %w", g.branchName, err)
+		// If the error contains "empty URL" we can continue without updating as the branch ref has already been removed
+		if !strings.Contains(err.Error(), "empty URL") {
+			return fmt.Errorf("failed to update repository config after removing branch %s: %w", g.branchName, err)
+		}
 	}
 
 	return nil
