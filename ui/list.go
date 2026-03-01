@@ -174,6 +174,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	remainingWidth := r.width
 	remainingWidth -= runewidth.StringWidth(prefix)
 	remainingWidth -= runewidth.StringWidth(branchIcon)
+	remainingWidth -= 2 // for the literal " " and "-" in the branchLine format string
 
 	diffWidth := runewidth.StringWidth(addedDiff) + runewidth.StringWidth(removedDiff)
 	if diffWidth > 0 {
