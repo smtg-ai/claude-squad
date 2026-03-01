@@ -112,7 +112,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		ctx:          ctx,
 		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewTerminalPane()),
 		errBox:       ui.NewErrBox(),
 		storage:      storage,
 		appConfig:    appConfig,
@@ -250,14 +250,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle instance changed after confirmation action
 		return m, m.instanceChanged()
 	case instanceStartedMsg:
+		// Select the instance that just started (or failed)
+		m.list.SelectInstance(msg.instance)
+
 		if msg.err != nil {
-			// Find and select the failed instance, then kill it
-			for i, inst := range m.list.GetInstances() {
-				if inst == msg.instance {
-					m.list.SetSelectedInstance(i)
-					break
-				}
-			}
 			m.list.Kill()
 			return m, tea.Batch(m.handleError(msg.err), m.instanceChanged())
 		}
@@ -271,13 +267,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.promptAfterName {
-			// Select the started instance
-			for i, inst := range m.list.GetInstances() {
-				if inst == msg.instance {
-					m.list.SetSelectedInstance(i)
-					break
-				}
-			}
 			m.state = statePrompt
 			m.menu.SetState(ui.StatePrompt)
 			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
@@ -472,13 +461,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	// Always check for escape key first to ensure it doesn't get intercepted elsewhere
 	if msg.Type == tea.KeyEsc {
 		// If in preview tab and in scroll mode, exit scroll mode
-		if !m.tabbedWindow.IsInDiffTab() && m.tabbedWindow.IsPreviewInScrollMode() {
+		if m.tabbedWindow.IsInPreviewTab() && m.tabbedWindow.IsPreviewInScrollMode() {
 			// Use the selected instance from the list
 			selected := m.list.GetSelectedInstance()
 			err := m.tabbedWindow.ResetPreviewToNormalMode(selected)
 			if err != nil {
 				return m, m.handleError(err)
 			}
+			return m, m.instanceChanged()
+		}
+		// If in terminal tab and in scroll mode, exit scroll mode
+		if m.tabbedWindow.IsInTerminalTab() && m.tabbedWindow.IsTerminalInScrollMode() {
+			m.tabbedWindow.ResetTerminalToNormalMode()
 			return m, m.instanceChanged()
 		}
 	}
@@ -551,7 +545,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, m.instanceChanged()
 	case keys.KeyTab:
 		m.tabbedWindow.Toggle()
-		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
+		m.menu.SetActiveTab(m.tabbedWindow.GetActiveTab())
 		return m, m.instanceChanged()
 	case keys.KeyKill:
 		selected := m.list.GetSelectedInstance()
@@ -575,6 +569,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if checkedOut {
 				return fmt.Errorf("instance %s is currently checked out", selected.Title)
 			}
+
+			// Clean up terminal session for this instance
+			m.tabbedWindow.CleanupTerminalForInstance(selected.Title)
 
 			// Delete from storage first
 			if err := m.storage.DeleteInstance(selected.Title); err != nil {
@@ -623,6 +620,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if err := selected.Pause(); err != nil {
 				m.handleError(err)
 			}
+			m.tabbedWindow.CleanupTerminalForInstance(selected.Title)
 			m.instanceChanged()
 		})
 		return m, nil
@@ -641,6 +639,19 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		selected := m.list.GetSelectedInstance()
 		if selected == nil || selected.Paused() || selected.Status == session.Loading || !selected.TmuxAlive() {
+			return m, nil
+		}
+		// Terminal tab: attach to terminal session
+		if m.tabbedWindow.IsInTerminalTab() {
+			m.showHelpScreen(helpTypeInstanceAttach{}, func() {
+				ch, err := m.tabbedWindow.AttachTerminal()
+				if err != nil {
+					m.handleError(err)
+					return
+				}
+				<-ch
+				m.state = stateDefault
+			})
 			return m, nil
 		}
 		// Show help screen before attaching
@@ -672,6 +683,9 @@ func (m *home) instanceChanged() tea.Cmd {
 
 	// If there's no selected instance, we don't need to update the preview.
 	if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
+		return m.handleError(err)
+	}
+	if err := m.tabbedWindow.UpdateTerminal(selected); err != nil {
 		return m.handleError(err)
 	}
 	return nil

@@ -129,9 +129,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	// add spinner next to title if it's running
 	var join string
 	switch i.Status {
-	case session.Running:
-		join = fmt.Sprintf("%s ", r.spinner.View())
-	case session.Loading:
+	case session.Running, session.Loading:
 		join = fmt.Sprintf("%s ", r.spinner.View())
 	case session.Ready:
 		join = readyStyle.Render(readyIcon)
@@ -367,6 +365,16 @@ func (l *List) SetSelectedInstance(idx int) {
 		return
 	}
 	l.selectedIdx = idx
+}
+
+// SelectInstance finds and selects the given instance in the list.
+func (l *List) SelectInstance(target *session.Instance) {
+	for i, inst := range l.items {
+		if inst == target {
+			l.SetSelectedInstance(i)
+			return
+		}
+	}
 }
 
 // GetInstances returns all instances in the list

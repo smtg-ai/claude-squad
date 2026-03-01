@@ -47,7 +47,7 @@ type Menu struct {
 	height, width int
 	state         MenuState
 	instance      *session.Instance
-	isInDiffTab   bool
+	activeTab     int
 
 	// keyDown is the key which is pressed. The default is -1.
 	keyDown keys.KeyName
@@ -59,10 +59,10 @@ var promptMenuOptions = []keys.KeyName{keys.KeySubmitName}
 
 func NewMenu() *Menu {
 	return &Menu{
-		options:     defaultMenuOptions,
-		state:       StateEmpty,
-		isInDiffTab: false,
-		keyDown:     -1,
+		options:   defaultMenuOptions,
+		state:     StateEmpty,
+		activeTab: 0,
+		keyDown:   -1,
 	}
 }
 
@@ -94,9 +94,9 @@ func (m *Menu) SetInstance(instance *session.Instance) {
 	m.updateOptions()
 }
 
-// SetInDiffTab updates whether we're currently in the diff tab
-func (m *Menu) SetInDiffTab(inDiffTab bool) {
-	m.isInDiffTab = inDiffTab
+// SetActiveTab updates the currently active tab
+func (m *Menu) SetActiveTab(tab int) {
+	m.activeTab = tab
 	m.updateOptions()
 }
 
@@ -139,7 +139,7 @@ func (m *Menu) addInstanceOptions() {
 	}
 
 	// Navigation group (when in diff tab)
-	if m.isInDiffTab {
+	if m.activeTab == DiffTab || m.activeTab == TerminalTab {
 		actionGroup = append(actionGroup, keys.KeyShiftUp)
 	}
 
