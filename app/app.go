@@ -250,14 +250,10 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Handle instance changed after confirmation action
 		return m, m.instanceChanged()
 	case instanceStartedMsg:
+		// Select the instance that just started (or failed)
+		m.list.SelectInstance(msg.instance)
+
 		if msg.err != nil {
-			// Find and select the failed instance, then kill it
-			for i, inst := range m.list.GetInstances() {
-				if inst == msg.instance {
-					m.list.SetSelectedInstance(i)
-					break
-				}
-			}
 			m.list.Kill()
 			return m, tea.Batch(m.handleError(msg.err), m.instanceChanged())
 		}
@@ -271,13 +267,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if msg.promptAfterName {
-			// Select the started instance
-			for i, inst := range m.list.GetInstances() {
-				if inst == msg.instance {
-					m.list.SetSelectedInstance(i)
-					break
-				}
-			}
 			m.state = statePrompt
 			m.menu.SetState(ui.StatePrompt)
 			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
@@ -657,8 +646,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.showHelpScreen(helpTypeInstanceAttach{}, func() {
 				ch, err := m.tabbedWindow.AttachTerminal()
 				if err != nil {
-					log.ErrorLog.Printf("%v", err)
-					m.errBox.SetError(err)
+					m.handleError(err)
 					return
 				}
 				<-ch
@@ -670,8 +658,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.showHelpScreen(helpTypeInstanceAttach{}, func() {
 			ch, err := m.list.Attach()
 			if err != nil {
-				log.ErrorLog.Printf("%v", err)
-				m.errBox.SetError(err)
+				m.handleError(err)
 				return
 			}
 			<-ch

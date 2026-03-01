@@ -239,21 +239,22 @@ func (t *TerminalPane) CloseForInstance(title string) {
 
 func (t *TerminalPane) String() string {
 	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	width := t.width
 	height := t.height
-	isScrolling := t.isScrolling
-	fallback := t.fallback
-	fallbackText := t.fallbackText
-	content := t.content
-	t.mu.Unlock()
 
 	if width == 0 || height == 0 {
 		return strings.Repeat("\n", height)
 	}
 
-	if isScrolling {
+	if t.isScrolling {
 		return t.viewport.View()
 	}
+
+	fallback := t.fallback
+	fallbackText := t.fallbackText
+	content := t.content
 
 	if fallback {
 		// 3 = tab bar height (border + padding + text), 4 = window style frame (top/bottom border + padding)
@@ -282,23 +283,20 @@ func (t *TerminalPane) String() string {
 			Render(strings.Join(lines, ""))
 	}
 
-	// Normal mode: show captured content with footer
-	availableHeight := height - 1 // 1 for footer
+	// Normal mode: show captured content
 	lines := strings.Split(content, "\n")
 
-	if availableHeight > 0 {
-		if len(lines) > availableHeight {
-			lines = lines[len(lines)-availableHeight:]
+	if height > 0 {
+		if len(lines) > height {
+			lines = lines[len(lines)-height:]
 		} else {
-			padding := availableHeight - len(lines)
+			padding := height - len(lines)
 			lines = append(lines, make([]string, padding)...)
 		}
 	}
 
-	footer := terminalFooterStyle.Render("Press Enter to open terminal")
 	contentStr := strings.Join(lines, "\n")
-	rendered := terminalPaneStyle.Width(width).Render(contentStr)
-	return lipgloss.JoinVertical(lipgloss.Left, rendered, footer)
+	return terminalPaneStyle.Width(width).Render(contentStr)
 }
 
 // enterScrollMode captures the full terminal history and enters scroll mode.

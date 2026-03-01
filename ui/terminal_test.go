@@ -148,7 +148,6 @@ func TestTerminalUpdateContent(t *testing.T) {
 	// Verify String() output contains the content
 	rendered := tp.String()
 	require.Contains(t, rendered, "whoami", "rendered output should contain captured content")
-	require.Contains(t, rendered, "Press Enter to open terminal", "rendered output should contain footer")
 }
 
 func TestTerminalFallbackStates(t *testing.T) {
