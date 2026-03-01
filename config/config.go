@@ -109,6 +109,30 @@ func GetClaudeCommand() (string, error) {
 	return "", fmt.Errorf("claude command not found in aliases or PATH")
 }
 
+// cleanEscapeSequences removes ANSI escape sequences from JSON data
+func cleanEscapeSequences(data []byte) []byte {
+	// Remove ANSI escape sequences (both literal and escaped forms)
+	ansiRegex := regexp.MustCompile(`\\033\[[0-9;]*m|\033\[[0-9;]*m`)
+	return ansiRegex.ReplaceAll(data, []byte{})
+}
+
+// cleanProgramPath removes ANSI escape sequences from a program path
+func cleanProgramPath(path string) string {
+	// Remove ANSI escape sequences
+	ansiRegex := regexp.MustCompile(`\\033\[[0-9;]*m|\033\[[0-9;]*m`)
+	cleaned := ansiRegex.ReplaceAllString(path, "")
+
+	// Also handle cases where the path might be wrapped with escape sequences
+	// Extract the actual path if it's between escape sequences
+	pathRegex := regexp.MustCompile(`([/\w\-\.]+/claude)`)
+	matches := pathRegex.FindStringSubmatch(cleaned)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+
+	return cleaned
+}
+
 func LoadConfig() *Config {
 	configDir, err := GetConfigDir()
 	if err != nil {
@@ -132,10 +156,28 @@ func LoadConfig() *Config {
 		return DefaultConfig()
 	}
 
+	// First, clean up any escape sequences in the raw data
+	cleanedData := cleanEscapeSequences(data)
+
 	var config Config
-	if err := json.Unmarshal(data, &config); err != nil {
+	if err := json.Unmarshal(cleanedData, &config); err != nil {
 		log.ErrorLog.Printf("failed to parse config file: %v", err)
-		return DefaultConfig()
+		// Try to save a clean default config
+		defaultCfg := DefaultConfig()
+		if saveErr := saveConfig(defaultCfg); saveErr != nil {
+			log.WarningLog.Printf("failed to save clean config: %v", saveErr)
+		}
+		return defaultCfg
+	}
+
+	// Clean up the default_program field if it contains escape sequences
+	if strings.Contains(config.DefaultProgram, "\\033") || strings.Contains(config.DefaultProgram, "\033") {
+		log.WarningLog.Printf("detected escape sequences in default_program, cleaning up")
+		config.DefaultProgram = cleanProgramPath(config.DefaultProgram)
+		// Save the cleaned config
+		if saveErr := saveConfig(&config); saveErr != nil {
+			log.WarningLog.Printf("failed to save cleaned config: %v", saveErr)
+		}
 	}
 
 	return &config
