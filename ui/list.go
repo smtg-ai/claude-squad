@@ -114,7 +114,7 @@ func (r *InstanceRenderer) setWidth(width int) {
 // ɹ and ɻ are other options.
 const branchIcon = "Ꮧ"
 
-func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, hasMultipleRepos bool) string {
+func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool) string {
 	prefix := fmt.Sprintf(" %d. ", idx)
 	if idx >= 10 {
 		prefix = prefix[:len(prefix)-1]
@@ -186,13 +186,18 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	remainingWidth -= diffWidth
 
 	branch := i.Branch
-	if i.Started() && hasMultipleRepos {
-		repoName, err := i.RepoName()
-		if err != nil {
-			log.ErrorLog.Printf("could not get repo name in instance renderer: %v", err)
-		} else {
-			branch += fmt.Sprintf(" (%s)", repoName)
+	// Always show repository name for better identification
+	var repoName string
+	if i.Started() {
+		if rn, err := i.RepoName(); err == nil {
+			repoName = rn
 		}
+	} else {
+		// For not-started instances, get repo name from Path
+		repoName = i.RepoNameFromPath()
+	}
+	if repoName != "" {
+		branch += fmt.Sprintf(" (%s)", repoName)
 	}
 	// Don't show branch if there's no space for it. Or show ellipsis if it's too long.
 	branchWidth := runewidth.StringWidth(branch)
@@ -255,7 +260,7 @@ func (l *List) String() string {
 
 	// Render the list.
 	for i, item := range l.items {
-		b.WriteString(l.renderer.Render(item, i+1, i == l.selectedIdx, len(l.repos) > 1))
+		b.WriteString(l.renderer.Render(item, i+1, i == l.selectedIdx))
 		if i != len(l.items)-1 {
 			b.WriteString("\n\n")
 		}
