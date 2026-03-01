@@ -249,6 +249,44 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case instanceChangedMsg:
 		// Handle instance changed after confirmation action
 		return m, m.instanceChanged()
+	case instanceStartedMsg:
+		if msg.err != nil {
+			// Find and select the failed instance, then kill it
+			for i, inst := range m.list.GetInstances() {
+				if inst == msg.instance {
+					m.list.SetSelectedInstance(i)
+					break
+				}
+			}
+			m.list.Kill()
+			return m, tea.Batch(m.handleError(msg.err), m.instanceChanged())
+		}
+
+		// Save after successful start
+		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+			return m, m.handleError(err)
+		}
+		if m.autoYes {
+			msg.instance.AutoYes = true
+		}
+
+		if msg.promptAfterName {
+			// Select the started instance
+			for i, inst := range m.list.GetInstances() {
+				if inst == msg.instance {
+					m.list.SetSelectedInstance(i)
+					break
+				}
+			}
+			m.state = statePrompt
+			m.menu.SetState(ui.StatePrompt)
+			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+		} else {
+			m.menu.SetState(ui.StateDefault)
+			m.showHelpScreen(helpStart(msg.instance), nil)
+		}
+
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -331,35 +369,25 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
-			if err := instance.Start(true); err != nil {
-				m.list.Kill()
-				m.state = stateDefault
-				return m, m.handleError(err)
-			}
-			// Save after adding new instance
-			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-				return m, m.handleError(err)
-			}
-			// Instance added successfully, call the finalizer.
+			// Set Loading status and finalize into the list immediately
+			instance.SetStatus(session.Loading)
 			m.newInstanceFinalizer()
-			if m.autoYes {
-				instance.AutoYes = true
-			}
-
-			m.newInstanceFinalizer()
+			promptAfterName := m.promptAfterName
+			m.promptAfterName = false
 			m.state = stateDefault
-			if m.promptAfterName {
-				m.state = statePrompt
-				m.menu.SetState(ui.StatePrompt)
-				// Initialize the text input overlay
-				m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
-				m.promptAfterName = false
-			} else {
-				m.menu.SetState(ui.StateDefault)
-				m.showHelpScreen(helpStart(instance), nil)
+			m.menu.SetState(ui.StateDefault)
+
+			// Return a tea.Cmd that runs instance.Start in the background
+			startCmd := func() tea.Msg {
+				err := instance.Start(true)
+				return instanceStartedMsg{
+					instance:        instance,
+					err:             err,
+					promptAfterName: promptAfterName,
+				}
 			}
 
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
 		case tea.KeyRunes:
 			if runewidth.StringWidth(instance.Title) >= 32 {
 				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
@@ -527,7 +555,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, m.instanceChanged()
 	case keys.KeyKill:
 		selected := m.list.GetSelectedInstance()
-		if selected == nil {
+		if selected == nil || selected.Status == session.Loading {
 			return m, nil
 		}
 
@@ -563,7 +591,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, m.confirmAction(message, killAction)
 	case keys.KeySubmit:
 		selected := m.list.GetSelectedInstance()
-		if selected == nil {
+		if selected == nil || selected.Status == session.Loading {
 			return m, nil
 		}
 
@@ -586,7 +614,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, m.confirmAction(message, pushAction)
 	case keys.KeyCheckout:
 		selected := m.list.GetSelectedInstance()
-		if selected == nil {
+		if selected == nil || selected.Status == session.Loading {
 			return m, nil
 		}
 
@@ -600,7 +628,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyResume:
 		selected := m.list.GetSelectedInstance()
-		if selected == nil {
+		if selected == nil || selected.Status == session.Loading {
 			return m, nil
 		}
 		if err := selected.Resume(); err != nil {
@@ -612,7 +640,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		selected := m.list.GetSelectedInstance()
-		if selected == nil || selected.Paused() || !selected.TmuxAlive() {
+		if selected == nil || selected.Paused() || selected.Status == session.Loading || !selected.TmuxAlive() {
 			return m, nil
 		}
 		// Show help screen before attaching
@@ -673,6 +701,12 @@ type previewTickMsg struct{}
 type tickUpdateMetadataMessage struct{}
 
 type instanceChangedMsg struct{}
+
+type instanceStartedMsg struct {
+	instance        *session.Instance
+	err             error
+	promptAfterName bool
+}
 
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
 // overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.
