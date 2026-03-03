@@ -65,9 +65,9 @@ export default function Home() {
           <h3>Via Shell Script</h3>
           <div className={styles.codeBlockWrapper}>
             <pre className={styles.codeBlock}>
-              <code>curl -fsSL https://raw.githubusercontent.com/stmg-ai/claude-squad/main/install.sh | bash</code>
+              <code>curl -fsSL https://raw.githubusercontent.com/smtg-ai/claude-squad/main/install.sh | bash</code>
             </pre>
-            <CopyButton textToCopy="curl -fsSL https://raw.githubusercontent.com/stmg-ai/claude-squad/main/install.sh | bash" />
+            <CopyButton textToCopy="curl -fsSL https://raw.githubusercontent.com/smtg-ai/claude-squad/main/install.sh | bash" />
           </div>
           <p className={styles.prerequisites}>
             Prerequisites: tmux, gh (GitHub CLI)
