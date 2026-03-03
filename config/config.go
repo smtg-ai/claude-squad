@@ -15,6 +15,10 @@ import (
 const (
 	ConfigFileName = "config.json"
 	defaultProgram = "claude"
+	// WorktreeRootSubdirectory stores worktrees under the global config subdirectory.
+	WorktreeRootSubdirectory = "subdirectory"
+	// WorktreeRootSibling stores worktrees in a sibling directory next to the repository.
+	WorktreeRootSibling = "sibling"
 )
 
 // GetConfigDir returns the path to the application's configuration directory
@@ -36,6 +40,8 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// WorktreeRoot controls where worktrees are created: "subdirectory" or "sibling".
+	WorktreeRoot string `json:"worktree_root"`
 }
 
 // DefaultConfig returns the default configuration
@@ -58,6 +64,7 @@ func DefaultConfig() *Config {
 			}
 			return fmt.Sprintf("%s/", strings.ToLower(user.Username))
 		}(),
+		WorktreeRoot: WorktreeRootSubdirectory,
 	}
 }
 
@@ -136,6 +143,10 @@ func LoadConfig() *Config {
 	if err := json.Unmarshal(data, &config); err != nil {
 		log.ErrorLog.Printf("failed to parse config file: %v", err)
 		return DefaultConfig()
+	}
+
+	if config.WorktreeRoot == "" {
+		config.WorktreeRoot = WorktreeRootSubdirectory
 	}
 
 	return &config
