@@ -92,6 +92,39 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 	return instances, nil
 }
 
+// LoadInstanceData loads the raw instance data without hydrating into full Instances.
+// This avoids tmux side effects for sessions that will be filtered out.
+func (s *Storage) LoadInstanceData() ([]InstanceData, error) {
+	jsonData := s.state.GetInstances()
+
+	var instancesData []InstanceData
+	if err := json.Unmarshal(jsonData, &instancesData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal instances: %w", err)
+	}
+
+	return instancesData, nil
+}
+
+// SaveInstancesWithExtra saves the hydrated instances plus extra raw InstanceData
+// (from other projects) back to disk, preserving sessions that were filtered out.
+func (s *Storage) SaveInstancesWithExtra(instances []*Instance, extra []InstanceData) error {
+	data := make([]InstanceData, 0)
+	for _, instance := range instances {
+		if instance.Started() {
+			data = append(data, instance.ToInstanceData())
+		}
+	}
+
+	data = append(data, extra...)
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal instances: %w", err)
+	}
+
+	return s.state.SaveInstances(jsonData)
+}
+
 // DeleteInstance removes an instance from storage
 func (s *Storage) DeleteInstance(title string) error {
 	instances, err := s.LoadInstances()

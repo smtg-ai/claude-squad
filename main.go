@@ -22,6 +22,7 @@ var (
 	programFlag string
 	autoYesFlag bool
 	daemonFlag  bool
+	allFlag     bool
 	rootCmd     = &cobra.Command{
 		Use:   "claude-squad",
 		Short: "Claude Squad - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.",
@@ -45,6 +46,11 @@ var (
 
 			if !git.IsGitRepo(currentDir) {
 				return fmt.Errorf("error: claude-squad must be run from within a git repository")
+			}
+
+			repoRoot, err := git.FindGitRepoRoot(currentDir)
+			if err != nil {
+				return fmt.Errorf("failed to find git repo root: %w", err)
 			}
 
 			cfg := config.LoadConfig()
@@ -71,7 +77,7 @@ var (
 				log.ErrorLog.Printf("failed to stop daemon: %v", err)
 			}
 
-			return app.Run(ctx, program, autoYes)
+			return app.Run(ctx, program, autoYes, repoRoot, allFlag)
 		},
 	}
 
@@ -150,6 +156,7 @@ func init() {
 		"[experimental] If enabled, all instances will automatically accept prompts")
 	rootCmd.Flags().BoolVar(&daemonFlag, "daemon", false, "Run a program that loads all sessions"+
 		" and runs autoyes mode on them.")
+	rootCmd.Flags().BoolVarP(&allFlag, "all", "a", false, "Show sessions from all projects")
 
 	// Hide the daemonFlag as it's only for internal use
 	err := rootCmd.Flags().MarkHidden("daemon")

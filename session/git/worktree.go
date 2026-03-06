@@ -57,7 +57,7 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 		absPath = repoPath
 	}
 
-	repoPath, err = findGitRepoRoot(absPath)
+	repoPath, err = FindGitRepoRoot(absPath)
 	if err != nil {
 		return nil, "", err
 	}
