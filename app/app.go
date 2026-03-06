@@ -10,6 +10,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -21,9 +23,9 @@ import (
 const GlobalInstanceLimit = 10
 
 // Run is the main entrypoint into the application.
-func Run(ctx context.Context, program string, autoYes bool) error {
+func Run(ctx context.Context, program string, autoYes bool, repoRoot string, showAll bool) error {
 	p := tea.NewProgram(
-		newHome(ctx, program, autoYes),
+		newHome(ctx, program, autoYes, repoRoot, showAll),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(), // Mouse scroll
 	)
@@ -60,6 +62,14 @@ type home struct {
 	// appState stores persistent application state like seen help screens
 	appState config.AppState
 
+	// repoRoot is the git repo root for the current working directory
+	repoRoot string
+	// showAll disables project-scoped filtering when true
+	showAll bool
+	// otherProjectData holds raw InstanceData for sessions not matching the current project,
+	// so they can be preserved when saving back to disk
+	otherProjectData []session.InstanceData
+
 	// -- State --
 
 	// state is the current discrete state of the application
@@ -94,7 +104,20 @@ type home struct {
 	confirmationOverlay *overlay.ConfirmationOverlay
 }
 
-func newHome(ctx context.Context, program string, autoYes bool) *home {
+// instanceMatchesRepo returns true if the given InstanceData belongs to the given repo root.
+func instanceMatchesRepo(data session.InstanceData, repoRoot string) bool {
+	// Check worktree repo path first (primary match)
+	if data.Worktree.RepoPath != "" {
+		return data.Worktree.RepoPath == repoRoot
+	}
+	// Fall back to checking if the session path starts with the repo root (older sessions)
+	if data.Path != "" {
+		return strings.HasPrefix(data.Path, repoRoot)
+	}
+	return false
+}
+
+func newHome(ctx context.Context, program string, autoYes bool, repoRoot string, showAll bool) *home {
 	// Load application config
 	appConfig := config.LoadConfig()
 
@@ -106,6 +129,12 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 	if err != nil {
 		fmt.Printf("Failed to initialize storage: %v\n", err)
 		os.Exit(1)
+	}
+
+	// Determine the repo name for the list header
+	var repoName string
+	if repoRoot != "" && !showAll {
+		repoName = filepath.Base(repoRoot)
 	}
 
 	h := &home{
@@ -120,18 +149,35 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		autoYes:      autoYes,
 		state:        stateDefault,
 		appState:     appState,
+		repoRoot:     repoRoot,
+		showAll:      showAll,
 	}
-	h.list = ui.NewList(&h.spinner, autoYes)
+	h.list = ui.NewList(&h.spinner, autoYes, repoName)
 
-	// Load saved instances
-	instances, err := storage.LoadInstances()
+	// Load raw instance data for filtering
+	allData, err := storage.LoadInstanceData()
 	if err != nil {
 		fmt.Printf("Failed to load instances: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Add loaded instances to the list
-	for _, instance := range instances {
+	// Partition into matching and non-matching instances
+	var matchingData []session.InstanceData
+	for _, data := range allData {
+		if showAll || repoRoot == "" || instanceMatchesRepo(data, repoRoot) {
+			matchingData = append(matchingData, data)
+		} else {
+			h.otherProjectData = append(h.otherProjectData, data)
+		}
+	}
+
+	// Hydrate only matching instances
+	for _, data := range matchingData {
+		instance, err := session.FromInstanceData(data)
+		if err != nil {
+			fmt.Printf("Failed to create instance %s: %v\n", data.Title, err)
+			os.Exit(1)
+		}
 		// Call the finalizer immediately.
 		h.list.AddInstance(instance)()
 		if autoYes {
@@ -260,7 +306,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Save after successful start
-		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+		if err := m.storage.SaveInstancesWithExtra(m.list.GetInstances(), m.otherProjectData); err != nil {
 			return m, m.handleError(err)
 		}
 		if m.autoYes {
@@ -286,7 +332,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {
-	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+	if err := m.storage.SaveInstancesWithExtra(m.list.GetInstances(), m.otherProjectData); err != nil {
 		return m, m.handleError(err)
 	}
 	return m, tea.Quit

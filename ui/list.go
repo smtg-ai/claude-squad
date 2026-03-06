@@ -59,18 +59,21 @@ type List struct {
 	height, width int
 	renderer      *InstanceRenderer
 	autoyes       bool
+	// repoName is displayed in the list header when set (project-scoped filtering)
+	repoName string
 
 	// map of repo name to number of instances using it. Used to display the repo name only if there are
 	// multiple repos in play.
 	repos map[string]int
 }
 
-func NewList(spinner *spinner.Model, autoYes bool) *List {
+func NewList(spinner *spinner.Model, autoYes bool, repoName string) *List {
 	return &List{
 		items:    []*session.Instance{},
 		renderer: &InstanceRenderer{spinner: spinner},
 		repos:    make(map[string]int),
 		autoyes:  autoYes,
+		repoName: repoName,
 	}
 }
 
@@ -226,7 +229,10 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 }
 
 func (l *List) String() string {
-	const titleText = " Instances "
+	titleText := " Instances "
+	if l.repoName != "" {
+		titleText = " " + l.repoName + " "
+	}
 	const autoYesText = " auto-yes "
 
 	// Write the title.
