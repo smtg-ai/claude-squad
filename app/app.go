@@ -77,10 +77,6 @@ type home struct {
 	// keySent is used to manage underlining menu items
 	keySent bool
 
-	// metadataUpdating is true while a background metadata update is in progress.
-	// Prevents overlapping ticks from piling up.
-	metadataUpdating bool
-
 	// instanceStarting is true while a background instance start is in progress.
 	// Prevents double-submission and guards against interacting with a not-yet-started instance.
 	instanceStarting bool
@@ -193,7 +189,7 @@ func (m *home) Init() tea.Cmd {
 			time.Sleep(100 * time.Millisecond)
 			return previewTickMsg{}
 		},
-		tickUpdateMetadataCmd,
+		tickUpdateMetadataCmd(m.list.GetInstances()),
 	)
 }
 
@@ -213,17 +209,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case keyupMsg:
 		m.menu.ClearKeydown()
 		return m, nil
-	case tickUpdateMetadataMessage:
-		if m.metadataUpdating {
-			// Previous update still in progress, check again shortly.
-			return m, func() tea.Msg {
-				time.Sleep(200 * time.Millisecond)
-				return tickUpdateMetadataMessage{}
-			}
-		}
-		m.metadataUpdating = true
-		instances := m.list.GetInstances()
-		return m, runMetadataUpdateCmd(instances)
 	case instanceStartDoneMsg:
 		m.instanceStarting = false
 		inst := msg.instance
@@ -251,7 +236,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 	case metadataUpdateDoneMsg:
-		m.metadataUpdating = false
 		for _, r := range msg.results {
 			if r.updated {
 				r.instance.SetStatus(session.Running)
@@ -269,7 +253,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				r.instance.SetDiffStats(r.diffStats)
 			}
 		}
-		return m, tickUpdateMetadataCmd
+		return m, tickUpdateMetadataCmd(m.list.GetInstances())
 	case tea.MouseMsg:
 		// Handle mouse wheel events for scrolling the diff/preview pane
 		if msg.Action == tea.MouseActionPress {
@@ -717,8 +701,6 @@ type hideErrMsg struct{}
 // previewTickMsg implements tea.Msg and triggers a preview update
 type previewTickMsg struct{}
 
-type tickUpdateMetadataMessage struct{}
-
 type instanceChangedMsg struct{}
 
 // instanceMetaResult holds the results of a single instance's metadata update,
@@ -750,18 +732,13 @@ func runInstanceStartCmd(instance *session.Instance) tea.Cmd {
 	}
 }
 
-// tickUpdateMetadataCmd schedules the next metadata update tick after a delay.
-var tickUpdateMetadataCmd = func() tea.Msg {
-	time.Sleep(500 * time.Millisecond)
-	return tickUpdateMetadataMessage{}
-}
-
-// runMetadataUpdateCmd returns a Cmd that performs expensive metadata I/O
-// (tmux capture, git diff) in background goroutines — one per active instance
-// in parallel — so the main event loop stays responsive to input.
-func runMetadataUpdateCmd(instances []*session.Instance) tea.Cmd {
+// tickUpdateMetadataCmd returns a self-chaining Cmd that sleeps 500ms, then performs
+// expensive metadata I/O (tmux capture, git diff) in parallel background goroutines.
+// Because it only re-schedules after completing, overlapping ticks are impossible.
+func tickUpdateMetadataCmd(instances []*session.Instance) tea.Cmd {
 	return func() tea.Msg {
-		// Collect active instances that need updating.
+		time.Sleep(500 * time.Millisecond)
+
 		var active []*session.Instance
 		for _, inst := range instances {
 			if inst.Started() && !inst.Paused() {
@@ -786,7 +763,7 @@ func runMetadataUpdateCmd(instances []*session.Instance) tea.Cmd {
 		}
 		wg.Wait()
 
-		return metadataUpdateDoneMsg{results: results[:]}
+		return metadataUpdateDoneMsg{results: results}
 	}
 }
 
