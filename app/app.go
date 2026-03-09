@@ -77,12 +77,6 @@ type home struct {
 	// keySent is used to manage underlining menu items
 	keySent bool
 
-	// instanceStarting is true while a background instance start is in progress.
-	// Prevents double-submission and guards against interacting with a not-yet-started instance.
-	instanceStarting bool
-	// startingInstance holds a reference to the instance being started in the background.
-	startingInstance *session.Instance
-
 	// -- UI Components --
 
 	// list displays the list of instances
@@ -121,7 +115,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		ctx:          ctx,
 		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		menu:         ui.NewMenu(),
-		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane()),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewTerminalPane()),
 		errBox:       ui.NewErrBox(),
 		storage:      storage,
 		appConfig:    appConfig,
@@ -209,32 +203,6 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case keyupMsg:
 		m.menu.ClearKeydown()
 		return m, nil
-	case instanceStartDoneMsg:
-		m.instanceStarting = false
-		inst := msg.instance
-		m.startingInstance = nil
-
-		if msg.err != nil {
-			// Start failed — remove the instance from the list and show the error.
-			m.list.Kill()
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), m.handleError(msg.err))
-		}
-
-		// Save after successful start.
-		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-			return m, m.handleError(err)
-		}
-
-		if m.promptAfterName {
-			m.state = statePrompt
-			m.menu.SetState(ui.StatePrompt)
-			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
-			m.promptAfterName = false
-		} else {
-			m.showHelpScreen(helpStart(inst), nil)
-		}
-
-		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 	case metadataUpdateDoneMsg:
 		for _, r := range msg.results {
 			if r.updated {
@@ -283,6 +251,33 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case instanceChangedMsg:
 		// Handle instance changed after confirmation action
 		return m, m.instanceChanged()
+	case instanceStartedMsg:
+		// Select the instance that just started (or failed)
+		m.list.SelectInstance(msg.instance)
+
+		if msg.err != nil {
+			m.list.Kill()
+			return m, tea.Batch(m.handleError(msg.err), m.instanceChanged())
+		}
+
+		// Save after successful start
+		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+			return m, m.handleError(err)
+		}
+		if m.autoYes {
+			msg.instance.AutoYes = true
+		}
+
+		if msg.promptAfterName {
+			m.state = statePrompt
+			m.menu.SetState(ui.StatePrompt)
+			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+		} else {
+			m.menu.SetState(ui.StateDefault)
+			m.showHelpScreen(helpStart(msg.instance), nil)
+		}
+
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -365,25 +360,25 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
-			// Set loading status for visual feedback (spinner in the list).
+			// Set Loading status and finalize into the list immediately
 			instance.SetStatus(session.Loading)
-
-			// Register the instance in the list (call finalizer once).
 			m.newInstanceFinalizer()
-			if m.autoYes {
-				instance.AutoYes = true
-			}
-
-			// Track the starting instance so the done handler can finish setup.
-			m.instanceStarting = true
-			m.startingInstance = instance
-
-			// Transition to default state immediately so the UI stays responsive.
+			promptAfterName := m.promptAfterName
+			m.promptAfterName = false
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
 
-			// Kick off the expensive Start() in a background goroutine.
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), runInstanceStartCmd(instance))
+			// Return a tea.Cmd that runs instance.Start in the background
+			startCmd := func() tea.Msg {
+				err := instance.Start(true)
+				return instanceStartedMsg{
+					instance:        instance,
+					err:             err,
+					promptAfterName: promptAfterName,
+				}
+			}
+
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
 		case tea.KeyRunes:
 			if runewidth.StringWidth(instance.Title) >= 32 {
 				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
@@ -468,13 +463,18 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	// Always check for escape key first to ensure it doesn't get intercepted elsewhere
 	if msg.Type == tea.KeyEsc {
 		// If in preview tab and in scroll mode, exit scroll mode
-		if !m.tabbedWindow.IsInDiffTab() && m.tabbedWindow.IsPreviewInScrollMode() {
+		if m.tabbedWindow.IsInPreviewTab() && m.tabbedWindow.IsPreviewInScrollMode() {
 			// Use the selected instance from the list
 			selected := m.list.GetSelectedInstance()
 			err := m.tabbedWindow.ResetPreviewToNormalMode(selected)
 			if err != nil {
 				return m, m.handleError(err)
 			}
+			return m, m.instanceChanged()
+		}
+		// If in terminal tab and in scroll mode, exit scroll mode
+		if m.tabbedWindow.IsInTerminalTab() && m.tabbedWindow.IsTerminalInScrollMode() {
+			m.tabbedWindow.ResetTerminalToNormalMode()
 			return m, m.instanceChanged()
 		}
 	}
@@ -493,9 +493,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	case keys.KeyHelp:
 		return m.showHelpScreen(helpTypeGeneral{}, nil)
 	case keys.KeyPrompt:
-		if m.instanceStarting {
-			return m, m.handleError(fmt.Errorf("please wait for the current session to finish starting"))
-		}
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
@@ -517,9 +514,6 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		return m, nil
 	case keys.KeyNew:
-		if m.instanceStarting {
-			return m, m.handleError(fmt.Errorf("please wait for the current session to finish starting"))
-		}
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
@@ -553,11 +547,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, m.instanceChanged()
 	case keys.KeyTab:
 		m.tabbedWindow.Toggle()
-		m.menu.SetInDiffTab(m.tabbedWindow.IsInDiffTab())
+		m.menu.SetActiveTab(m.tabbedWindow.GetActiveTab())
 		return m, m.instanceChanged()
 	case keys.KeyKill:
 		selected := m.list.GetSelectedInstance()
-		if selected == nil {
+		if selected == nil || selected.Status == session.Loading {
 			return m, nil
 		}
 
@@ -577,6 +571,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if checkedOut {
 				return fmt.Errorf("instance %s is currently checked out", selected.Title)
 			}
+
+			// Clean up terminal session for this instance
+			m.tabbedWindow.CleanupTerminalForInstance(selected.Title)
 
 			// Delete from storage first
 			if err := m.storage.DeleteInstance(selected.Title); err != nil {
@@ -625,12 +622,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if err := selected.Pause(); err != nil {
 				m.handleError(err)
 			}
+			m.tabbedWindow.CleanupTerminalForInstance(selected.Title)
 			m.instanceChanged()
 		})
 		return m, nil
 	case keys.KeyResume:
 		selected := m.list.GetSelectedInstance()
-		if selected == nil {
+		if selected == nil || selected.Status == session.Loading {
 			return m, nil
 		}
 		if err := selected.Resume(); err != nil {
@@ -643,6 +641,19 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		selected := m.list.GetSelectedInstance()
 		if selected == nil || selected.Paused() || selected.Status == session.Loading || !selected.TmuxAlive() {
+			return m, nil
+		}
+		// Terminal tab: attach to terminal session
+		if m.tabbedWindow.IsInTerminalTab() {
+			m.showHelpScreen(helpTypeInstanceAttach{}, func() {
+				ch, err := m.tabbedWindow.AttachTerminal()
+				if err != nil {
+					m.handleError(err)
+					return
+				}
+				<-ch
+				m.state = stateDefault
+			})
 			return m, nil
 		}
 		// Show help screen before attaching
@@ -675,6 +686,9 @@ func (m *home) instanceChanged() tea.Cmd {
 
 	// If there's no selected instance, we don't need to update the preview.
 	if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
+		return m.handleError(err)
+	}
+	if err := m.tabbedWindow.UpdateTerminal(selected); err != nil {
 		return m.handleError(err)
 	}
 	return nil
@@ -717,19 +731,10 @@ type metadataUpdateDoneMsg struct {
 	results []instanceMetaResult
 }
 
-// instanceStartDoneMsg is sent when the background instance start completes.
-type instanceStartDoneMsg struct {
-	instance *session.Instance
-	err      error
-}
-
-// runInstanceStartCmd returns a Cmd that performs the expensive instance.Start(true)
-// in a background goroutine so the main event loop stays responsive.
-func runInstanceStartCmd(instance *session.Instance) tea.Cmd {
-	return func() tea.Msg {
-		err := instance.Start(true)
-		return instanceStartDoneMsg{instance: instance, err: err}
-	}
+type instanceStartedMsg struct {
+	instance        *session.Instance
+	err             error
+	promptAfterName bool
 }
 
 // tickUpdateMetadataCmd returns a self-chaining Cmd that sleeps 500ms, then performs
@@ -757,6 +762,7 @@ func tickUpdateMetadataCmd(instances []*session.Instance) tea.Cmd {
 				defer wg.Done()
 				r := &results[i]
 				r.instance = instance
+				r.instance.CheckAndHandleTrustPrompt()
 				r.updated, r.hasPrompt = instance.HasUpdated()
 				r.diffStats = instance.ComputeDiff()
 			}(idx, inst)

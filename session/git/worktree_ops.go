@@ -7,9 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 )
 
 // Setup creates a new worktree for the session
@@ -20,36 +17,13 @@ func (g *GitWorktree) Setup() error {
 		return fmt.Errorf("failed to get worktree directory: %w", err)
 	}
 
-	// Create directory and check branch existence in parallel
-	errChan := make(chan error, 2)
-	var branchExists bool
-
-	// Goroutine for directory creation
-	go func() {
-		errChan <- os.MkdirAll(worktreesDir, 0755)
-	}()
-
-	// Goroutine for branch check
-	go func() {
-		repo, err := git.PlainOpen(g.repoPath)
-		if err != nil {
-			errChan <- fmt.Errorf("failed to open repository: %w", err)
-			return
-		}
-
-		branchRef := plumbing.NewBranchReferenceName(g.branchName)
-		if _, err := repo.Reference(branchRef, false); err == nil {
-			branchExists = true
-		}
-		errChan <- nil
-	}()
-
-	// Wait for both operations
-	for i := 0; i < 2; i++ {
-		if err := <-errChan; err != nil {
-			return err
-		}
+	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
+		return err
 	}
+
+	// Check if branch exists using git CLI (much faster than go-git PlainOpen)
+	_, err = g.runGitCommand(g.repoPath, "show-ref", "--verify", fmt.Sprintf("refs/heads/%s", g.branchName))
+	branchExists := err == nil
 
 	if branchExists {
 		return g.setupFromExistingBranch()
@@ -74,25 +48,11 @@ func (g *GitWorktree) setupFromExistingBranch() error {
 
 // setupNewWorktree creates a new worktree from HEAD
 func (g *GitWorktree) setupNewWorktree() error {
-	// Ensure worktrees directory exists
-	worktreesDir := filepath.Join(g.repoPath, "worktrees")
-	if err := os.MkdirAll(worktreesDir, 0755); err != nil {
-		return fmt.Errorf("failed to create worktrees directory: %w", err)
-	}
-
 	// Clean up any existing worktree first
 	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath) // Ignore error if worktree doesn't exist
 
-	// Open the repository
-	repo, err := git.PlainOpen(g.repoPath)
-	if err != nil {
-		return fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	// Clean up any existing branch or reference
-	if err := g.cleanupExistingBranch(repo); err != nil {
-		return fmt.Errorf("failed to cleanup existing branch: %w", err)
-	}
+	// Clean up any existing branch using git CLI (much faster than go-git PlainOpen)
+	_, _ = g.runGitCommand(g.repoPath, "branch", "-D", g.branchName) // Ignore error if branch doesn't exist
 
 	output, err := g.runGitCommand(g.repoPath, "rev-parse", "HEAD")
 	if err != nil {
@@ -132,22 +92,12 @@ func (g *GitWorktree) Cleanup() error {
 		errs = append(errs, fmt.Errorf("failed to check worktree path: %w", err))
 	}
 
-	// Open the repository for branch cleanup
-	repo, err := git.PlainOpen(g.repoPath)
-	if err != nil {
-		errs = append(errs, fmt.Errorf("failed to open repository for cleanup: %w", err))
-		return g.combineErrors(errs)
-	}
-
-	branchRef := plumbing.NewBranchReferenceName(g.branchName)
-
-	// Check if branch exists before attempting removal
-	if _, err := repo.Reference(branchRef, false); err == nil {
-		if err := repo.Storer.RemoveReference(branchRef); err != nil {
+	// Delete the branch using git CLI
+	if _, err := g.runGitCommand(g.repoPath, "branch", "-D", g.branchName); err != nil {
+		// Only log if it's not a "branch not found" error
+		if !strings.Contains(err.Error(), "not found") {
 			errs = append(errs, fmt.Errorf("failed to remove branch %s: %w", g.branchName, err))
 		}
-	} else if err != plumbing.ErrReferenceNotFound {
-		errs = append(errs, fmt.Errorf("error checking branch %s existence: %w", g.branchName, err))
 	}
 
 	// Prune the worktree to clean up any remaining references

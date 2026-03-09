@@ -149,45 +149,30 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("error restoring tmux session: %w", err)
 	}
 
-	if strings.HasSuffix(t.program, ProgramClaude) || strings.HasSuffix(t.program, ProgramAider) || strings.HasSuffix(t.program, ProgramGemini) {
-		searchString := "Do you trust the files in this folder?"
-		tapFunc := t.TapEnter
-		maxWaitTime := 30 * time.Second // Much longer timeout for slower systems
-		if !strings.HasSuffix(t.program, ProgramClaude) {
-			searchString = "Open documentation url for more info"
-			tapFunc = t.TapDAndEnter
-			maxWaitTime = 45 * time.Second // Aider/Gemini take longer to start
-		}
-
-		// Deal with "do you trust the files" screen by sending an enter keystroke.
-		// Use exponential backoff with longer timeout for reliability on slow systems
-		startTime := time.Now()
-		sleepDuration := 100 * time.Millisecond
-		attempt := 0
-
-		for time.Since(startTime) < maxWaitTime {
-			attempt++
-			time.Sleep(sleepDuration)
-			content, err := t.CapturePaneContent()
-			if err != nil {
-				// Session might not be ready yet, continue waiting
-			} else {
-				if strings.Contains(content, searchString) {
-					if err := tapFunc(); err != nil {
-						log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
-					}
-					break
-				}
-			}
-
-			// Exponential backoff with cap at 1 second
-			sleepDuration = time.Duration(float64(sleepDuration) * 1.2)
-			if sleepDuration > time.Second {
-				sleepDuration = time.Second
-			}
-		}
-	}
 	return nil
+}
+
+// CheckAndHandleTrustPrompt checks the pane content once for a trust prompt and dismisses it if found.
+// Returns true if the prompt was found and handled.
+func (t *TmuxSession) CheckAndHandleTrustPrompt() bool {
+	searchString := "Do you trust the files in this folder?"
+	tapFunc := t.TapEnter
+	if !strings.HasSuffix(t.program, ProgramClaude) {
+		searchString = "Open documentation url for more info"
+		tapFunc = t.TapDAndEnter
+	}
+
+	content, err := t.CapturePaneContent()
+	if err != nil {
+		return false
+	}
+	if strings.Contains(content, searchString) {
+		if err := tapFunc(); err != nil {
+			log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
+		}
+		return true
+	}
+	return false
 }
 
 // Restore attaches to an existing session and restores the window size

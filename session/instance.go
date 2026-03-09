@@ -309,6 +309,20 @@ func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
 }
 
 // TapEnter sends an enter key press to the tmux session if AutoYes is enabled.
+// CheckAndHandleTrustPrompt checks for and dismisses the trust prompt for supported programs.
+func (i *Instance) CheckAndHandleTrustPrompt() bool {
+	if !i.started || i.tmuxSession == nil {
+		return false
+	}
+	program := i.Program
+	if !strings.HasSuffix(program, tmux.ProgramClaude) &&
+		!strings.HasSuffix(program, tmux.ProgramAider) &&
+		!strings.HasSuffix(program, tmux.ProgramGemini) {
+		return false
+	}
+	return i.tmuxSession.CheckAndHandleTrustPrompt()
+}
+
 func (i *Instance) TapEnter() {
 	if !i.started || !i.AutoYes {
 		return
@@ -339,6 +353,14 @@ func (i *Instance) GetGitWorktree() (*git.GitWorktree, error) {
 		return nil, fmt.Errorf("cannot get git worktree for instance that has not been started")
 	}
 	return i.gitWorktree, nil
+}
+
+// GetWorktreePath returns the worktree path for the instance, or empty string if unavailable
+func (i *Instance) GetWorktreePath() string {
+	if i.gitWorktree == nil {
+		return ""
+	}
+	return i.gitWorktree.GetWorktreePath()
 }
 
 func (i *Instance) Started() bool {

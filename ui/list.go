@@ -129,9 +129,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	// add spinner next to title if it's running
 	var join string
 	switch i.Status {
-	case session.Running:
-		join = fmt.Sprintf("%s ", r.spinner.View())
-	case session.Loading:
+	case session.Running, session.Loading:
 		join = fmt.Sprintf("%s ", r.spinner.View())
 	case session.Ready:
 		join = readyStyle.Render(readyIcon)
@@ -176,6 +174,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	remainingWidth := r.width
 	remainingWidth -= runewidth.StringWidth(prefix)
 	remainingWidth -= runewidth.StringWidth(branchIcon)
+	remainingWidth -= 2 // for the literal " " and "-" in the branchLine format string
 
 	diffWidth := runewidth.StringWidth(addedDiff) + runewidth.StringWidth(removedDiff)
 	if diffWidth > 0 {
@@ -366,6 +365,16 @@ func (l *List) SetSelectedInstance(idx int) {
 		return
 	}
 	l.selectedIdx = idx
+}
+
+// SelectInstance finds and selects the given instance in the list.
+func (l *List) SelectInstance(target *session.Instance) {
+	for i, inst := range l.items {
+		if inst == target {
+			l.SetSelectedInstance(i)
+			return
+		}
+	}
 }
 
 // GetInstances returns all instances in the list

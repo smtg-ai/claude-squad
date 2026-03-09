@@ -3,11 +3,8 @@ package git
 import (
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/go-git/go-git/v5"
 )
 
 // sanitizeBranchName transforms an arbitrary string into a Git branch name friendly string.
@@ -53,34 +50,15 @@ func checkGHCLI() error {
 
 // IsGitRepo checks if the given path is within a git repository
 func IsGitRepo(path string) bool {
-	for {
-		_, err := git.PlainOpen(path)
-		if err == nil {
-			return true
-		}
-
-		parent := filepath.Dir(path)
-		if parent == path {
-			return false
-		}
-		path = parent
-	}
+	cmd := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel")
+	return cmd.Run() == nil
 }
 
 func findGitRepoRoot(path string) (string, error) {
-	currentPath := path
-	for {
-		_, err := git.PlainOpen(currentPath)
-		if err == nil {
-			// Found the repository root
-			return currentPath, nil
-		}
-
-		parent := filepath.Dir(currentPath)
-		if parent == currentPath {
-			// Reached the filesystem root without finding a repository
-			return "", fmt.Errorf("failed to find Git repository root from path: %s", path)
-		}
-		currentPath = parent
+	cmd := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to find Git repository root from path: %s", path)
 	}
+	return strings.TrimSpace(string(out)), nil
 }

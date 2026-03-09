@@ -33,6 +33,7 @@ var (
 const (
 	PreviewTab int = iota
 	DiffTab
+	TerminalTab
 )
 
 type Tab struct {
@@ -51,17 +52,20 @@ type TabbedWindow struct {
 
 	preview  *PreviewPane
 	diff     *DiffPane
+	terminal *TerminalPane
 	instance *session.Instance
 }
 
-func NewTabbedWindow(preview *PreviewPane, diff *DiffPane) *TabbedWindow {
+func NewTabbedWindow(preview *PreviewPane, diff *DiffPane, terminal *TerminalPane) *TabbedWindow {
 	return &TabbedWindow{
 		tabs: []string{
 			"Preview",
 			"Diff",
+			"Terminal",
 		},
-		preview: preview,
-		diff:    diff,
+		preview:  preview,
+		diff:     diff,
+		terminal: terminal,
 	}
 }
 
@@ -88,6 +92,7 @@ func (w *TabbedWindow) SetSize(width, height int) {
 
 	w.preview.SetSize(contentWidth, contentHeight)
 	w.diff.SetSize(contentWidth, contentHeight)
+	w.terminal.SetSize(contentWidth, contentHeight)
 }
 
 func (w *TabbedWindow) GetPreviewSize() (width, height int) {
@@ -96,16 +101,6 @@ func (w *TabbedWindow) GetPreviewSize() (width, height int) {
 
 func (w *TabbedWindow) Toggle() {
 	w.activeTab = (w.activeTab + 1) % len(w.tabs)
-}
-
-// ToggleWithReset toggles the tab and resets preview pane to normal mode
-func (w *TabbedWindow) ToggleWithReset(instance *session.Instance) error {
-	// Reset preview pane to normal mode before switching
-	if err := w.preview.ResetToNormalMode(instance); err != nil {
-		return err
-	}
-	w.activeTab = (w.activeTab + 1) % len(w.tabs)
-	return nil
 }
 
 // UpdatePreview updates the content of the preview pane. instance may be nil.
@@ -123,6 +118,14 @@ func (w *TabbedWindow) UpdateDiff(instance *session.Instance) {
 	w.diff.SetDiff(instance)
 }
 
+// UpdateTerminal updates the terminal pane content. Only updates when terminal tab is active.
+func (w *TabbedWindow) UpdateTerminal(instance *session.Instance) error {
+	if w.activeTab != TerminalTab {
+		return nil
+	}
+	return w.terminal.UpdateContent(instance)
+}
+
 // ResetPreviewToNormalMode resets the preview pane to normal mode
 func (w *TabbedWindow) ResetPreviewToNormalMode(instance *session.Instance) error {
 	return w.preview.ResetToNormalMode(instance)
@@ -130,35 +133,85 @@ func (w *TabbedWindow) ResetPreviewToNormalMode(instance *session.Instance) erro
 
 // Add these new methods for handling scroll events
 func (w *TabbedWindow) ScrollUp() {
-	if w.activeTab == PreviewTab {
+	switch w.activeTab {
+	case PreviewTab:
 		err := w.preview.ScrollUp(w.instance)
 		if err != nil {
 			log.InfoLog.Printf("tabbed window failed to scroll up: %v", err)
 		}
-	} else {
+	case DiffTab:
 		w.diff.ScrollUp()
+	case TerminalTab:
+		if err := w.terminal.ScrollUp(); err != nil {
+			log.InfoLog.Printf("tabbed window failed to scroll terminal up: %v", err)
+		}
 	}
 }
 
 func (w *TabbedWindow) ScrollDown() {
-	if w.activeTab == PreviewTab {
+	switch w.activeTab {
+	case PreviewTab:
 		err := w.preview.ScrollDown(w.instance)
 		if err != nil {
 			log.InfoLog.Printf("tabbed window failed to scroll down: %v", err)
 		}
-	} else {
+	case DiffTab:
 		w.diff.ScrollDown()
+	case TerminalTab:
+		if err := w.terminal.ScrollDown(); err != nil {
+			log.InfoLog.Printf("tabbed window failed to scroll terminal down: %v", err)
+		}
 	}
+}
+
+// IsInPreviewTab returns true if the preview tab is currently active
+func (w *TabbedWindow) IsInPreviewTab() bool {
+	return w.activeTab == PreviewTab
 }
 
 // IsInDiffTab returns true if the diff tab is currently active
 func (w *TabbedWindow) IsInDiffTab() bool {
-	return w.activeTab == 1
+	return w.activeTab == DiffTab
+}
+
+// IsInTerminalTab returns true if the terminal tab is currently active
+func (w *TabbedWindow) IsInTerminalTab() bool {
+	return w.activeTab == TerminalTab
+}
+
+// GetActiveTab returns the currently active tab index
+func (w *TabbedWindow) GetActiveTab() int {
+	return w.activeTab
+}
+
+// AttachTerminal attaches to the terminal tmux session
+func (w *TabbedWindow) AttachTerminal() (chan struct{}, error) {
+	return w.terminal.Attach()
+}
+
+// CleanupTerminal closes the terminal session
+func (w *TabbedWindow) CleanupTerminal() {
+	w.terminal.Close()
+}
+
+// CleanupTerminalForInstance closes the cached terminal session for the given instance title.
+func (w *TabbedWindow) CleanupTerminalForInstance(title string) {
+	w.terminal.CloseForInstance(title)
 }
 
 // IsPreviewInScrollMode returns true if the preview pane is in scroll mode
 func (w *TabbedWindow) IsPreviewInScrollMode() bool {
 	return w.preview.isScrolling
+}
+
+// IsTerminalInScrollMode returns true if the terminal pane is in scroll mode
+func (w *TabbedWindow) IsTerminalInScrollMode() bool {
+	return w.terminal.IsScrolling()
+}
+
+// ResetTerminalToNormalMode exits scroll mode on the terminal pane
+func (w *TabbedWindow) ResetTerminalToNormalMode() {
+	w.terminal.ResetToNormalMode()
 }
 
 func (w *TabbedWindow) String() string {
@@ -168,8 +221,9 @@ func (w *TabbedWindow) String() string {
 
 	var renderedTabs []string
 
-	tabWidth := w.width / len(w.tabs)
-	lastTabWidth := w.width - tabWidth*(len(w.tabs)-1)
+	totalTabWidth := w.width + windowStyle.GetHorizontalFrameSize()
+	tabWidth := totalTabWidth / len(w.tabs)
+	lastTabWidth := totalTabWidth - tabWidth*(len(w.tabs)-1)
 	tabHeight := activeTabStyle.GetVerticalFrameSize() + 1 // get padding border margin size + 1 for character height
 
 	for i, t := range w.tabs {
@@ -196,16 +250,19 @@ func (w *TabbedWindow) String() string {
 			border.BottomRight = "┤"
 		}
 		style = style.Border(border)
-		style = style.Width(width - 1)
+		style = style.Width(width - style.GetHorizontalFrameSize())
 		renderedTabs = append(renderedTabs, style.Render(t))
 	}
 
 	row := lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...)
 	var content string
-	if w.activeTab == 0 {
+	switch w.activeTab {
+	case PreviewTab:
 		content = w.preview.String()
-	} else {
+	case DiffTab:
 		content = w.diff.String()
+	case TerminalTab:
+		content = w.terminal.String()
 	}
 	window := windowStyle.Render(
 		lipgloss.Place(
