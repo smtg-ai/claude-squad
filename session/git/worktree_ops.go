@@ -21,11 +21,15 @@ func (g *GitWorktree) Setup() error {
 		return err
 	}
 
+	// If this worktree uses a pre-existing branch, always set up from that branch
+	// (it may exist locally or only on the remote).
+	if g.isExistingBranch {
+		return g.setupFromExistingBranch()
+	}
+
 	// Check if branch exists using git CLI (much faster than go-git PlainOpen)
 	_, err = g.runGitCommand(g.repoPath, "show-ref", "--verify", fmt.Sprintf("refs/heads/%s", g.branchName))
-	branchExists := err == nil
-
-	if branchExists {
+	if err == nil {
 		return g.setupFromExistingBranch()
 	}
 	return g.setupNewWorktree()
@@ -38,7 +42,22 @@ func (g *GitWorktree) setupFromExistingBranch() error {
 	// Clean up any existing worktree first
 	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath) // Ignore error if worktree doesn't exist
 
-	// Create a new worktree from the existing branch
+	// Check if the local branch exists
+	_, localErr := g.runGitCommand(g.repoPath, "show-ref", "--verify", fmt.Sprintf("refs/heads/%s", g.branchName))
+	if localErr != nil {
+		// Local branch doesn't exist — check if remote tracking branch exists
+		_, remoteErr := g.runGitCommand(g.repoPath, "show-ref", "--verify", fmt.Sprintf("refs/remotes/origin/%s", g.branchName))
+		if remoteErr != nil {
+			return fmt.Errorf("branch %s not found locally or on remote", g.branchName)
+		}
+		// Create a local tracking branch via worktree add -b
+		if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, fmt.Sprintf("origin/%s", g.branchName)); err != nil {
+			return fmt.Errorf("failed to create worktree from remote branch %s: %w", g.branchName, err)
+		}
+		return nil
+	}
+
+	// Create a new worktree from the existing local branch
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", g.worktreePath, g.branchName); err != nil {
 		return fmt.Errorf("failed to create worktree from branch %s: %w", g.branchName, err)
 	}
@@ -92,11 +111,13 @@ func (g *GitWorktree) Cleanup() error {
 		errs = append(errs, fmt.Errorf("failed to check worktree path: %w", err))
 	}
 
-	// Delete the branch using git CLI
-	if _, err := g.runGitCommand(g.repoPath, "branch", "-D", g.branchName); err != nil {
-		// Only log if it's not a "branch not found" error
-		if !strings.Contains(err.Error(), "not found") {
-			errs = append(errs, fmt.Errorf("failed to remove branch %s: %w", g.branchName, err))
+	// Delete the branch using git CLI, but skip if this is a pre-existing branch
+	if !g.isExistingBranch {
+		if _, err := g.runGitCommand(g.repoPath, "branch", "-D", g.branchName); err != nil {
+			// Only log if it's not a "branch not found" error
+			if !strings.Contains(err.Error(), "not found") {
+				errs = append(errs, fmt.Errorf("failed to remove branch %s: %w", g.branchName, err))
+			}
 		}
 	}
 

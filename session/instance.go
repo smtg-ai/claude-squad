@@ -55,6 +55,9 @@ type Instance struct {
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
 
+	// selectedBranch is the existing branch to start on (empty = new branch from HEAD)
+	selectedBranch string
+
 	// The below fields are initialized upon calling Start().
 
 	started bool
@@ -82,11 +85,12 @@ func (i *Instance) ToInstanceData() InstanceData {
 	// Only include worktree data if gitWorktree is initialized
 	if i.gitWorktree != nil {
 		data.Worktree = GitWorktreeData{
-			RepoPath:      i.gitWorktree.GetRepoPath(),
-			WorktreePath:  i.gitWorktree.GetWorktreePath(),
-			SessionName:   i.Title,
-			BranchName:    i.gitWorktree.GetBranchName(),
-			BaseCommitSHA: i.gitWorktree.GetBaseCommitSHA(),
+			RepoPath:         i.gitWorktree.GetRepoPath(),
+			WorktreePath:     i.gitWorktree.GetWorktreePath(),
+			SessionName:      i.Title,
+			BranchName:       i.gitWorktree.GetBranchName(),
+			BaseCommitSHA:    i.gitWorktree.GetBaseCommitSHA(),
+			IsExistingBranch: i.gitWorktree.IsExistingBranch(),
 		}
 	}
 
@@ -120,6 +124,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 			data.Worktree.SessionName,
 			data.Worktree.BranchName,
 			data.Worktree.BaseCommitSHA,
+			data.Worktree.IsExistingBranch,
 		),
 		diffStats: &git.DiffStats{
 			Added:   data.DiffStats.Added,
@@ -150,6 +155,8 @@ type InstanceOptions struct {
 	Program string
 	// If AutoYes is true, then
 	AutoYes bool
+	// Branch is an existing branch name to start the session on (empty = new branch from HEAD)
+	Branch string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -162,15 +169,16 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 	}
 
 	return &Instance{
-		Title:     opts.Title,
-		Status:    Ready,
-		Path:      absPath,
-		Program:   opts.Program,
-		Height:    0,
-		Width:     0,
-		CreatedAt: t,
-		UpdatedAt: t,
-		AutoYes:   false,
+		Title:          opts.Title,
+		Status:         Ready,
+		Path:           absPath,
+		Program:        opts.Program,
+		Height:         0,
+		Width:          0,
+		CreatedAt:      t,
+		UpdatedAt:      t,
+		AutoYes:        false,
+		selectedBranch: opts.Branch,
 	}, nil
 }
 
@@ -183,6 +191,11 @@ func (i *Instance) RepoName() (string, error) {
 
 func (i *Instance) SetStatus(status Status) {
 	i.Status = status
+}
+
+// SetSelectedBranch sets the branch to use when starting the instance.
+func (i *Instance) SetSelectedBranch(branch string) {
+	i.selectedBranch = branch
 }
 
 // firstTimeSetup is true if this is a new instance. Otherwise, it's one loaded from storage.
@@ -202,12 +215,21 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	i.tmuxSession = tmuxSession
 
 	if firstTimeSetup {
-		gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
-		if err != nil {
-			return fmt.Errorf("failed to create git worktree: %w", err)
+		if i.selectedBranch != "" {
+			gitWorktree, err := git.NewGitWorktreeFromBranch(i.Path, i.selectedBranch, i.Title)
+			if err != nil {
+				return fmt.Errorf("failed to create git worktree from branch: %w", err)
+			}
+			i.gitWorktree = gitWorktree
+			i.Branch = i.selectedBranch
+		} else {
+			gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
+			if err != nil {
+				return fmt.Errorf("failed to create git worktree: %w", err)
+			}
+			i.gitWorktree = gitWorktree
+			i.Branch = branchName
 		}
-		i.gitWorktree = gitWorktree
-		i.Branch = branchName
 	}
 
 	// Setup error handler to cleanup resources on any error
