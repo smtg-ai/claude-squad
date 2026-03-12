@@ -1,6 +1,6 @@
 # Claude Squad [![CI](https://github.com/smtg-ai/claude-squad/actions/workflows/build.yml/badge.svg)](https://github.com/smtg-ai/claude-squad/actions/workflows/build.yml) [![GitHub Release](https://img.shields.io/github/v/release/smtg-ai/claude-squad)](https://github.com/smtg-ai/claude-squad/releases/latest)
 
-[Claude Squad](https://smtg-ai.github.io/claude-squad/) is a terminal app that manages multiple [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli) (and other local agents including [Aider](https://github.com/Aider-AI/aider)) in separate workspaces, allowing you to work on multiple tasks simultaneously.
+[Claude Squad](https://smtg-ai.github.io/claude-squad/) is a terminal app that manages multiple AI assistants including [Amazon Q CLI](https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/command-line-getting-started.html), [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), and other local agents including [Aider](https://github.com/Aider-AI/aider) in separate workspaces, allowing you to work on multiple tasks simultaneously.
 
 
 ![Claude Squad Screenshot](assets/screenshot.png)
@@ -74,17 +74,28 @@ Run the application with:
 ```bash
 cs
 ```
-NOTE: The default program is `claude` and we recommend using the latest version.
+NOTE: Claude Squad automatically detects and uses Claude Code (`claude`) by default.
 
 <br />
 
-<b>Using Claude Squad with other AI assistants:</b>
-- For [Codex](https://github.com/openai/codex): Set your API key with `export OPENAI_API_KEY=<your_key>`
-- Launch with specific assistants:
-   - Codex: `cs -p "codex"`
-   - Aider: `cs -p "aider ..."`
-   - Gemini: `cs -p "gemini"`
-- Make this the default, by modifying the config file (locate with `cs debug`)
+**Using Claude Squad with different AI assistants:**
+
+Claude Squad automatically detects and uses Claude Code (`claude`) by default. Other AI assistants can be used by specifying them with the `-p` flag:
+
+**Default (Automatic Detection):**
+- Claude Code: Automatically detected if available
+
+**Manual Selection (using `-p` flag):**
+- Amazon Q: `cs -p "q"` (requires `q` command installed)
+- Aider: `cs -p "aider ..."` (requires `aider` command installed)  
+- Codex: `cs -p "codex"` (requires `codex` command installed)
+- Gemini: `cs -p "gemini"` (requires `gemini` command installed)
+
+**Setup Requirements:**
+- For Claude Code: Install from [Claude Code](https://github.com/anthropics/claude-code)
+- For Amazon Q: Set your AWS credentials and install with `pip install amazon-q-developer-cli`
+- For Codex: Set your API key with `export OPENAI_API_KEY=<your_key>`
+- Make any tool the default by modifying the config file (locate with `cs debug`)
 
 <br />
 
