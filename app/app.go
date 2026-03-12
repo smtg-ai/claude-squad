@@ -11,6 +11,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -181,7 +183,7 @@ func (m *home) Init() tea.Cmd {
 			time.Sleep(100 * time.Millisecond)
 			return previewTickMsg{}
 		},
-		tickUpdateMetadataCmd,
+		tickUpdateMetadataCmd(m.list.GetInstances()),
 	)
 }
 
@@ -201,27 +203,25 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case keyupMsg:
 		m.menu.ClearKeydown()
 		return m, nil
-	case tickUpdateMetadataMessage:
-		for _, instance := range m.list.GetInstances() {
-			if !instance.Started() || instance.Paused() {
-				continue
-			}
-			instance.CheckAndHandleTrustPrompt()
-			updated, prompt := instance.HasUpdated()
-			if updated {
-				instance.SetStatus(session.Running)
+	case metadataUpdateDoneMsg:
+		for _, r := range msg.results {
+			if r.updated {
+				r.instance.SetStatus(session.Running)
+			} else if r.hasPrompt {
+				r.instance.TapEnter()
 			} else {
-				if prompt {
-					instance.TapEnter()
-				} else {
-					instance.SetStatus(session.Ready)
-				}
+				r.instance.SetStatus(session.Ready)
 			}
-			if err := instance.UpdateDiffStats(); err != nil {
-				log.WarningLog.Printf("could not update diff stats: %v", err)
+			if r.diffStats != nil && r.diffStats.Error != nil {
+				if !strings.Contains(r.diffStats.Error.Error(), "base commit SHA not set") {
+					log.WarningLog.Printf("could not update diff stats: %v", r.diffStats.Error)
+				}
+				r.instance.SetDiffStats(nil)
+			} else {
+				r.instance.SetDiffStats(r.diffStats)
 			}
 		}
-		return m, tickUpdateMetadataCmd
+		return m, tickUpdateMetadataCmd(m.list.GetInstances())
 	case tea.MouseMsg:
 		// Handle mouse wheel events for scrolling the diff/preview pane
 		if msg.Action == tea.MouseActionPress {
@@ -754,6 +754,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			<-ch
 			m.state = stateDefault
+			m.instanceChanged()
 		})
 		return m, nil
 	default:
@@ -803,9 +804,21 @@ type hideErrMsg struct{}
 // previewTickMsg implements tea.Msg and triggers a preview update
 type previewTickMsg struct{}
 
-type tickUpdateMetadataMessage struct{}
-
 type instanceChangedMsg struct{}
+
+// instanceMetaResult holds the results of a single instance's metadata update,
+// computed in a background goroutine.
+type instanceMetaResult struct {
+	instance  *session.Instance
+	updated   bool
+	hasPrompt bool
+	diffStats *git.DiffStats
+}
+
+// metadataUpdateDoneMsg is sent when the background metadata update completes.
+type metadataUpdateDoneMsg struct {
+	results []instanceMetaResult
+}
 
 type instanceStartedMsg struct {
 	instance        *session.Instance
@@ -849,11 +862,40 @@ func (m *home) runBranchSearch(filter string, version uint64) tea.Cmd {
 	}
 }
 
-// tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
-// overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.
-var tickUpdateMetadataCmd = func() tea.Msg {
-	time.Sleep(500 * time.Millisecond)
-	return tickUpdateMetadataMessage{}
+// tickUpdateMetadataCmd returns a self-chaining Cmd that sleeps 500ms, then performs
+// expensive metadata I/O (tmux capture, git diff) in parallel background goroutines.
+// Because it only re-schedules after completing, overlapping ticks are impossible.
+func tickUpdateMetadataCmd(instances []*session.Instance) tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(500 * time.Millisecond)
+
+		var active []*session.Instance
+		for _, inst := range instances {
+			if inst.Started() && !inst.Paused() {
+				active = append(active, inst)
+			}
+		}
+		if len(active) == 0 {
+			return metadataUpdateDoneMsg{}
+		}
+
+		results := make([]instanceMetaResult, len(active))
+		var wg sync.WaitGroup
+		for idx, inst := range active {
+			wg.Add(1)
+			go func(i int, instance *session.Instance) {
+				defer wg.Done()
+				r := &results[i]
+				r.instance = instance
+				r.instance.CheckAndHandleTrustPrompt()
+				r.updated, r.hasPrompt = instance.HasUpdated()
+				r.diffStats = instance.ComputeDiff()
+			}(idx, inst)
+		}
+		wg.Wait()
+
+		return metadataUpdateDoneMsg{results: results}
+	}
 }
 
 // handleError handles all errors which get bubbled up to the app. sets the error message. We return a callback tea.Cmd that returns a hideErrMsg message
