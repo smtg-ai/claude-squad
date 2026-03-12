@@ -285,7 +285,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.promptAfterName {
 			m.state = statePrompt
 			m.menu.SetState(ui.StatePrompt)
-			m.textInputOverlay = overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "")
+			m.textInputOverlay = m.newPromptOverlay()
 		} else {
 			// If instance has a prompt (set from Shift+N flow), send it now
 			if msg.instance.Prompt != "" {
@@ -386,7 +386,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				m.promptAfterName = false
 				m.state = statePrompt
 				m.menu.SetState(ui.StatePrompt)
-				m.textInputOverlay = overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "")
+				m.textInputOverlay = m.newPromptOverlay()
 				// Trigger initial branch search (no debounce, version 0)
 				initialSearch := m.runBranchSearch("", m.textInputOverlay.BranchFilterVersion())
 				return m, tea.Batch(tea.WindowSize(), initialSearch)
@@ -467,11 +467,15 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.textInputOverlay.IsSubmitted() {
 				prompt := m.textInputOverlay.GetValue()
 				selectedBranch := m.textInputOverlay.GetSelectedBranch()
+				selectedProgram := m.textInputOverlay.GetSelectedProgram()
 
 				if !selected.Started() {
 					// Shift+N flow: instance not started yet — set branch, start, then send prompt
 					if selectedBranch != "" {
 						selected.SetSelectedBranch(selectedBranch)
+					}
+					if selectedProgram != "" {
+						selected.Program = selectedProgram
 					}
 					selected.Prompt = prompt
 
@@ -865,6 +869,10 @@ func (m *home) handleError(err error) tea.Cmd {
 
 		return hideErrMsg{}
 	}
+}
+
+func (m *home) newPromptOverlay() *overlay.TextInputOverlay {
+	return overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "", m.appConfig.GetProfiles())
 }
 
 // cancelPromptOverlay cancels the prompt overlay, cleaning up unstarted instances.

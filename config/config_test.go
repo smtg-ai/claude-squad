@@ -202,6 +202,72 @@ func TestLoadConfig(t *testing.T) {
 	})
 }
 
+func TestGetProgram(t *testing.T) {
+	t.Run("no profiles returns default_program as-is", func(t *testing.T) {
+		cfg := &Config{DefaultProgram: "/usr/local/bin/claude"}
+		assert.Equal(t, "/usr/local/bin/claude", cfg.GetProgram())
+	})
+
+	t.Run("profiles defined and default_program matches a profile name", func(t *testing.T) {
+		cfg := &Config{
+			DefaultProgram: "claude",
+			Profiles: []Profile{
+				{Name: "claude", Program: "/usr/local/bin/claude"},
+				{Name: "aider", Program: "aider --model ollama_chat/gemma3:1b"},
+			},
+		}
+		assert.Equal(t, "/usr/local/bin/claude", cfg.GetProgram())
+	})
+
+	t.Run("profiles defined but default_program does not match any profile", func(t *testing.T) {
+		cfg := &Config{
+			DefaultProgram: "some-other-program",
+			Profiles: []Profile{
+				{Name: "claude", Program: "/usr/local/bin/claude"},
+			},
+		}
+		assert.Equal(t, "some-other-program", cfg.GetProgram())
+	})
+}
+
+func TestGetProfiles(t *testing.T) {
+	t.Run("no profiles returns single synthetic profile", func(t *testing.T) {
+		cfg := &Config{DefaultProgram: "/usr/local/bin/claude"}
+		profiles := cfg.GetProfiles()
+		assert.Len(t, profiles, 1)
+		assert.Equal(t, "/usr/local/bin/claude", profiles[0].Name)
+		assert.Equal(t, "/usr/local/bin/claude", profiles[0].Program)
+	})
+
+	t.Run("profiles defined returns them with default first", func(t *testing.T) {
+		cfg := &Config{
+			DefaultProgram: "aider",
+			Profiles: []Profile{
+				{Name: "claude", Program: "/usr/local/bin/claude"},
+				{Name: "aider", Program: "aider --model gemma"},
+			},
+		}
+		profiles := cfg.GetProfiles()
+		assert.Len(t, profiles, 2)
+		assert.Equal(t, "aider", profiles[0].Name)
+		assert.Equal(t, "claude", profiles[1].Name)
+	})
+
+	t.Run("profiles defined but default not matching preserves order", func(t *testing.T) {
+		cfg := &Config{
+			DefaultProgram: "other",
+			Profiles: []Profile{
+				{Name: "claude", Program: "/usr/local/bin/claude"},
+				{Name: "aider", Program: "aider --model gemma"},
+			},
+		}
+		profiles := cfg.GetProfiles()
+		assert.Len(t, profiles, 2)
+		assert.Equal(t, "claude", profiles[0].Name)
+		assert.Equal(t, "aider", profiles[1].Name)
+	})
+}
+
 func TestSaveConfig(t *testing.T) {
 	t.Run("saves config to file", func(t *testing.T) {
 		// Create a temporary config directory

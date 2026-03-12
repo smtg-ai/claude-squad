@@ -110,6 +110,36 @@ The menu at the bottom of the screen shows available commands:
 - `q` - Quit the application
 - `shift-↓/↑` - scroll in diff view
 
+### Configuration
+
+Claude Squad stores its configuration in `~/.claude-squad/config.json`. You can find the exact path by running `cs debug`.
+
+#### Profiles
+
+Profiles let you define multiple named program configurations and switch between them when creating a new session. When more than one profile is defined, the session creation overlay shows a profile picker that you can navigate with `←`/`→`.
+
+To configure profiles, add a `profiles` array to your config file and set `default_program` to the name of the profile to select by default:
+
+```json
+{
+  "default_program": "claude",
+  "profiles": [
+    { "name": "claude", "program": "claude" },
+    { "name": "codex", "program": "codex" },
+    { "name": "aider", "program": "aider --model ollama_chat/gemma3:1b" }
+  ]
+}
+```
+
+Each profile has two fields:
+
+| Field     | Description                                              |
+|-----------|----------------------------------------------------------|
+| `name`    | Display name shown in the profile picker                 |
+| `program` | Shell command used to launch the agent for that profile  |
+
+If no profiles are defined, Claude Squad uses `default_program` directly as the launch command (the default is `claude`).
+
 ### FAQs
 
 #### Failed to start new session

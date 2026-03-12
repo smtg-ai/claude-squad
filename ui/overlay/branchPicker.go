@@ -147,35 +147,37 @@ func (bp *BranchPicker) GetSelectedBranch() string {
 	return selected
 }
 
+var (
+	bpLabelStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("62")).
+			Bold(true)
+
+	bpFilterStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("7"))
+
+	bpSelectedStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("62")).
+			Foreground(lipgloss.Color("0"))
+
+	bpDimStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240"))
+)
+
 // Render renders the branch picker.
 func (bp *BranchPicker) Render() string {
-	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("62")).
-		Bold(true)
-
-	filterStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("7"))
-
-	selectedStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("62")).
-		Foreground(lipgloss.Color("0"))
-
-	dimStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240"))
-
 	var s strings.Builder
-	s.WriteString(labelStyle.Render("Branch"))
+	s.WriteString(bpLabelStyle.Render("Branch"))
 	if bp.focused {
 		cursor := bp.filter + "█"
-		s.WriteString(filterStyle.Render(" (filter: " + cursor + ")"))
+		s.WriteString(bpFilterStyle.Render(" (filter: " + cursor + ")"))
 	} else if bp.filter != "" {
-		s.WriteString(dimStyle.Render(" (filter: " + bp.filter + ")"))
+		s.WriteString(bpDimStyle.Render(" (filter: " + bp.filter + ")"))
 	}
-	s.WriteString("\n")
+	s.WriteString("\n\n")
 
 	items := bp.visibleItems()
 	if len(items) == 0 {
-		s.WriteString(dimStyle.Render("  No matching branches"))
+		s.WriteString(bpDimStyle.Render("  No matching branches"))
 		return s.String()
 	}
 
@@ -195,11 +197,11 @@ func (bp *BranchPicker) Render() string {
 		label := items[i]
 		if i == bp.cursor && bp.focused {
 			prefix = "> "
-			s.WriteString(selectedStyle.Render(prefix + label))
+			s.WriteString(bpSelectedStyle.Render(prefix + label))
 		} else if i == bp.cursor {
 			s.WriteString(prefix + label)
 		} else {
-			s.WriteString(dimStyle.Render(prefix + label))
+			s.WriteString(bpDimStyle.Render(prefix + label))
 		}
 		if i < end-1 {
 			s.WriteString("\n")
