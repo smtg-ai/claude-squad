@@ -26,6 +26,12 @@ func GetConfigDir() (string, error) {
 	return filepath.Join(homeDir, ".claude-squad"), nil
 }
 
+// Profile represents a named program configuration
+type Profile struct {
+	Name    string `json:"name"`
+	Program string `json:"program"`
+}
+
 // Config represents the application configuration
 type Config struct {
 	// DefaultProgram is the default program to run in new instances
@@ -36,6 +42,43 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// Profiles is a list of named program profiles.
+	Profiles []Profile `json:"profiles,omitempty"`
+}
+
+// GetProgram returns the program to run. If Profiles is non-empty and
+// DefaultProgram matches a profile name, that profile's Program is returned.
+// Otherwise DefaultProgram is returned as-is.
+func (c *Config) GetProgram() string {
+	for _, p := range c.Profiles {
+		if p.Name == c.DefaultProgram {
+			return p.Program
+		}
+	}
+	return c.DefaultProgram
+}
+
+// GetProfiles returns a unified list of profiles. If Profiles is defined,
+// those are returned with the default profile first. Otherwise, a single
+// profile is synthesized from DefaultProgram.
+func (c *Config) GetProfiles() []Profile {
+	if len(c.Profiles) == 0 {
+		return []Profile{{Name: c.DefaultProgram, Program: c.DefaultProgram}}
+	}
+	// Reorder so the default profile comes first.
+	profiles := make([]Profile, 0, len(c.Profiles))
+	for _, p := range c.Profiles {
+		if p.Name == c.DefaultProgram {
+			profiles = append(profiles, p)
+			break
+		}
+	}
+	for _, p := range c.Profiles {
+		if p.Name != c.DefaultProgram {
+			profiles = append(profiles, p)
+		}
+	}
+	return profiles
 }
 
 // DefaultConfig returns the default configuration
