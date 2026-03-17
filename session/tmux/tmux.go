@@ -23,6 +23,7 @@ const ProgramClaude = "claude"
 
 const ProgramAider = "aider"
 const ProgramGemini = "gemini"
+const ProgramCodex = "codex"
 
 // TmuxSession represents a managed tmux session
 type TmuxSession struct {
@@ -177,6 +178,77 @@ func (t *TmuxSession) CheckAndHandleTrustPrompt() bool {
 		}
 	}
 	return false
+}
+
+// IsCliReady checks if the CLI program in the tmux session has finished
+// initializing and is ready to accept user input.
+func (t *TmuxSession) IsCliReady() bool {
+	content, err := t.CapturePaneContent()
+	if err != nil {
+		return false
+	}
+
+	trimmed := strings.TrimRight(content, " \t\n\r")
+	if trimmed == "" {
+		return false
+	}
+
+	switch {
+	case strings.HasSuffix(t.program, ProgramClaude):
+		// Claude shows ❯ prompt or /help text when ready
+		return strings.Contains(content, "❯") || strings.Contains(content, "/help")
+	case strings.HasPrefix(t.program, ProgramAider):
+		return strings.HasSuffix(trimmed, ">")
+	case strings.HasPrefix(t.program, ProgramGemini):
+		return strings.HasSuffix(trimmed, ">")
+	case strings.HasPrefix(t.program, ProgramCodex):
+		return strings.HasSuffix(trimmed, ">")
+	default:
+		// Unknown CLI: no specific check, rely on stability fallback in WaitForCliReady
+		return false
+	}
+}
+
+// WaitForCliReady polls until the CLI is ready for input or the timeout expires.
+// It first checks known CLI prompt patterns via IsCliReady, then falls back to
+// content stability detection for unknown CLIs.
+// Returns true if the CLI became ready, false on timeout.
+func (t *TmuxSession) WaitForCliReady(timeout time.Duration) bool {
+	deadline := time.After(timeout)
+	const interval = 200 * time.Millisecond
+	var prevContent string
+	stableCount := 0
+	const stableThreshold = 5 // 5 * 200ms = 1s of stable content
+
+	for {
+		select {
+		case <-deadline:
+			log.InfoLog.Printf("WaitForCliReady: timed out after %v for %s", timeout, t.program)
+			return false
+		default:
+		}
+
+		if t.IsCliReady() {
+			return true
+		}
+
+		// Fallback: detect content stability (content not changing)
+		content, err := t.CapturePaneContent()
+		if err == nil && content != "" && content == prevContent {
+			stableCount++
+			if stableCount >= stableThreshold {
+				log.InfoLog.Printf("WaitForCliReady: content stable for %s, assuming ready", t.program)
+				return true
+			}
+		} else {
+			stableCount = 0
+			if err == nil {
+				prevContent = content
+			}
+		}
+
+		time.Sleep(interval)
+	}
 }
 
 // Restore attaches to an existing session and restores the window size

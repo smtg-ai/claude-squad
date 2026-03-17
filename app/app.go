@@ -287,15 +287,24 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.menu.SetState(ui.StatePrompt)
 			m.textInputOverlay = m.newPromptOverlay()
 		} else {
-			// If instance has a prompt (set from Shift+N flow), send it now
+			// If instance has a prompt (set from Shift+N flow), wait for CLI
+			// readiness before sending to avoid the prompt being lost.
+			cmds := []tea.Cmd{tea.WindowSize(), m.instanceChanged()}
 			if msg.instance.Prompt != "" {
-				if err := msg.instance.SendPrompt(msg.instance.Prompt); err != nil {
-					log.ErrorLog.Printf("failed to send prompt: %v", err)
-				}
+				prompt := msg.instance.Prompt
 				msg.instance.Prompt = ""
+				instance := msg.instance
+				cmds = append(cmds, func() tea.Msg {
+					instance.WaitForCliReady(30 * time.Second)
+					if err := instance.SendPrompt(prompt); err != nil {
+						log.ErrorLog.Printf("failed to send prompt: %v", err)
+					}
+					return nil
+				})
 			}
 			m.menu.SetState(ui.StateDefault)
 			m.showHelpScreen(helpStart(msg.instance), nil)
+			return m, tea.Batch(cmds...)
 		}
 
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
