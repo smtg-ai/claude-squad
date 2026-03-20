@@ -73,9 +73,6 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 				)),
 		))
 		return nil
-	case instance.Status == session.Loading:
-		p.setFallbackState("Setting up workspace...")
-		return nil
 	}
 
 	var content string

@@ -189,7 +189,7 @@ func (m *home) Init() tea.Cmd {
 			time.Sleep(100 * time.Millisecond)
 			return previewTickMsg{}
 		},
-		tickUpdateMetadataCmd(m.list.GetInstances()),
+		tickUpdateMetadataCmd(m.snapshotActiveInstances()),
 	)
 }
 
@@ -253,7 +253,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				r.instance.SetDiffStats(r.diffStats)
 			}
 		}
-		return m, tickUpdateMetadataCmd(m.list.GetInstances())
+		return m, tickUpdateMetadataCmd(m.snapshotActiveInstances())
 	case tea.MouseMsg:
 		// Handle mouse wheel events for scrolling the diff/preview pane
 		if msg.Action == tea.MouseActionPress {
@@ -909,19 +909,28 @@ func runInstanceStartCmd(instance *session.Instance) tea.Cmd {
 	}
 }
 
+// snapshotActiveInstances returns the currently active (started, not paused)
+// instances. Called on the main thread so the filtering doesn't race with
+// state mutations.
+func (m *home) snapshotActiveInstances() []*session.Instance {
+	var out []*session.Instance
+	for _, inst := range m.list.GetInstances() {
+		if inst.Started() && !inst.Paused() {
+			out = append(out, inst)
+		}
+	}
+	return out
+}
+
 // tickUpdateMetadataCmd returns a self-chaining Cmd that sleeps 500ms, then performs
 // expensive metadata I/O (tmux capture, git diff) in parallel background goroutines.
 // Because it only re-schedules after completing, overlapping ticks are impossible.
-func tickUpdateMetadataCmd(instances []*session.Instance) tea.Cmd {
+// The active instances slice should be snapshotted on the main thread via
+// snapshotActiveInstances() before being passed here.
+func tickUpdateMetadataCmd(active []*session.Instance) tea.Cmd {
 	return func() tea.Msg {
 		time.Sleep(500 * time.Millisecond)
 
-		var active []*session.Instance
-		for _, inst := range instances {
-			if inst.Started() && !inst.Paused() {
-				active = append(active, inst)
-			}
-		}
 		if len(active) == 0 {
 			return metadataUpdateDoneMsg{}
 		}
