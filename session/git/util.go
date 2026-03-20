@@ -54,7 +54,7 @@ func IsGitRepo(path string) bool {
 	return cmd.Run() == nil
 }
 
-func findGitRepoRoot(path string) (string, error) {
+func FindGitRepoRoot(path string) (string, error) {
 	cmd := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel")
 	out, err := cmd.Output()
 	if err != nil {
