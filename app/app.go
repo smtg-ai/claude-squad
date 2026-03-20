@@ -5,6 +5,7 @@ import (
 	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/session"
+	"claude-squad/session/git"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
 	"context"
@@ -285,6 +286,20 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case branchSearchDebounceMsg:
+		// Debounce timer fired — check if this is still the current filter version
+		if m.textInputOverlay == nil {
+			return m, nil
+		}
+		if msg.version != m.textInputOverlay.BranchFilterVersion() {
+			return m, nil // stale, a newer debounce is pending
+		}
+		return m, m.runBranchSearch(msg.filter, msg.version)
+	case branchSearchResultMsg:
+		if m.textInputOverlay != nil {
+			m.textInputOverlay.SetBranchResults(msg.branches, msg.version)
+		}
+		return m, nil
 	case tea.KeyMsg:
 		return m.handleKeyPress(msg)
 	case tea.WindowSizeMsg:
@@ -316,8 +331,15 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.promptAfterName {
 			m.state = statePrompt
 			m.menu.SetState(ui.StatePrompt)
-			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+			m.textInputOverlay = m.newPromptOverlay()
 		} else {
+			// If instance has a prompt (set from Shift+N flow), send it now
+			if msg.instance.Prompt != "" {
+				if err := msg.instance.SendPrompt(msg.instance.Prompt); err != nil {
+					log.ErrorLog.Printf("failed to send prompt: %v", err)
+				}
+				msg.instance.Prompt = ""
+			}
 			m.menu.SetState(ui.StateDefault)
 			m.showHelpScreen(helpStart(msg.instance), nil)
 		}
@@ -405,10 +427,20 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, m.handleError(fmt.Errorf("title cannot be empty"))
 			}
 
+			// If promptAfterName, show prompt+branch overlay before starting
+			if m.promptAfterName {
+				m.promptAfterName = false
+				m.state = statePrompt
+				m.menu.SetState(ui.StatePrompt)
+				m.textInputOverlay = m.newPromptOverlay()
+				// Trigger initial branch search (no debounce, version 0)
+				initialSearch := m.runBranchSearch("", m.textInputOverlay.BranchFilterVersion())
+				return m, tea.Batch(tea.WindowSize(), initialSearch)
+			}
+
 			// Set Loading status and finalize into the list immediately
 			instance.SetStatus(session.Loading)
 			m.newInstanceFinalizer()
-			promptAfterName := m.promptAfterName
 			m.promptAfterName = false
 			m.state = stateDefault
 			m.menu.SetState(ui.StateDefault)
@@ -419,7 +451,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return instanceStartedMsg{
 					instance:        instance,
 					err:             err,
-					promptAfterName: promptAfterName,
+					promptAfterName: false,
 				}
 			}
 
@@ -459,19 +491,62 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		return m, nil
 	} else if m.state == statePrompt {
+		// Handle cancel via ctrl+c before delegating to the overlay
+		if msg.String() == "ctrl+c" {
+			return m, m.cancelPromptOverlay()
+		}
+
 		// Use the new TextInputOverlay component to handle all key events
-		shouldClose := m.textInputOverlay.HandleKeyPress(msg)
+		shouldClose, branchFilterChanged := m.textInputOverlay.HandleKeyPress(msg)
 
 		// Check if the form was submitted or canceled
 		if shouldClose {
 			selected := m.list.GetSelectedInstance()
-			// TODO: this should never happen since we set the instance in the previous state.
 			if selected == nil {
 				return m, nil
 			}
+
+			if m.textInputOverlay.IsCanceled() {
+				return m, m.cancelPromptOverlay()
+			}
+
 			if m.textInputOverlay.IsSubmitted() {
-				if err := selected.SendPrompt(m.textInputOverlay.GetValue()); err != nil {
-					// TODO: we probably end up in a bad state here.
+				prompt := m.textInputOverlay.GetValue()
+				selectedBranch := m.textInputOverlay.GetSelectedBranch()
+				selectedProgram := m.textInputOverlay.GetSelectedProgram()
+
+				if !selected.Started() {
+					// Shift+N flow: instance not started yet — set branch, start, then send prompt
+					if selectedBranch != "" {
+						selected.SetSelectedBranch(selectedBranch)
+					}
+					if selectedProgram != "" {
+						selected.Program = selectedProgram
+					}
+					selected.Prompt = prompt
+
+					// Finalize into list and start
+					selected.SetStatus(session.Loading)
+					m.newInstanceFinalizer()
+					m.textInputOverlay = nil
+					m.state = stateDefault
+					m.menu.SetState(ui.StateDefault)
+
+					startCmd := func() tea.Msg {
+						err := selected.Start(true)
+						return instanceStartedMsg{
+							instance:        selected,
+							err:             err,
+							promptAfterName: false,
+							selectedBranch:  selectedBranch,
+						}
+					}
+
+					return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
+				}
+
+				// Regular flow: instance already running, just send prompt
+				if err := selected.SendPrompt(prompt); err != nil {
 					return m, m.handleError(err)
 				}
 			}
@@ -487,6 +562,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					return nil
 				},
 			)
+		}
+
+		// Schedule a debounced branch search if the filter changed
+		if branchFilterChanged {
+			filter := m.textInputOverlay.BranchFilter()
+			version := m.textInputOverlay.BranchFilterVersion()
+			return m, m.scheduleBranchSearch(filter, version)
 		}
 
 		return m, nil
@@ -542,6 +624,14 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
+
+		// Start a background fetch so branches are up to date by the time the picker opens
+		fetchCmd := func() tea.Msg {
+			currentDir, _ := os.Getwd()
+			git.FetchBranches(currentDir)
+			return nil
+		}
+
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:   "",
 			Path:    ".",
@@ -557,7 +647,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		m.menu.SetState(ui.StateNewInstance)
 		m.promptAfterName = true
 
-		return m, nil
+		return m, fetchCmd
 	case keys.KeyNew:
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
@@ -767,6 +857,42 @@ type instanceStartedMsg struct {
 	instance        *session.Instance
 	err             error
 	promptAfterName bool
+	selectedBranch  string
+}
+
+// branchSearchDebounceMsg fires after the debounce interval to trigger a search.
+type branchSearchDebounceMsg struct {
+	filter  string
+	version uint64
+}
+
+// branchSearchResultMsg carries search results back to Update.
+type branchSearchResultMsg struct {
+	branches []string
+	version  uint64
+}
+
+const branchSearchDebounce = 150 * time.Millisecond
+
+// scheduleBranchSearch returns a debounced tea.Cmd: sleeps, then triggers a search message.
+func (m *home) scheduleBranchSearch(filter string, version uint64) tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(branchSearchDebounce)
+		return branchSearchDebounceMsg{filter: filter, version: version}
+	}
+}
+
+// runBranchSearch returns a tea.Cmd that performs the git search in the background.
+func (m *home) runBranchSearch(filter string, version uint64) tea.Cmd {
+	return func() tea.Msg {
+		currentDir, _ := os.Getwd()
+		branches, err := git.SearchBranches(currentDir, filter)
+		if err != nil {
+			log.WarningLog.Printf("branch search failed: %v", err)
+			return nil
+		}
+		return branchSearchResultMsg{branches: branches, version: version}
+	}
 }
 
 // tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
@@ -789,6 +915,27 @@ func (m *home) handleError(err error) tea.Cmd {
 
 		return hideErrMsg{}
 	}
+}
+
+func (m *home) newPromptOverlay() *overlay.TextInputOverlay {
+	return overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "", m.appConfig.GetProfiles())
+}
+
+// cancelPromptOverlay cancels the prompt overlay, cleaning up unstarted instances.
+func (m *home) cancelPromptOverlay() tea.Cmd {
+	selected := m.list.GetSelectedInstance()
+	if selected != nil && !selected.Started() {
+		m.list.Kill()
+	}
+	m.textInputOverlay = nil
+	m.state = stateDefault
+	return tea.Sequence(
+		tea.WindowSize(),
+		func() tea.Msg {
+			m.menu.SetState(ui.StateDefault)
+			return nil
+		},
+	)
 }
 
 // confirmAction shows a confirmation modal and stores the action to execute on confirm

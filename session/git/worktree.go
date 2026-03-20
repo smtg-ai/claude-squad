@@ -29,16 +29,44 @@ type GitWorktree struct {
 	branchName string
 	// Base commit hash for the worktree
 	baseCommitSHA string
+	// isExistingBranch is true if the branch existed before the session was created.
+	// When true, the branch will not be deleted on cleanup.
+	isExistingBranch bool
 }
 
-func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string) *GitWorktree {
+func NewGitWorktreeFromStorage(repoPath string, worktreePath string, sessionName string, branchName string, baseCommitSHA string, isExistingBranch bool) *GitWorktree {
 	return &GitWorktree{
-		repoPath:      repoPath,
-		worktreePath:  worktreePath,
-		sessionName:   sessionName,
-		branchName:    branchName,
-		baseCommitSHA: baseCommitSHA,
+		repoPath:         repoPath,
+		worktreePath:     worktreePath,
+		sessionName:      sessionName,
+		branchName:       branchName,
+		baseCommitSHA:    baseCommitSHA,
+		isExistingBranch: isExistingBranch,
 	}
+}
+
+// resolveWorktreePaths resolves the repo root and generates a unique worktree path for the given branch name.
+func resolveWorktreePaths(repoPath string, branchName string) (resolvedRepo string, worktreePath string, err error) {
+	absPath, err := filepath.Abs(repoPath)
+	if err != nil {
+		log.ErrorLog.Printf("git worktree path abs error, falling back to repoPath %s: %s", repoPath, err)
+		absPath = repoPath
+	}
+
+	resolvedRepo, err = FindGitRepoRoot(absPath)
+	if err != nil {
+		return "", "", err
+	}
+
+	worktreeDir, err := getWorktreeDirectory()
+	if err != nil {
+		return "", "", err
+	}
+
+	worktreePath = filepath.Join(worktreeDir, sanitizeBranchName(branchName))
+	worktreePath = worktreePath + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
+
+	return resolvedRepo, worktreePath, nil
 }
 
 // NewGitWorktree creates a new GitWorktree instance
@@ -49,27 +77,10 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 	// (e.g., backslashes from Windows domain usernames like DOMAIN\user)
 	branchName = sanitizeBranchName(branchName)
 
-	// Convert repoPath to absolute path
-	absPath, err := filepath.Abs(repoPath)
-	if err != nil {
-		log.ErrorLog.Printf("git worktree path abs error, falling back to repoPath %s: %s", repoPath, err)
-		// If we can't get absolute path, use original path as fallback
-		absPath = repoPath
-	}
-
-	repoPath, err = FindGitRepoRoot(absPath)
+	repoPath, worktreePath, err := resolveWorktreePaths(repoPath, branchName)
 	if err != nil {
 		return nil, "", err
 	}
-
-	worktreeDir, err := getWorktreeDirectory()
-	if err != nil {
-		return nil, "", err
-	}
-
-	// Use sanitized branch name for the worktree directory name
-	worktreePath := filepath.Join(worktreeDir, branchName)
-	worktreePath = worktreePath + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
 
 	return &GitWorktree{
 		repoPath:     repoPath,
@@ -77,6 +88,28 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 		branchName:   branchName,
 		worktreePath: worktreePath,
 	}, branchName, nil
+}
+
+// NewGitWorktreeFromBranch creates a new GitWorktree that uses an existing branch.
+// The branch will not be deleted on cleanup.
+func NewGitWorktreeFromBranch(repoPath string, branchName string, sessionName string) (*GitWorktree, error) {
+	repoPath, worktreePath, err := resolveWorktreePaths(repoPath, branchName)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GitWorktree{
+		repoPath:         repoPath,
+		sessionName:      sessionName,
+		branchName:       branchName,
+		worktreePath:     worktreePath,
+		isExistingBranch: true,
+	}, nil
+}
+
+// IsExistingBranch returns whether this worktree uses a pre-existing branch
+func (g *GitWorktree) IsExistingBranch() bool {
+	return g.isExistingBranch
 }
 
 // GetWorktreePath returns the path to the worktree

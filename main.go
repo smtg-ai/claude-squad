@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	version     = "1.0.16"
+	version     = "1.0.17"
 	programFlag string
 	autoYesFlag bool
 	daemonFlag  bool
@@ -56,7 +56,7 @@ var (
 			cfg := config.LoadConfig()
 
 			// Program flag overrides config
-			program := cfg.DefaultProgram
+			program := cfg.GetProgram()
 			if programFlag != "" {
 				program = programFlag
 			}

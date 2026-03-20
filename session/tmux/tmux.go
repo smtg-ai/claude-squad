@@ -155,22 +155,26 @@ func (t *TmuxSession) Start(workDir string) error {
 // CheckAndHandleTrustPrompt checks the pane content once for a trust prompt and dismisses it if found.
 // Returns true if the prompt was found and handled.
 func (t *TmuxSession) CheckAndHandleTrustPrompt() bool {
-	searchString := "Do you trust the files in this folder?"
-	tapFunc := t.TapEnter
-	if !strings.HasSuffix(t.program, ProgramClaude) {
-		searchString = "Open documentation url for more info"
-		tapFunc = t.TapDAndEnter
-	}
-
 	content, err := t.CapturePaneContent()
 	if err != nil {
 		return false
 	}
-	if strings.Contains(content, searchString) {
-		if err := tapFunc(); err != nil {
-			log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
+
+	if strings.HasSuffix(t.program, ProgramClaude) {
+		if strings.Contains(content, "Do you trust the files in this folder?") ||
+			strings.Contains(content, "new MCP server") {
+			if err := t.TapEnter(); err != nil {
+				log.ErrorLog.Printf("could not tap enter on trust/MCP screen: %v", err)
+			}
+			return true
 		}
-		return true
+	} else {
+		if strings.Contains(content, "Open documentation url for more info") {
+			if err := t.TapDAndEnter(); err != nil {
+				log.ErrorLog.Printf("could not tap enter on trust screen: %v", err)
+			}
+			return true
+		}
 	}
 	return false
 }
