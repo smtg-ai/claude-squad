@@ -9,6 +9,7 @@ import (
 // Run starts the GUI application.
 func Run(program string, autoYes bool) error {
 	a := app.New()
+	a.Settings().SetTheme(&squadTheme{})
 	w := a.NewWindow("Claude Squad")
 	w.SetContent(widget.NewLabel("Claude Squad GUI - Coming Soon"))
 	w.Resize(fyne.NewSize(1200, 800))
