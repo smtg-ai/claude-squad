@@ -409,6 +409,26 @@ func (t *TmuxSession) Detach() {
 	t.wg.Wait()
 }
 
+// ConnectPTY creates a new tmux attach-session PTY for use by an external
+// terminal widget (e.g., fyne-io/terminal). The caller reads/writes directly
+// to the returned *os.File. Call DisconnectPTY() when done.
+func (t *TmuxSession) ConnectPTY() (*os.File, error) {
+	ptmx, err := t.ptyFactory.Start(exec.Command("tmux", "attach-session", "-t", t.sanitizedName))
+	if err != nil {
+		return nil, fmt.Errorf("error creating GUI PTY connection: %w", err)
+	}
+	return ptmx, nil
+}
+
+// DisconnectPTY closes a GUI-connected PTY. The underlying tmux session
+// continues running. The background monitoring PTY (t.ptmx) is unaffected.
+func (t *TmuxSession) DisconnectPTY(ptmx *os.File) error {
+	if ptmx == nil {
+		return nil
+	}
+	return ptmx.Close()
+}
+
 // Close terminates the tmux session and cleans up resources
 func (t *TmuxSession) Close() error {
 	var errs []error

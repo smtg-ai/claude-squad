@@ -584,6 +584,14 @@ func (i *Instance) PreviewFullHistory() (string, error) {
 	return i.tmuxSession.CapturePaneContentWithOptions("-", "-")
 }
 
+// GetTmuxSession returns the underlying tmux session, or nil if not started.
+func (i *Instance) GetTmuxSession() *tmux.TmuxSession {
+	if !i.started {
+		return nil
+	}
+	return i.tmuxSession
+}
+
 // SetTmuxSession sets the tmux session for testing purposes
 func (i *Instance) SetTmuxSession(session *tmux.TmuxSession) {
 	i.tmuxSession = session
