@@ -5,6 +5,7 @@ import (
 	cmd2 "claude-squad/cmd"
 	"claude-squad/config"
 	"claude-squad/daemon"
+	"claude-squad/gui"
 	"claude-squad/log"
 	"claude-squad/session"
 	"claude-squad/session/git"
@@ -141,6 +142,36 @@ var (
 			fmt.Printf("https://github.com/smtg-ai/claude-squad/releases/tag/v%s\n", version)
 		},
 	}
+
+	guiCmd = &cobra.Command{
+		Use:   "gui",
+		Short: "Launch the Claude Squad GUI",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log.Initialize(false)
+			defer log.Close()
+
+			currentDir, err := filepath.Abs(".")
+			if err != nil {
+				return fmt.Errorf("failed to get current directory: %w", err)
+			}
+
+			if !git.IsGitRepo(currentDir) {
+				return fmt.Errorf("error: claude-squad must be run from within a git repository")
+			}
+
+			cfg := config.LoadConfig()
+			program := cfg.GetProgram()
+			if programFlag != "" {
+				program = programFlag
+			}
+			autoYes := cfg.AutoYes
+			if autoYesFlag {
+				autoYes = true
+			}
+
+			return gui.Run(program, autoYes)
+		},
+	}
 )
 
 func init() {
@@ -160,6 +191,7 @@ func init() {
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
+	rootCmd.AddCommand(guiCmd)
 }
 
 func main() {
