@@ -19,23 +19,33 @@ var (
 	colorOverlay = color.NRGBA{R: 0x6c, G: 0x70, B: 0x86, A: 0xff}
 )
 
+// ShortcutRegistrar registers hotkey shortcuts on a target that supports AddShortcut.
+type ShortcutRegistrar func(target ShortcutAdder)
+
+// ShortcutAdder is anything with an AddShortcut method (Canvas, ShortcutHandler, etc).
+type ShortcutAdder interface {
+	AddShortcut(shortcut fyne.Shortcut, handler func(fyne.Shortcut))
+}
+
 // Pane represents a single terminal pane with a header bar.
 type Pane struct {
-	container   *fyne.Container
-	header      *fyne.Container
-	titleLabel  *widget.Label
-	statusIcon  *canvas.Text
-	branchLabel *widget.Label
-	hintLabel   *widget.Label
-	conn        *TerminalConnection
-	focused     bool
-	onFocus     func(*Pane)
+	container    *fyne.Container
+	header       *fyne.Container
+	titleLabel   *widget.Label
+	statusIcon   *canvas.Text
+	branchLabel  *widget.Label
+	hintLabel    *widget.Label
+	conn         *TerminalConnection
+	focused      bool
+	onFocus      func(*Pane)
+	registerKeys ShortcutRegistrar
 }
 
 // NewPane creates a new empty pane.
-func NewPane(onFocus func(*Pane)) *Pane {
+func NewPane(onFocus func(*Pane), registerKeys ShortcutRegistrar) *Pane {
 	p := &Pane{
-		conn:        NewTerminalConnection(),
+		conn:         NewTerminalConnection(),
+		registerKeys: registerKeys,
 		titleLabel:  widget.NewLabel("No session"),
 		statusIcon:  canvas.NewText("", colorOverlay),
 		branchLabel: widget.NewLabel(""),
@@ -76,6 +86,11 @@ func (p *Pane) OpenSession(inst *session.Instance) error {
 	p.titleLabel.SetText(inst.Title)
 	p.branchLabel.SetText(inst.Branch)
 	p.updateStatus(inst)
+
+	// Register hotkey shortcuts on the terminal widget so they work when it has focus
+	if p.registerKeys != nil {
+		p.registerKeys(p.conn.Terminal())
+	}
 
 	// Replace the pane content with the terminal widget
 	p.container.Objects = []fyne.CanvasObject{p.header, p.conn.Terminal()}

@@ -24,17 +24,18 @@ func (n *node) isLeaf() bool {
 
 // Manager manages the binary tree of panes.
 type Manager struct {
-	root    *node
-	focused *node
-	onFocus func(*Pane) // callback when focus changes
+	root         *node
+	focused      *node
+	onFocus      func(*Pane) // callback when focus changes
+	registerKeys ShortcutRegistrar
 }
 
 // NewManager creates a new pane manager with a single empty pane.
-func NewManager(onFocus func(*Pane)) *Manager {
-	m := &Manager{onFocus: onFocus}
+func NewManager(onFocus func(*Pane), registerKeys ShortcutRegistrar) *Manager {
+	m := &Manager{onFocus: onFocus, registerKeys: registerKeys}
 	pane := NewPane(func(p *Pane) {
 		m.FocusPane(p)
-	})
+	}, registerKeys)
 	pane.SetFocused(true)
 	m.root = &node{pane: pane}
 	m.focused = m.root
@@ -93,7 +94,7 @@ func (m *Manager) split(horizontal bool) *Pane {
 
 	newPane := NewPane(func(p *Pane) {
 		m.FocusPane(p)
-	})
+	}, m.registerKeys)
 
 	oldNode := m.focused
 	parent := oldNode.parent

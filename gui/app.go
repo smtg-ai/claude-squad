@@ -74,11 +74,15 @@ func Run(program string, autoYes bool) error {
 
 	var sidebarWidget *sidebar.Sidebar
 	var paneManager *panes.Manager
+	var hotkeyDefs []shortcutDef
 	sidebarVisible := true
 
-	// Pane manager
+	// Pane manager — shortcut registrar captures hotkeyDefs by pointer,
+	// which gets populated after RegisterHotkeys below.
 	paneManager = panes.NewManager(func(p *panes.Pane) {
 		// Focus callback
+	}, func(target panes.ShortcutAdder) {
+		RegisterTerminalShortcuts(target, hotkeyDefs)
 	})
 
 	// Sidebar
@@ -103,8 +107,8 @@ func Run(program string, autoYes bool) error {
 	rootSplit.SetOffset(0.2)
 	rootContainer := container.NewStack(rootSplit)
 
-	// Register hotkeys
-	RegisterHotkeys(w.Canvas(), Handlers{
+	// Register hotkeys on canvas, and save defs for terminal widget registration
+	hotkeyDefs = RegisterHotkeys(w.Canvas(), Handlers{
 		NewSession: func() {
 			showNewSessionDialog(w, appConfig, program, state, sidebarWidget, paneManager, autoYes)
 		},
