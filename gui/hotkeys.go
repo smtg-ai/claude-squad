@@ -1,11 +1,19 @@
 package gui
 
 import (
+	"runtime"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/driver/desktop"
 )
 
-const modCtrlShift = fyne.KeyModifierControl | fyne.KeyModifierShift
+// modPrefix returns the display string for the modifier combo.
+func modPrefix() string {
+	if runtime.GOOS == "darwin" {
+		return "⌘⇧"
+	}
+	return "Ctrl+Shift+"
+}
 
 // Handlers is a struct of callback functions for hotkey actions.
 type Handlers struct {
@@ -27,7 +35,9 @@ type Handlers struct {
 	Quit            func()
 }
 
-// RegisterHotkeys registers all Ctrl+Shift shortcuts on the given canvas.
+// RegisterHotkeys registers shortcuts on the given canvas.
+// On macOS, registers Cmd+Shift; on other platforms, Ctrl+Shift.
+// Both modifier combos are registered so either works everywhere.
 func RegisterHotkeys(canvas fyne.Canvas, h Handlers) {
 	shortcuts := []struct {
 		key     fyne.KeyName
@@ -51,16 +61,24 @@ func RegisterHotkeys(canvas fyne.Canvas, h Handlers) {
 		{fyne.KeyQ, h.Quit},
 	}
 
+	// Register both Ctrl+Shift and Super(Cmd)+Shift so hotkeys work on all platforms
+	modifiers := []fyne.KeyModifier{
+		fyne.KeyModifierControl | fyne.KeyModifierShift,
+		fyne.KeyModifierSuper | fyne.KeyModifierShift,
+	}
+
 	for _, s := range shortcuts {
 		handler := s.handler // capture for closure
-		shortcut := &desktop.CustomShortcut{
-			KeyName:  s.key,
-			Modifier: modCtrlShift,
-		}
-		canvas.AddShortcut(shortcut, func(_ fyne.Shortcut) {
-			if handler != nil {
-				handler()
+		for _, mod := range modifiers {
+			shortcut := &desktop.CustomShortcut{
+				KeyName:  s.key,
+				Modifier: mod,
 			}
-		})
+			canvas.AddShortcut(shortcut, func(_ fyne.Shortcut) {
+				if handler != nil {
+					handler()
+				}
+			})
+		}
 	}
 }

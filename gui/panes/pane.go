@@ -4,6 +4,7 @@ import (
 	"claude-squad/session"
 	"fmt"
 	"image/color"
+	"runtime"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -25,6 +26,7 @@ type Pane struct {
 	titleLabel  *widget.Label
 	statusIcon  *canvas.Text
 	branchLabel *widget.Label
+	hintLabel   *widget.Label
 	conn        *TerminalConnection
 	focused     bool
 	onFocus     func(*Pane)
@@ -42,11 +44,14 @@ func NewPane(onFocus func(*Pane)) *Pane {
 
 	p.branchLabel.TextStyle = fyne.TextStyle{Italic: true}
 	p.statusIcon.TextSize = 14
+	p.hintLabel = widget.NewLabel(hintText())
+	p.hintLabel.TextStyle = fyne.TextStyle{Italic: true}
 
 	p.header = container.NewHBox(
 		p.statusIcon,
 		p.titleLabel,
 		layout.NewSpacer(),
+		p.hintLabel,
 		p.branchLabel,
 	)
 
@@ -141,4 +146,12 @@ func (p *Pane) UpdateStatus() {
 // Disconnect cleans up the terminal connection.
 func (p *Pane) Disconnect() {
 	p.conn.Disconnect()
+}
+
+func hintText() string {
+	mod := "Ctrl+Shift"
+	if runtime.GOOS == "darwin" {
+		mod = "⌘⇧"
+	}
+	return fmt.Sprintf("Split: %s+\\  %s+-  |  Close: %s+W  |  Nav: %s+←→↑↓", mod, mod, mod, mod)
 }
