@@ -84,10 +84,11 @@ func Run(program string, autoYes bool) error {
 	// Sidebar
 	sidebarWidget = sidebar.NewSidebar(
 		func(inst *session.Instance) {
-			// On select — just highlights in sidebar
+			// On select — open in focused pane
+			openSessionInFocusedPane(paneManager, inst)
 		},
 		func(inst *session.Instance) {
-			// On activate (double-click) — open in focused pane
+			// On activate (double-click) — also open in focused pane
 			openSessionInFocusedPane(paneManager, inst)
 		},
 		func() {
