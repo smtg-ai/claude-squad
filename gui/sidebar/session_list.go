@@ -108,6 +108,12 @@ func NewSessionList(onSelect func(*session.Instance), onActivate func(*session.I
 
 // Update rebuilds the list from the current instances.
 func (sl *SessionList) Update(instances []*session.Instance) {
+	// Remember selected instance title to preserve selection
+	var selectedTitle string
+	if sl.selectedIdx >= 0 && sl.selectedIdx < len(sl.entries) && !sl.entries[sl.selectedIdx].isHeader {
+		selectedTitle = sl.entries[sl.selectedIdx].instance.Title
+	}
+
 	var active, paused []*session.Instance
 	for _, inst := range instances {
 		if inst.Status == session.Paused {
@@ -131,6 +137,15 @@ func (sl *SessionList) Update(instances []*session.Instance) {
 		sl.entries = append(sl.entries, listEntry{isHeader: true, text: "PAUSED"})
 		for _, inst := range paused {
 			sl.entries = append(sl.entries, listEntry{instance: inst})
+		}
+	}
+
+	// Restore selection by title, or reset if not found
+	sl.selectedIdx = -1
+	for i, e := range sl.entries {
+		if !e.isHeader && e.instance.Title == selectedTitle {
+			sl.selectedIdx = i
+			break
 		}
 	}
 

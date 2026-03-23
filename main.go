@@ -175,9 +175,9 @@ var (
 )
 
 func init() {
-	rootCmd.Flags().StringVarP(&programFlag, "program", "p", "",
+	rootCmd.PersistentFlags().StringVarP(&programFlag, "program", "p", "",
 		"Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')")
-	rootCmd.Flags().BoolVarP(&autoYesFlag, "autoyes", "y", false,
+	rootCmd.PersistentFlags().BoolVarP(&autoYesFlag, "autoyes", "y", false,
 		"[experimental] If enabled, all instances will automatically accept prompts")
 	rootCmd.Flags().BoolVar(&daemonFlag, "daemon", false, "Run a program that loads all sessions"+
 		" and runs autoyes mode on them.")

@@ -84,6 +84,10 @@ func (tc *TerminalConnection) disconnectLocked() {
 	}
 	tc.closed = true
 
+	// Remove resize listener to terminate resizeLoop goroutine
+	tc.term.RemoveListener(tc.listener)
+	tc.listener = make(chan terminal.Config, 1) // fresh channel for next Connect
+
 	if tc.instance != nil {
 		tmuxSession := tc.instance.GetTmuxSession()
 		if tmuxSession != nil {

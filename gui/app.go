@@ -206,16 +206,18 @@ func Run(program string, autoYes bool) error {
 						inst.SetStatus(session.Ready)
 					}
 				} else {
-					inst.SetStatus(session.Ready)
+					inst.SetStatus(session.Running)
 				}
 				if err := inst.UpdateDiffStats(); err != nil {
 					log.WarningLog.Printf("failed to update diff stats: %v", err)
 				}
 			}
-			sidebarWidget.Update(state.getInstances())
-			for _, p := range paneManager.AllPanes() {
-				p.UpdateStatus()
-			}
+			fyne.Do(func() {
+				sidebarWidget.Update(state.getInstances())
+				for _, p := range paneManager.AllPanes() {
+					p.UpdateStatus()
+				}
+			})
 		}
 	}()
 
@@ -294,6 +296,10 @@ func killSession(inst *session.Instance, state *guiState, sb *sidebar.Sidebar, p
 		if p.Instance() != nil && p.Instance().Title == inst.Title {
 			p.CloseSession()
 		}
+	}
+
+	if err := inst.Kill(); err != nil {
+		log.ErrorLog.Printf("failed to kill instance: %v", err)
 	}
 
 	if err := state.storage.DeleteInstance(inst.Title); err != nil {
