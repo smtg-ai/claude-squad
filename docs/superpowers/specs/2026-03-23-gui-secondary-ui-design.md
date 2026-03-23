@@ -20,7 +20,7 @@ The current Bubble Tea TUI has fundamental limitations:
 
 - **Fyne v2** (`fyne.io/fyne/v2`): Pure Go cross-platform GUI toolkit. Custom-rendered via OpenGL. Dark theme built-in. Provides widgets for lists, split containers, buttons, dialogs, and layout management.
 - **fyne-io/terminal** (`fyne.io/terminal`): Embedded terminal emulator widget for Fyne. VT100 emulation, mouse support, color rendering. Connects directly to a PTY.
-- **Existing Go packages**: `session`, `session/git`, `session/tmux`, `config`, `session/storage` — all reused as-is with no modifications.
+- **Existing Go packages**: `session`, `session/git`, `session/tmux`, `config`, `session/storage` — reused with minimal additions to `session/tmux` for GUI PTY integration (see PTY Integration section).
 
 ## Layout
 
@@ -96,14 +96,14 @@ Split(vertical)
 
 ### Session-Pane Relationship
 
-- A session can be open in multiple panes simultaneously (same PTY, same content).
-- The sidebar indicates which sessions are currently visible in panes.
+- A session can only be open in one pane at a time. Opening it in a different pane moves it (closes the old pane's connection, opens in the new one).
+- The sidebar indicates which session is currently visible in which pane (e.g., a small dot or "open" marker).
 
 ## Interaction Model
 
 ### Hotkeys
 
-All UI hotkeys use `Ctrl+Shift+` prefix to avoid conflicts with terminal input.
+All UI hotkeys use `Ctrl+Shift+` prefix to avoid conflicts with terminal input. Hotkeys are intercepted at the Fyne application level (via `Canvas.AddShortcut` or a top-level key handler) before events reach the focused terminal widget, ensuring the terminal never sees UI commands.
 
 | Action | Hotkey |
 |--------|--------|
@@ -136,6 +136,30 @@ All UI hotkeys use `Ctrl+Shift+` prefix to avoid conflicts with terminal input.
 3. Once running, open it in any pane via `Ctrl+Shift+Enter` or double-click.
 4. A pane can be switched to a different session at any time.
 5. Alarm state triggers when `HasUpdated()` detects a prompt — sidebar icon changes to yellow warning.
+
+## PTY Integration
+
+The existing `TmuxSession.Attach()` method (tmux.go:258-333) is designed for the TUI: it pipes tmux PTY output to `os.Stdout` and reads from `os.Stdin`. This does not work for the GUI, where terminal widgets need direct access to the PTY file descriptor.
+
+**Approach**: Add a new method to `TmuxSession` that exposes the PTY for GUI consumption without the stdin/stdout piping:
+
+```go
+// ConnectPTY creates a new tmux attach PTY for this session and returns
+// the file descriptor for use by an external terminal widget.
+// The caller is responsible for reading/writing to the returned *os.File.
+// Call DisconnectPTY() to clean up when done.
+func (t *TmuxSession) ConnectPTY() (*os.File, error)
+
+// DisconnectPTY closes a GUI-connected PTY and restores the background
+// monitoring PTY (same as what Restore() sets up).
+func (t *TmuxSession) DisconnectPTY(ptmx *os.File) error
+```
+
+Each call to `ConnectPTY()` runs `tmux attach-session -t <name>` via `pty.Start()`, returning the master side of the PTY. The `fyne-io/terminal` widget connects via its `RunWithConnection(io.Reader, io.WriteCloser)` API, passing the PTY file as both reader and writer. When the pane is closed or the session is moved to a different pane, `DisconnectPTY()` cleans up the attach PTY and restores the background monitoring PTY.
+
+This is a small, additive change to `session/tmux/tmux.go` — the existing `Attach()`/`Detach()` flow for the TUI remains untouched.
+
+**One session, one pane**: A tmux session has a single terminal state. Multiple PTY attachments to the same tmux session would share that state, but `fyne-io/terminal` widgets each expect exclusive read access to their PTY fd. To avoid complexity, each session can only be open in one pane at a time. Opening a session in a new pane disconnects the previous pane first.
 
 ## Status Polling
 
@@ -177,7 +201,7 @@ claude-squad/
       new_session.go          <- new session dialog (name, prompt, branch, profile)
       confirm.go              <- confirmation dialog (kill, push)
   app/                        <- existing Bubble Tea UI (unchanged)
-  session/                    <- existing (shared, unchanged)
+  session/                    <- existing (shared, minor additions to tmux layer)
   config/                     <- existing (shared, unchanged)
   cmd/
     cmd.go                    <- add "gui" subcommand
