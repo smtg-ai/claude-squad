@@ -27,6 +27,11 @@ func (g *GitWorktree) Setup() error {
 		return g.setupFromExistingBranch()
 	}
 
+	// If a base ref is specified, create a new branch from that ref
+	if g.baseRef != "" {
+		return g.setupFromRef()
+	}
+
 	// Check if branch exists using git CLI (much faster than go-git PlainOpen)
 	_, err = g.runGitCommand(g.repoPath, "show-ref", "--verify", fmt.Sprintf("refs/heads/%s", g.branchName))
 	if err == nil {
@@ -91,6 +96,29 @@ func (g *GitWorktree) setupNewWorktree() error {
 	// TODO: we might want to give an option to use main/master instead of the current branch.
 	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, headCommit); err != nil {
 		return fmt.Errorf("failed to create worktree from commit %s: %w", headCommit, err)
+	}
+
+	return nil
+}
+
+// setupFromRef creates a new worktree with a new branch based on a specific ref.
+func (g *GitWorktree) setupFromRef() error {
+	// Clean up any existing worktree first
+	_, _ = g.runGitCommand(g.repoPath, "worktree", "remove", "-f", g.worktreePath)
+
+	// Clean up any existing branch
+	_, _ = g.runGitCommand(g.repoPath, "branch", "-D", g.branchName)
+
+	// Resolve the ref to a commit SHA for baseCommitSHA
+	output, err := g.runGitCommand(g.repoPath, "rev-parse", g.baseRef)
+	if err != nil {
+		return fmt.Errorf("failed to resolve ref %s: %w", g.baseRef, err)
+	}
+	g.baseCommitSHA = strings.TrimSpace(output)
+
+	// Create worktree with new branch based on the ref
+	if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, g.baseRef); err != nil {
+		return fmt.Errorf("failed to create worktree from ref %s: %w", g.baseRef, err)
 	}
 
 	return nil
