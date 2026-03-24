@@ -24,7 +24,6 @@ type TerminalConnection struct {
 // NewTerminalConnection creates a new connection but does not start it.
 func NewTerminalConnection() *TerminalConnection {
 	return &TerminalConnection{
-		term:     terminal.New(),
 		listener: make(chan terminal.Config, 1),
 	}
 }
@@ -35,7 +34,8 @@ func (tc *TerminalConnection) Terminal() *terminal.Terminal {
 }
 
 // Connect attaches the terminal widget to the given instance's tmux session.
-// It disconnects any existing connection first.
+// It disconnects any existing connection first. A new terminal widget is
+// created each time to avoid races with the previous RunWithConnection goroutine.
 func (tc *TerminalConnection) Connect(inst *session.Instance) error {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -53,6 +53,8 @@ func (tc *TerminalConnection) Connect(inst *session.Instance) error {
 		return err
 	}
 
+	// Create a fresh terminal widget to avoid races with the old RunWithConnection goroutine
+	tc.term = terminal.New()
 	tc.instance = inst
 	tc.ptmx = ptmx
 	tc.closed = false

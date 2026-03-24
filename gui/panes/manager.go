@@ -26,16 +26,17 @@ func (n *node) isLeaf() bool {
 type Manager struct {
 	root         *node
 	focused      *node
+	canvas       fyne.Canvas
 	onFocus      func(*Pane) // callback when focus changes
 	registerKeys ShortcutRegistrar
 }
 
 // NewManager creates a new pane manager with a single empty pane.
-func NewManager(onFocus func(*Pane), registerKeys ShortcutRegistrar) *Manager {
-	m := &Manager{onFocus: onFocus, registerKeys: registerKeys}
+func NewManager(onFocus func(*Pane), registerKeys ShortcutRegistrar, c fyne.Canvas) *Manager {
+	m := &Manager{onFocus: onFocus, registerKeys: registerKeys, canvas: c}
 	pane := NewPane(func(p *Pane) {
 		m.FocusPane(p)
-	}, registerKeys)
+	}, registerKeys, c)
 	pane.SetFocused(true)
 	m.root = &node{pane: pane}
 	m.focused = m.root
@@ -94,7 +95,7 @@ func (m *Manager) split(horizontal bool) *Pane {
 
 	newPane := NewPane(func(p *Pane) {
 		m.FocusPane(p)
-	}, m.registerKeys)
+	}, m.registerKeys, m.canvas)
 
 	oldNode := m.focused
 	parent := oldNode.parent
@@ -134,6 +135,9 @@ func (m *Manager) split(horizontal bool) *Pane {
 		}
 		m.rebuildSplit(parent)
 	}
+
+	// Focus the new pane so the user can immediately open a session in it
+	m.FocusPane(newPane)
 
 	return newPane
 }

@@ -19,9 +19,9 @@ type Sidebar struct {
 }
 
 // NewSidebar creates a new sidebar widget.
-func NewSidebar(onSelect func(*session.Instance), onActivate func(*session.Instance), onNew func()) *Sidebar {
+func NewSidebar(onSelect func(*session.Instance), onActivate func(*session.Instance), onNew func(), c fyne.Canvas, actions *ContextActions) *Sidebar {
 	s := &Sidebar{
-		sessionList: NewSessionList(onSelect, onActivate),
+		sessionList: NewSessionList(onSelect, onActivate, c, actions),
 		onNew:       onNew,
 	}
 

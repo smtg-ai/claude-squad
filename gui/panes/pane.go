@@ -14,9 +14,11 @@ import (
 )
 
 var (
-	colorGreen   = color.NRGBA{R: 0xa6, G: 0xe3, B: 0xa1, A: 0xff}
-	colorYellow  = color.NRGBA{R: 0xf9, G: 0xe2, B: 0xaf, A: 0xff}
-	colorOverlay = color.NRGBA{R: 0x6c, G: 0x70, B: 0x86, A: 0xff}
+	colorGreen      = color.NRGBA{R: 0xa6, G: 0xe3, B: 0xa1, A: 0xff}
+	colorYellow     = color.NRGBA{R: 0xf9, G: 0xe2, B: 0xaf, A: 0xff}
+	colorOverlay    = color.NRGBA{R: 0x6c, G: 0x70, B: 0x86, A: 0xff}
+	colorFocusBorder = color.NRGBA{R: 0x89, G: 0xb4, B: 0xfa, A: 0xff} // blue accent
+	colorDimBorder   = color.NRGBA{R: 0x45, G: 0x47, B: 0x5a, A: 0xff}
 )
 
 // ShortcutRegistrar registers hotkey shortcuts on a target that supports AddShortcut.
@@ -29,23 +31,57 @@ type ShortcutAdder interface {
 
 // Pane represents a single terminal pane with a header bar.
 type Pane struct {
-	container    *fyne.Container
+	container    *fyne.Container // outer: stack(focusBorder, inner, overlay)
+	inner        *fyne.Container // border layout with header + content
 	header       *fyne.Container
 	titleLabel   *widget.Label
 	statusIcon   *canvas.Text
 	branchLabel  *widget.Label
 	hintLabel    *widget.Label
+	focusBorder  *canvas.Rectangle
+	overlay      *tapOverlay
 	conn         *TerminalConnection
+	canvas       fyne.Canvas
 	focused      bool
 	onFocus      func(*Pane)
 	registerKeys ShortcutRegistrar
 }
 
+// tapOverlay is an invisible full-pane overlay that intercepts clicks.
+// It fires the onTap callback and then forwards keyboard focus to an
+// optional focusable widget (the terminal) so typing still works.
+type tapOverlay struct {
+	widget.BaseWidget
+	onTap     func()
+	focusable fyne.Focusable // set when a terminal is connected
+	canvas    fyne.Canvas
+}
+
+func newTapOverlay(c fyne.Canvas, onTap func()) *tapOverlay {
+	t := &tapOverlay{canvas: c, onTap: onTap}
+	t.ExtendBaseWidget(t)
+	return t
+}
+
+func (t *tapOverlay) Tapped(_ *fyne.PointEvent) {
+	if t.onTap != nil {
+		t.onTap()
+	}
+	if t.focusable != nil && t.canvas != nil {
+		t.canvas.Focus(t.focusable)
+	}
+}
+
+func (t *tapOverlay) CreateRenderer() fyne.WidgetRenderer {
+	return widget.NewSimpleRenderer(canvas.NewRectangle(color.Transparent))
+}
+
 // NewPane creates a new empty pane.
-func NewPane(onFocus func(*Pane), registerKeys ShortcutRegistrar) *Pane {
+func NewPane(onFocus func(*Pane), registerKeys ShortcutRegistrar, c fyne.Canvas) *Pane {
 	p := &Pane{
 		conn:         NewTerminalConnection(),
 		registerKeys: registerKeys,
+		canvas:       c,
 		titleLabel:  widget.NewLabel("No session"),
 		statusIcon:  canvas.NewText("", colorOverlay),
 		branchLabel: widget.NewLabel(""),
@@ -65,11 +101,25 @@ func NewPane(onFocus func(*Pane), registerKeys ShortcutRegistrar) *Pane {
 		p.branchLabel,
 	)
 
+	p.focusBorder = canvas.NewRectangle(colorDimBorder)
+	p.focusBorder.StrokeWidth = 2
+	p.focusBorder.StrokeColor = colorDimBorder
+	p.focusBorder.FillColor = color.Transparent
+
+	// Transparent overlay on top of everything — catches clicks to focus this pane
+	p.overlay = newTapOverlay(c, func() {
+		if p.onFocus != nil {
+			p.onFocus(p)
+		}
+	})
+
 	emptyLabel := widget.NewLabel("Select a session to open here")
 	emptyLabel.Alignment = fyne.TextAlignCenter
 	emptyContent := container.NewCenter(emptyLabel)
 
-	p.container = container.NewBorder(p.header, nil, nil, nil, emptyContent)
+	p.inner = container.NewBorder(p.header, nil, nil, nil, emptyContent)
+	// Stack order: border (back), content (middle), overlay (front — intercepts taps)
+	p.container = container.NewStack(p.focusBorder, p.inner, p.overlay)
 	return p
 }
 
@@ -92,16 +142,20 @@ func (p *Pane) OpenSession(inst *session.Instance) error {
 		p.registerKeys(p.conn.Terminal())
 	}
 
+	// Tell the overlay to forward keyboard focus to this terminal after tap
+	p.overlay.focusable = p.conn.Terminal()
+
 	// Replace the pane content with the terminal widget
-	p.container.Objects = []fyne.CanvasObject{p.header, p.conn.Terminal()}
-	p.container.Layout = layout.NewBorderLayout(p.header, nil, nil, nil)
-	p.container.Refresh()
+	p.inner.Objects = []fyne.CanvasObject{p.header, p.conn.Terminal()}
+	p.inner.Layout = layout.NewBorderLayout(p.header, nil, nil, nil)
+	p.inner.Refresh()
 	return nil
 }
 
 // CloseSession disconnects the terminal and shows empty state.
 func (p *Pane) CloseSession() {
 	p.conn.Disconnect()
+	p.overlay.focusable = nil
 	p.titleLabel.SetText("No session")
 	p.branchLabel.SetText("")
 	p.statusIcon.Text = ""
@@ -109,9 +163,9 @@ func (p *Pane) CloseSession() {
 	emptyLabel := widget.NewLabel("Select a session to open here")
 	emptyLabel.Alignment = fyne.TextAlignCenter
 
-	p.container.Objects = []fyne.CanvasObject{p.header, container.NewCenter(emptyLabel)}
-	p.container.Layout = layout.NewBorderLayout(p.header, nil, nil, nil)
-	p.container.Refresh()
+	p.inner.Objects = []fyne.CanvasObject{p.header, container.NewCenter(emptyLabel)}
+	p.inner.Layout = layout.NewBorderLayout(p.header, nil, nil, nil)
+	p.inner.Refresh()
 }
 
 // Instance returns the connected instance, or nil.
@@ -122,6 +176,12 @@ func (p *Pane) Instance() *session.Instance {
 // SetFocused updates the visual focus state of this pane.
 func (p *Pane) SetFocused(focused bool) {
 	p.focused = focused
+	if focused {
+		p.focusBorder.StrokeColor = colorFocusBorder
+	} else {
+		p.focusBorder.StrokeColor = colorDimBorder
+	}
+	p.focusBorder.Refresh()
 }
 
 // IsFocused returns whether this pane is focused.
