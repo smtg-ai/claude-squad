@@ -93,6 +93,8 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// pendingConfirmAction is the action to execute when the user confirms in the confirmation overlay
+	pendingConfirmAction tea.Cmd
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -530,10 +532,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	// Handle confirmation state
 	if m.state == stateConfirm {
+		confirmKey := m.confirmationOverlay.ConfirmKey
 		shouldClose := m.confirmationOverlay.HandleKeyPress(msg)
 		if shouldClose {
 			m.state = stateDefault
 			m.confirmationOverlay = nil
+			if msg.String() == confirmKey {
+				action := m.pendingConfirmAction
+				m.pendingConfirmAction = nil
+				return m, action
+			}
+			m.pendingConfirmAction = nil
 			return m, nil
 		}
 		return m, nil
@@ -646,19 +655,21 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		// Create the kill action as a tea.Cmd
 		killAction := func() tea.Msg {
-			// Get worktree and check if branch is checked out
-			worktree, err := selected.GetGitWorktree()
-			if err != nil {
-				return err
-			}
-
-			checkedOut, err := worktree.IsBranchCheckedOut()
-			if err != nil {
-				return err
-			}
-
-			if checkedOut {
-				return fmt.Errorf("instance %s is currently checked out", selected.Title)
+			// Skip branch-checked-out warning for in-place sessions (no worktree)
+			if !selected.IsInPlace() {
+				worktree, err := selected.GetGitWorktree()
+				if err != nil {
+					return err
+				}
+				if worktree != nil {
+					checkedOut, err := worktree.IsBranchCheckedOut()
+					if err != nil {
+						return err
+					}
+					if checkedOut {
+						return fmt.Errorf("instance %s is currently checked out", selected.Title)
+					}
+				}
 			}
 
 			// Clean up terminal session for this instance
@@ -685,11 +696,17 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		// Create the push action as a tea.Cmd
 		pushAction := func() tea.Msg {
+			if selected.IsInPlace() {
+				return fmt.Errorf("cannot push in-place session")
+			}
 			// Default commit message with timestamp
 			commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s", selected.Title, time.Now().Format(time.RFC822))
 			worktree, err := selected.GetGitWorktree()
 			if err != nil {
 				return err
+			}
+			if worktree == nil {
+				return fmt.Errorf("no worktree for session")
 			}
 			if err = worktree.PushChanges(commitMsg, true); err != nil {
 				return err
@@ -901,18 +918,8 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 	// Set a fixed width for consistent appearance
 	m.confirmationOverlay.SetWidth(50)
 
-	// Set callbacks for confirmation and cancellation
-	m.confirmationOverlay.OnConfirm = func() {
-		m.state = stateDefault
-		// Execute the action if it exists
-		if action != nil {
-			_ = action()
-		}
-	}
-
-	m.confirmationOverlay.OnCancel = func() {
-		m.state = stateDefault
-	}
+	// Store the action to execute when confirmed
+	m.pendingConfirmAction = action
 
 	return nil
 }
@@ -932,16 +939,19 @@ func (m *home) View() string {
 	if m.state == statePrompt {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
+			return mainView
 		}
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
 	} else if m.state == stateHelp {
 		if m.textOverlay == nil {
 			log.ErrorLog.Printf("text overlay is nil")
+			return mainView
 		}
 		return overlay.PlaceOverlay(0, 0, m.textOverlay.Render(), mainView, true, true)
 	} else if m.state == stateConfirm {
 		if m.confirmationOverlay == nil {
 			log.ErrorLog.Printf("confirmation overlay is nil")
+			return mainView
 		}
 		return overlay.PlaceOverlay(0, 0, m.confirmationOverlay.Render(), mainView, true, true)
 	}
