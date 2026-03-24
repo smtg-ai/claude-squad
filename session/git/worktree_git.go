@@ -7,6 +7,38 @@ import (
 	"strings"
 )
 
+// GetCurrentBranch returns the current branch name for the given repo path.
+func GetCurrentBranch(repoPath string) (string, error) {
+	cmd := exec.Command("git", "-C", repoPath, "branch", "--show-current")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to get current branch: %s (%w)", output, err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// GetDefaultBranch returns the default branch name for the remote origin.
+// Falls back to the current branch, then to "main" if both fail.
+func GetDefaultBranch(repoPath string) string {
+	// Try to get the remote default branch
+	cmd := exec.Command("git", "-C", repoPath, "symbolic-ref", "refs/remotes/origin/HEAD")
+	if output, err := cmd.CombinedOutput(); err == nil {
+		ref := strings.TrimSpace(string(output))
+		// Strip "refs/remotes/origin/" prefix
+		if name := strings.TrimPrefix(ref, "refs/remotes/origin/"); name != ref {
+			return name
+		}
+	}
+
+	// Fall back to current branch
+	if branch, err := GetCurrentBranch(repoPath); err == nil && branch != "" {
+		return branch
+	}
+
+	// Final fallback
+	return "main"
+}
+
 // MaxBranchSearchResults is the maximum number of branches returned by SearchBranches.
 const MaxBranchSearchResults = 50
 
