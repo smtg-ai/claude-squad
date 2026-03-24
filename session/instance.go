@@ -198,6 +198,9 @@ func (i *Instance) RepoName() (string, error) {
 	if !i.started {
 		return "", fmt.Errorf("cannot get repo name for instance that has not been started")
 	}
+	if i.gitWorktree == nil {
+		return filepath.Base(i.Path), nil
+	}
 	return i.gitWorktree.GetRepoName(), nil
 }
 
@@ -232,7 +235,12 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	i.tmuxSession = tmuxSession
 
 	if firstTimeSetup {
-		if i.selectedBranch != "" {
+		if i.inPlace {
+			// In-place: no worktree, set branch from current working directory
+			if branch, err := git.GetCurrentBranch(i.Path); err == nil && branch != "" {
+				i.Branch = branch
+			}
+		} else if i.selectedBranch != "" {
 			gitWorktree, err := git.NewGitWorktreeFromBranch(i.Path, i.selectedBranch, i.Title)
 			if err != nil {
 				return fmt.Errorf("failed to create git worktree from branch: %w", err)
@@ -240,9 +248,17 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 			i.gitWorktree = gitWorktree
 			i.Branch = i.selectedBranch
 		} else {
-			gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
+			// Default: fetch origin and create worktree from remote default branch
+			git.FetchBranches(i.Path)
+			defaultBranch := git.GetDefaultBranch(i.Path)
+			baseRef := fmt.Sprintf("origin/%s", defaultBranch)
+			gitWorktree, branchName, err := git.NewGitWorktreeFromRef(i.Path, baseRef, i.Title)
 			if err != nil {
-				return fmt.Errorf("failed to create git worktree: %w", err)
+				// Fall back to HEAD if origin ref fails
+				gitWorktree, branchName, err = git.NewGitWorktree(i.Path, i.Title)
+				if err != nil {
+					return fmt.Errorf("failed to create git worktree: %w", err)
+				}
 			}
 			i.gitWorktree = gitWorktree
 			i.Branch = branchName
@@ -268,20 +284,28 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 			return setupErr
 		}
 	} else {
-		// Setup git worktree first
-		if err := i.gitWorktree.Setup(); err != nil {
-			setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
-			return setupErr
-		}
-
-		// Create new session
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
-			// Cleanup git worktree if tmux session creation fails
-			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
-				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+		if i.inPlace {
+			// In-place: just start tmux in working directory
+			if err := i.tmuxSession.Start(i.Path); err != nil {
+				setupErr = fmt.Errorf("failed to start new session: %w", err)
+				return setupErr
 			}
-			setupErr = fmt.Errorf("failed to start new session: %w", err)
-			return setupErr
+		} else {
+			// Setup git worktree first
+			if err := i.gitWorktree.Setup(); err != nil {
+				setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
+				return setupErr
+			}
+
+			// Create new session
+			if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+				// Cleanup git worktree if tmux session creation fails
+				if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
+					err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+				}
+				setupErr = fmt.Errorf("failed to start new session: %w", err)
+				return setupErr
+			}
 		}
 	}
 
@@ -437,6 +461,18 @@ func (i *Instance) Pause() error {
 		return fmt.Errorf("instance is already paused")
 	}
 
+	// In-place sessions: just detach tmux, no git operations
+	if i.inPlace {
+		if i.tmuxSession == nil {
+			return fmt.Errorf("tmux session is nil")
+		}
+		if err := i.tmuxSession.DetachSafely(); err != nil {
+			return fmt.Errorf("failed to detach tmux session: %w", err)
+		}
+		i.SetStatus(Paused)
+		return nil
+	}
+
 	var errs []error
 
 	// Check if there are any changes to commit
@@ -500,6 +536,26 @@ func (i *Instance) Resume() error {
 		return fmt.Errorf("can only resume paused instances")
 	}
 
+	// In-place sessions: just restart tmux in working directory
+	if i.inPlace {
+		if i.tmuxSession == nil {
+			return fmt.Errorf("tmux session is nil")
+		}
+		if i.tmuxSession.DoesSessionExist() {
+			if err := i.tmuxSession.Restore(); err != nil {
+				if err := i.tmuxSession.Start(i.Path); err != nil {
+					return fmt.Errorf("failed to start new session: %w", err)
+				}
+			}
+		} else {
+			if err := i.tmuxSession.Start(i.Path); err != nil {
+				return fmt.Errorf("failed to start new session: %w", err)
+			}
+		}
+		i.SetStatus(Running)
+		return nil
+	}
+
 	// Check if branch is checked out
 	if checked, err := i.gitWorktree.IsBranchCheckedOut(); err != nil {
 		log.ErrorLog.Print(err)
@@ -559,6 +615,11 @@ func (i *Instance) UpdateDiffStats() error {
 
 	if i.Status == Paused {
 		// Keep the previous diff stats if the instance is paused
+		return nil
+	}
+
+	if i.gitWorktree == nil {
+		i.diffStats = nil
 		return nil
 	}
 
