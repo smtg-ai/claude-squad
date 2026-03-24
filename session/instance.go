@@ -57,6 +57,9 @@ type Instance struct {
 
 	// selectedBranch is the existing branch to start on (empty = new branch from HEAD)
 	selectedBranch string
+	// inPlace is true when the session runs directly in the working directory
+	// without git worktree isolation. gitWorktree will be nil.
+	inPlace bool
 
 	// The below fields are initialized upon calling Start().
 
@@ -80,6 +83,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 		UpdatedAt: time.Now(),
 		Program:   i.Program,
 		AutoYes:   i.AutoYes,
+		InPlace:   i.inPlace,
 	}
 
 	// Only include worktree data if gitWorktree is initialized
@@ -118,19 +122,24 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		CreatedAt: data.CreatedAt,
 		UpdatedAt: data.UpdatedAt,
 		Program:   data.Program,
-		gitWorktree: git.NewGitWorktreeFromStorage(
+		inPlace:   data.InPlace,
+		diffStats: &git.DiffStats{
+			Added:   data.DiffStats.Added,
+			Removed: data.DiffStats.Removed,
+			Content: data.DiffStats.Content,
+		},
+	}
+
+	// Only create git worktree from storage if not an in-place session
+	if !data.InPlace {
+		instance.gitWorktree = git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,
 			data.Worktree.SessionName,
 			data.Worktree.BranchName,
 			data.Worktree.BaseCommitSHA,
 			data.Worktree.IsExistingBranch,
-		),
-		diffStats: &git.DiffStats{
-			Added:   data.DiffStats.Added,
-			Removed: data.DiffStats.Removed,
-			Content: data.DiffStats.Content,
-		},
+		)
 	}
 
 	if instance.Paused() {
@@ -157,6 +166,8 @@ type InstanceOptions struct {
 	AutoYes bool
 	// Branch is an existing branch name to start the session on (empty = new branch from HEAD)
 	Branch string
+	// InPlace runs the session directly in the working directory without git isolation.
+	InPlace bool
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -179,6 +190,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		UpdatedAt:      t,
 		AutoYes:        false,
 		selectedBranch: opts.Branch,
+		inPlace:        opts.InPlace,
 	}, nil
 }
 
@@ -196,6 +208,11 @@ func (i *Instance) SetStatus(status Status) {
 // SetSelectedBranch sets the branch to use when starting the instance.
 func (i *Instance) SetSelectedBranch(branch string) {
 	i.selectedBranch = branch
+}
+
+// IsInPlace returns whether this session runs in-place without git isolation.
+func (i *Instance) IsInPlace() bool {
+	return i.inPlace
 }
 
 // firstTimeSetup is true if this is a new instance. Otherwise, it's one loaded from storage.
@@ -317,14 +334,14 @@ func (i *Instance) combineErrors(errs []error) error {
 }
 
 func (i *Instance) Preview() (string, error) {
-	if !i.started || i.Status == Paused {
+	if !i.started || i.Status == Paused || i.tmuxSession == nil {
 		return "", nil
 	}
 	return i.tmuxSession.CapturePaneContent()
 }
 
 func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
-	if !i.started {
+	if !i.started || i.tmuxSession == nil {
 		return false, false
 	}
 	return i.tmuxSession.HasUpdated()
@@ -346,7 +363,7 @@ func (i *Instance) CheckAndHandleTrustPrompt() bool {
 }
 
 func (i *Instance) TapEnter() {
-	if !i.started || !i.AutoYes {
+	if !i.started || !i.AutoYes || i.tmuxSession == nil {
 		return
 	}
 	if err := i.tmuxSession.TapEnter(); err != nil {
@@ -355,14 +372,14 @@ func (i *Instance) TapEnter() {
 }
 
 func (i *Instance) Attach() (chan struct{}, error) {
-	if !i.started {
+	if !i.started || i.tmuxSession == nil {
 		return nil, fmt.Errorf("cannot attach instance that has not been started")
 	}
 	return i.tmuxSession.Attach()
 }
 
 func (i *Instance) SetPreviewSize(width, height int) error {
-	if !i.started || i.Status == Paused {
+	if !i.started || i.Status == Paused || i.tmuxSession == nil {
 		return fmt.Errorf("cannot set preview size for instance that has not been started or " +
 			"is paused")
 	}
@@ -405,6 +422,9 @@ func (i *Instance) Paused() bool {
 
 // TmuxAlive returns true if the tmux session is alive. This is a sanity check before attaching.
 func (i *Instance) TmuxAlive() bool {
+	if i.tmuxSession == nil {
+		return false
+	}
 	return i.tmuxSession.DoesSessionExist()
 }
 
@@ -435,6 +455,9 @@ func (i *Instance) Pause() error {
 	}
 
 	// Detach from tmux session instead of closing to preserve session output
+	if i.tmuxSession == nil {
+		return fmt.Errorf("tmux session is nil")
+	}
 	if err := i.tmuxSession.DetachSafely(); err != nil {
 		errs = append(errs, fmt.Errorf("failed to detach tmux session: %w", err))
 		log.ErrorLog.Print(err)
@@ -492,6 +515,9 @@ func (i *Instance) Resume() error {
 	}
 
 	// Check if tmux session still exists from pause, otherwise create new one
+	if i.tmuxSession == nil {
+		return fmt.Errorf("tmux session is nil")
+	}
 	if i.tmuxSession.DoesSessionExist() {
 		// Session exists, just restore PTY connection to it
 		if err := i.tmuxSession.Restore(); err != nil {
@@ -578,7 +604,7 @@ func (i *Instance) SendPrompt(prompt string) error {
 
 // PreviewFullHistory captures the entire tmux pane output including full scrollback history
 func (i *Instance) PreviewFullHistory() (string, error) {
-	if !i.started || i.Status == Paused {
+	if !i.started || i.Status == Paused || i.tmuxSession == nil {
 		return "", nil
 	}
 	return i.tmuxSession.CapturePaneContentWithOptions("-", "-")
@@ -599,7 +625,7 @@ func (i *Instance) SetTmuxSession(session *tmux.TmuxSession) {
 
 // SendKeys sends keys to the tmux session
 func (i *Instance) SendKeys(keys string) error {
-	if !i.started || i.Status == Paused {
+	if !i.started || i.Status == Paused || i.tmuxSession == nil {
 		return fmt.Errorf("cannot send keys to instance that has not been started or is paused")
 	}
 	return i.tmuxSession.SendKeys(keys)
