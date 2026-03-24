@@ -224,6 +224,48 @@ func TestSetupFromRefWithOriginBranch(t *testing.T) {
 	}
 }
 
+func TestSetupFromRefCurrentBranch(t *testing.T) {
+	// Regression test: using setupFromRef with the currently checked-out branch
+	// should succeed (unlike setupFromExistingBranch which would fail with
+	// "already checked out").
+	repo := createTestRepo(t)
+	currentBranch := gitCmd(t, repo, "branch", "--show-current")
+	currentSHA := headSHA(t, repo)
+
+	wtPath := worktreeDir(t, "wt-current")
+
+	gw := &GitWorktree{
+		repoPath:     repo,
+		worktreePath: wtPath,
+		sessionName:  "test-current",
+		branchName:   "cs-test-current",
+		baseRef:      currentBranch, // use the currently checked-out branch as ref
+	}
+
+	if err := gw.Setup(); err != nil {
+		t.Fatalf("Setup() with current branch as ref should succeed, got: %v", err)
+	}
+	defer gw.Cleanup()
+
+	// Worktree should be on the NEW branch, not the current branch
+	wtBranch := gitCmd(t, wtPath, "branch", "--show-current")
+	if wtBranch != "cs-test-current" {
+		t.Errorf("worktree branch = %q, want 'cs-test-current'", wtBranch)
+	}
+
+	// Worktree HEAD should match the current branch's commit
+	wtHead := headSHA(t, wtPath)
+	if wtHead != currentSHA {
+		t.Errorf("worktree HEAD = %q, want %q (current branch tip)", wtHead, currentSHA)
+	}
+
+	// The original branch should still be checked out in the main repo
+	repoBranch := gitCmd(t, repo, "branch", "--show-current")
+	if repoBranch != currentBranch {
+		t.Errorf("repo branch changed to %q, should still be %q", repoBranch, currentBranch)
+	}
+}
+
 func TestCleanupRemovesWorktreeAndBranch(t *testing.T) {
 	repo := createTestRepo(t)
 	wtPath := worktreeDir(t, "wt-cleanup")

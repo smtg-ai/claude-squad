@@ -241,12 +241,15 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 				i.Branch = branch
 			}
 		} else if i.selectedBranch != "" {
-			gitWorktree, err := git.NewGitWorktreeFromBranch(i.Path, i.selectedBranch, i.Title)
+			// Create a new branch based on the selected branch. We use the selected
+			// branch as a ref rather than checking it out directly, because the
+			// selected branch may already be checked out in the main worktree.
+			gitWorktree, branchName, err := git.NewGitWorktreeFromRef(i.Path, i.selectedBranch, i.Title)
 			if err != nil {
-				return fmt.Errorf("failed to create git worktree from branch: %w", err)
+				return fmt.Errorf("failed to create git worktree from branch %s: %w", i.selectedBranch, err)
 			}
 			i.gitWorktree = gitWorktree
-			i.Branch = i.selectedBranch
+			i.Branch = branchName
 		} else {
 			// Default: fetch origin and create worktree from remote default branch
 			git.FetchBranches(i.Path)

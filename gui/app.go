@@ -347,6 +347,12 @@ func showNewSessionDialog(w fyne.Window, cfg *config.Config, defaultProgram stri
 			go func() {
 				if err := inst.Start(true); err != nil {
 					log.ErrorLog.Printf("failed to start instance: %v", err)
+					state.removeInstance(inst.Title)
+					fyne.Do(func() {
+						sb.Update(state.getInstances())
+						dialogs.ShowError("Failed to Start Session",
+							fmt.Sprintf("Could not start session '%s': %v", opts.Name, err), w)
+					})
 					return
 				}
 				if opts.Prompt != "" {

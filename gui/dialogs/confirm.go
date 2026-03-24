@@ -1,6 +1,8 @@
 package dialogs
 
 import (
+	"fmt"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/dialog"
 )
@@ -12,4 +14,9 @@ func ShowConfirm(title, message string, onConfirm func(), parent fyne.Window) {
 			onConfirm()
 		}
 	}, parent)
+}
+
+// ShowError shows an error dialog with the given title and message.
+func ShowError(title, message string, parent fyne.Window) {
+	dialog.ShowError(fmt.Errorf("%s: %s", title, message), parent)
 }
