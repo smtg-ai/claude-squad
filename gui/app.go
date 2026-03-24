@@ -7,6 +7,7 @@ import (
 	"claude-squad/gui/sidebar"
 	"claude-squad/log"
 	"claude-squad/session"
+	"claude-squad/session/git"
 	"fmt"
 	"sync"
 	"time"
@@ -83,21 +84,37 @@ func Run(program string, autoYes bool) error {
 		// Focus callback
 	}, func(target panes.ShortcutAdder) {
 		RegisterTerminalShortcuts(target, hotkeyDefs)
-	})
+	}, w.Canvas())
 
 	// Sidebar
 	sidebarWidget = sidebar.NewSidebar(
 		func(inst *session.Instance) {
 			// On select — open in focused pane
-			openSessionInFocusedPane(paneManager, inst)
+			openSessionInFocusedPane(paneManager, inst, sidebarWidget, state)
 		},
 		func(inst *session.Instance) {
 			// On activate (double-click) — also open in focused pane
-			openSessionInFocusedPane(paneManager, inst)
+			openSessionInFocusedPane(paneManager, inst, sidebarWidget, state)
 		},
 		func() {
 			// On new
 			showNewSessionDialog(w, appConfig, program, state, sidebarWidget, paneManager, autoYes)
+		},
+		w.Canvas(),
+		&sidebar.ContextActions{
+			OnOpen: func(inst *session.Instance) {
+				openSessionInFocusedPane(paneManager, inst, sidebarWidget, state)
+			},
+			OnPause: func(inst *session.Instance) {
+				togglePauseResume(inst, state, sidebarWidget)
+			},
+			OnDelete: func(inst *session.Instance) {
+				dialogs.ShowConfirm("Delete Session",
+					fmt.Sprintf("Delete session '%s'? This will remove the tmux session, worktree, and branch.", inst.Title),
+					func() {
+						killSession(inst, state, sidebarWidget, paneManager)
+					}, w)
+			},
 		},
 	)
 
@@ -136,7 +153,7 @@ func Run(program string, autoYes bool) error {
 		OpenInPane: func() {
 			inst := sidebarWidget.SelectedInstance()
 			if inst != nil {
-				openSessionInFocusedPane(paneManager, inst)
+				openSessionInFocusedPane(paneManager, inst, sidebarWidget, state)
 			}
 		},
 		KillSession: func() {
@@ -200,6 +217,25 @@ func Run(program string, autoYes bool) error {
 				if !inst.Started() || inst.Paused() {
 					continue
 				}
+				// Auto-pause sessions whose tmux session has died (e.g. ctrl-c ctrl-c)
+				if !inst.TmuxAlive() {
+					log.InfoLog.Printf("tmux session for '%s' is gone, auto-pausing", inst.Title)
+					// Close any pane showing this session before pausing
+					fyne.Do(func() {
+						for _, p := range paneManager.AllPanes() {
+							if p.Instance() != nil && p.Instance().Title == inst.Title {
+								p.CloseSession()
+							}
+						}
+					})
+					if err := inst.Pause(); err != nil {
+						log.ErrorLog.Printf("failed to auto-pause '%s': %v, forcing paused state", inst.Title, err)
+						// Worktree may already be gone (e.g. from a previous app run).
+						// Force status to Paused so we don't retry every poll cycle.
+						inst.SetStatus(session.Paused)
+					}
+					continue
+				}
 				inst.CheckAndHandleTrustPrompt()
 				updated, prompt := inst.HasUpdated()
 				if updated {
@@ -236,11 +272,31 @@ func Run(program string, autoYes bool) error {
 	return nil
 }
 
-func openSessionInFocusedPane(pm *panes.Manager, inst *session.Instance) {
+func openSessionInFocusedPane(pm *panes.Manager, inst *session.Instance, sb *sidebar.Sidebar, state *guiState) {
 	pane := pm.FocusedPane()
 	if pane == nil || inst == nil {
 		return
 	}
+
+	// Resume paused sessions in the background, then connect once ready
+	if inst.Paused() {
+		go func() {
+			if err := inst.Resume(); err != nil {
+				log.ErrorLog.Printf("failed to resume session '%s': %v", inst.Title, err)
+				return
+			}
+			fyne.Do(func() {
+				sb.Update(state.getInstances())
+				connectPaneToSession(pm, pane, inst)
+			})
+		}()
+		return
+	}
+
+	connectPaneToSession(pm, pane, inst)
+}
+
+func connectPaneToSession(pm *panes.Manager, pane *panes.Pane, inst *session.Instance) {
 	// Disconnect from any other pane showing this session
 	for _, p := range pm.AllPanes() {
 		if p.Instance() != nil && p.Instance().Title == inst.Title && p != pane {
@@ -253,46 +309,60 @@ func openSessionInFocusedPane(pm *panes.Manager, inst *session.Instance) {
 }
 
 func showNewSessionDialog(w fyne.Window, cfg *config.Config, defaultProgram string, state *guiState, sb *sidebar.Sidebar, pm *panes.Manager, autoYes bool) {
-	dialogs.ShowNewSession(cfg.GetProfiles(), w, func(opts dialogs.SessionOptions) {
-		if opts.Name == "" {
-			return
-		}
-		prog := opts.Program
-		if prog == "" {
-			prog = defaultProgram
-		}
-		inst, err := session.NewInstance(session.InstanceOptions{
-			Title:   opts.Name,
-			Path:    ".",
-			Program: prog,
-		})
-		if err != nil {
-			log.ErrorLog.Printf("failed to create instance: %v", err)
-			return
-		}
-		inst.AutoYes = autoYes
-		inst.Prompt = opts.Prompt
-		inst.SetStatus(session.Loading)
-		state.addInstance(inst)
-		sb.Update(state.getInstances())
+	defaultBranch := git.GetDefaultBranch(".")
+	branches, _ := git.SearchBranches(".", "")
 
-		go func() {
-			if err := inst.Start(true); err != nil {
-				log.ErrorLog.Printf("failed to start instance: %v", err)
+	dialogs.ShowNewSession(cfg.GetProfiles(), defaultBranch, branches, w,
+		func(filter string) []string {
+			results, _ := git.SearchBranches(".", filter)
+			return results
+		},
+		func(opts dialogs.SessionOptions) {
+			if opts.Name == "" {
 				return
 			}
-			if opts.Prompt != "" {
-				if err := inst.SendPrompt(opts.Prompt); err != nil {
-					log.ErrorLog.Printf("failed to send prompt: %v", err)
-				}
-				inst.Prompt = ""
+			prog := opts.Program
+			if prog == "" {
+				prog = defaultProgram
 			}
+			inst, err := session.NewInstance(session.InstanceOptions{
+				Title:   opts.Name,
+				Path:    ".",
+				Program: prog,
+				InPlace: opts.InPlace,
+			})
+			if err != nil {
+				log.ErrorLog.Printf("failed to create instance: %v", err)
+				return
+			}
+			inst.AutoYes = autoYes
+			inst.Prompt = opts.Prompt
+			if opts.Branch != "" {
+				inst.SetSelectedBranch(opts.Branch)
+			}
+			inst.SetStatus(session.Loading)
+			state.addInstance(inst)
 			sb.Update(state.getInstances())
-			if err := state.storage.SaveInstances(state.getInstances()); err != nil {
-				log.ErrorLog.Printf("failed to save instances: %v", err)
-			}
-		}()
-	})
+
+			go func() {
+				if err := inst.Start(true); err != nil {
+					log.ErrorLog.Printf("failed to start instance: %v", err)
+					return
+				}
+				if opts.Prompt != "" {
+					if err := inst.SendPrompt(opts.Prompt); err != nil {
+						log.ErrorLog.Printf("failed to send prompt: %v", err)
+					}
+					inst.Prompt = ""
+				}
+				fyne.Do(func() {
+					sb.Update(state.getInstances())
+				})
+				if err := state.storage.SaveInstances(state.getInstances()); err != nil {
+					log.ErrorLog.Printf("failed to save instances: %v", err)
+				}
+			}()
+		})
 }
 
 func killSession(inst *session.Instance, state *guiState, sb *sidebar.Sidebar, pm *panes.Manager) {
@@ -304,7 +374,7 @@ func killSession(inst *session.Instance, state *guiState, sb *sidebar.Sidebar, p
 	}
 
 	if err := inst.Kill(); err != nil {
-		log.ErrorLog.Printf("failed to kill instance: %v", err)
+		log.WarningLog.Printf("errors during kill of '%s' (proceeding with removal): %v", inst.Title, err)
 	}
 
 	if err := state.storage.DeleteInstance(inst.Title); err != nil {
@@ -316,9 +386,17 @@ func killSession(inst *session.Instance, state *guiState, sb *sidebar.Sidebar, p
 }
 
 func pushSession(inst *session.Instance) {
+	if inst.IsInPlace() {
+		log.WarningLog.Printf("cannot push in-place session '%s'", inst.Title)
+		return
+	}
 	worktree, err := inst.GetGitWorktree()
 	if err != nil {
 		log.ErrorLog.Printf("failed to get worktree: %v", err)
+		return
+	}
+	if worktree == nil {
+		log.ErrorLog.Printf("no worktree for session '%s'", inst.Title)
 		return
 	}
 	commitMsg := fmt.Sprintf("[claudesquad] update from '%s' on %s", inst.Title, time.Now().Format(time.RFC822))
