@@ -44,6 +44,10 @@ type Config struct {
 	BranchPrefix string `json:"branch_prefix"`
 	// Profiles is a list of named program profiles.
 	Profiles []Profile `json:"profiles,omitempty"`
+	// WorktreeSetup is a shell command run in the new worktree after it is created.
+	// Use this to install dependencies, copy env files, or run any other setup.
+	// Example: "workz sync --isolated"  or  "npm install && cp ../.env .env"
+	WorktreeSetup string `json:"worktree_setup,omitempty"`
 }
 
 // GetProgram returns the program to run. If Profiles is non-empty and
