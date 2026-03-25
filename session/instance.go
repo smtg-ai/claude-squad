@@ -4,6 +4,7 @@ import (
 	"claude-squad/log"
 	"claude-squad/session/git"
 	"claude-squad/session/tmux"
+	"os/exec"
 	"path/filepath"
 
 	"fmt"
@@ -51,6 +52,8 @@ type Instance struct {
 	AutoYes bool
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
+	// SetupHook is an optional shell command run inside the worktree after it is created.
+	SetupHook string
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
@@ -157,6 +160,9 @@ type InstanceOptions struct {
 	AutoYes bool
 	// Branch is an existing branch name to start the session on (empty = new branch from HEAD)
 	Branch string
+	// SetupHook is an optional shell command run inside the new worktree after it is created.
+	// Runs via $SHELL -c "...". An error aborts the session creation.
+	SetupHook string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -179,7 +185,28 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		UpdatedAt:      t,
 		AutoYes:        false,
 		selectedBranch: opts.Branch,
+		SetupHook:      opts.SetupHook,
 	}, nil
+}
+
+// runSetupHook executes i.SetupHook in the worktree directory via the user's shell.
+func (i *Instance) runSetupHook() error {
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/sh"
+	}
+
+	worktreePath := i.gitWorktree.GetWorktreePath()
+	log.InfoLog.Printf("running worktree setup hook in %s: %s", worktreePath, i.SetupHook)
+
+	cmd := exec.Command(shell, "-c", i.SetupHook)
+	cmd.Dir = worktreePath
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("command %q exited with error: %w\noutput:\n%s", i.SetupHook, err, output)
+	}
+	log.InfoLog.Printf("setup hook output:\n%s", output)
+	return nil
 }
 
 func (i *Instance) RepoName() (string, error) {
@@ -255,6 +282,14 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		if err := i.gitWorktree.Setup(); err != nil {
 			setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
 			return setupErr
+		}
+
+		// Run optional setup hook inside the new worktree
+		if i.SetupHook != "" {
+			if err := i.runSetupHook(); err != nil {
+				setupErr = fmt.Errorf("worktree setup hook failed: %w", err)
+				return setupErr
+			}
 		}
 
 		// Create new session
