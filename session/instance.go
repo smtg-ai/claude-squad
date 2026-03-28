@@ -330,7 +330,6 @@ func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
 	return i.tmuxSession.HasUpdated()
 }
 
-// TapEnter sends an enter key press to the tmux session if AutoYes is enabled.
 // CheckAndHandleTrustPrompt checks for and dismisses the trust prompt for supported programs.
 func (i *Instance) CheckAndHandleTrustPrompt() bool {
 	if !i.started || i.tmuxSession == nil {
@@ -345,6 +344,7 @@ func (i *Instance) CheckAndHandleTrustPrompt() bool {
 	return i.tmuxSession.CheckAndHandleTrustPrompt()
 }
 
+// TapEnter sends an enter key press to the tmux session if AutoYes is enabled.
 func (i *Instance) TapEnter() {
 	if !i.started || !i.AutoYes {
 		return
@@ -548,6 +548,21 @@ func (i *Instance) UpdateDiffStats() error {
 
 	i.diffStats = stats
 	return nil
+}
+
+// ComputeDiff runs the expensive git diff I/O and returns the result without
+// mutating instance state. Safe to call from a background goroutine.
+func (i *Instance) ComputeDiff() *git.DiffStats {
+	if !i.started || i.Status == Paused {
+		return nil
+	}
+	return i.gitWorktree.Diff()
+}
+
+// SetDiffStats sets the diff statistics on the instance. Should be called from
+// the main event loop to avoid data races with View.
+func (i *Instance) SetDiffStats(stats *git.DiffStats) {
+	i.diffStats = stats
 }
 
 // GetDiffStats returns the current git diff statistics
