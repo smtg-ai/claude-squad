@@ -114,6 +114,15 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestGetConfigDir(t *testing.T) {
 	t.Run("returns valid config directory", func(t *testing.T) {
+		// Ensure env var is not set for this test
+		originalEnv := os.Getenv(EnvConfigDir)
+		os.Unsetenv(EnvConfigDir)
+		defer func() {
+			if originalEnv != "" {
+				os.Setenv(EnvConfigDir, originalEnv)
+			}
+		}()
+
 		configDir, err := GetConfigDir()
 
 		assert.NoError(t, err)
@@ -121,6 +130,49 @@ func TestGetConfigDir(t *testing.T) {
 		assert.True(t, strings.HasSuffix(configDir, ".claude-squad"))
 
 		// Verify it's an absolute path
+		assert.True(t, filepath.IsAbs(configDir))
+	})
+
+	t.Run("uses CLAUDE_SQUAD_HOME when set", func(t *testing.T) {
+		tempDir := t.TempDir()
+		customDir := filepath.Join(tempDir, "custom-claude-squad")
+
+		originalEnv := os.Getenv(EnvConfigDir)
+		os.Setenv(EnvConfigDir, customDir)
+		defer func() {
+			if originalEnv != "" {
+				os.Setenv(EnvConfigDir, originalEnv)
+			} else {
+				os.Unsetenv(EnvConfigDir)
+			}
+		}()
+
+		configDir, err := GetConfigDir()
+
+		assert.NoError(t, err)
+		assert.Equal(t, customDir, configDir)
+	})
+
+	t.Run("expands tilde in CLAUDE_SQUAD_HOME", func(t *testing.T) {
+		originalEnv := os.Getenv(EnvConfigDir)
+		os.Setenv(EnvConfigDir, "~/.custom-claude-squad")
+		defer func() {
+			if originalEnv != "" {
+				os.Setenv(EnvConfigDir, originalEnv)
+			} else {
+				os.Unsetenv(EnvConfigDir)
+			}
+		}()
+
+		configDir, err := GetConfigDir()
+
+		assert.NoError(t, err)
+		assert.NotEmpty(t, configDir)
+		// Should not contain tilde
+		assert.False(t, strings.HasPrefix(configDir, "~"))
+		// Should end with our custom directory
+		assert.True(t, strings.HasSuffix(configDir, ".custom-claude-squad"))
+		// Should be absolute path
 		assert.True(t, filepath.IsAbs(configDir))
 	})
 }
