@@ -24,9 +24,9 @@ import (
 const GlobalInstanceLimit = 10
 
 // Run is the main entrypoint into the application.
-func Run(ctx context.Context, program string, autoYes bool) error {
+func Run(ctx context.Context, program string, autoYes bool, setupHook string) error {
 	p := tea.NewProgram(
-		newHome(ctx, program, autoYes),
+		newHome(ctx, program, autoYes, setupHook),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(), // Mouse scroll
 	)
@@ -53,8 +53,9 @@ type home struct {
 
 	// -- Storage and Configuration --
 
-	program string
-	autoYes bool
+	program   string
+	autoYes   bool
+	setupHook string
 
 	// storage is the interface for saving/loading data to/from the app's state
 	storage *session.Storage
@@ -103,7 +104,7 @@ type home struct {
 	confirmationOverlay *overlay.ConfirmationOverlay
 }
 
-func newHome(ctx context.Context, program string, autoYes bool) *home {
+func newHome(ctx context.Context, program string, autoYes bool, setupHook string) *home {
 	// Load application config
 	appConfig := config.LoadConfig()
 
@@ -127,6 +128,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		appConfig:    appConfig,
 		program:      program,
 		autoYes:      autoYes,
+		setupHook:    setupHook,
 		state:        stateDefault,
 		appState:     appState,
 	}
@@ -619,9 +621,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
+			Title:     "",
+			Path:      ".",
+			Program:   m.program,
+			SetupHook: m.setupHook,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -640,9 +643,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
+			Title:     "",
+			Path:      ".",
+			Program:   m.program,
+			SetupHook: m.setupHook,
 		})
 		if err != nil {
 			return m, m.handleError(err)

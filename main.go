@@ -18,11 +18,12 @@ import (
 )
 
 var (
-	version     = "1.0.17"
-	programFlag string
-	autoYesFlag bool
-	daemonFlag  bool
-	rootCmd     = &cobra.Command{
+	version       = "1.0.17"
+	programFlag   string
+	autoYesFlag   bool
+	daemonFlag    bool
+	setupHookFlag string
+	rootCmd       = &cobra.Command{
 		Use:   "claude-squad",
 		Short: "Claude Squad - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -59,6 +60,11 @@ var (
 			if autoYesFlag {
 				autoYes = true
 			}
+			// SetupHook: CLI flag overrides config
+			setupHook := cfg.WorktreeSetup
+			if setupHookFlag != "" {
+				setupHook = setupHookFlag
+			}
 			if autoYes {
 				defer func() {
 					if err := daemon.LaunchDaemon(); err != nil {
@@ -71,7 +77,7 @@ var (
 				log.ErrorLog.Printf("failed to stop daemon: %v", err)
 			}
 
-			return app.Run(ctx, program, autoYes)
+			return app.Run(ctx, program, autoYes, setupHook)
 		},
 	}
 
@@ -150,6 +156,9 @@ func init() {
 		"[experimental] If enabled, all instances will automatically accept prompts")
 	rootCmd.Flags().BoolVar(&daemonFlag, "daemon", false, "Run a program that loads all sessions"+
 		" and runs autoyes mode on them.")
+	rootCmd.Flags().StringVar(&setupHookFlag, "setup", "",
+		"Shell command to run inside each new worktree after creation (overrides worktree_setup in config). "+
+			"Example: --setup \"workz sync --isolated\"")
 
 	// Hide the daemonFlag as it's only for internal use
 	err := rootCmd.Flags().MarkHidden("daemon")
