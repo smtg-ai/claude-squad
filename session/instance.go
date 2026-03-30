@@ -570,6 +570,14 @@ func (i *Instance) GetDiffStats() *git.DiffStats {
 	return i.diffStats
 }
 
+// WaitForCliReady waits for the CLI in the tmux session to be ready for input.
+func (i *Instance) WaitForCliReady(timeout time.Duration) bool {
+	if !i.started || i.tmuxSession == nil {
+		return false
+	}
+	return i.tmuxSession.WaitForCliReady(timeout)
+}
+
 // SendPrompt sends a prompt to the tmux session
 func (i *Instance) SendPrompt(prompt string) error {
 	if !i.started {
