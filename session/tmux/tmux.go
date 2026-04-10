@@ -5,7 +5,7 @@ import (
 	"claude-squad/cmd"
 	"claude-squad/log"
 	"context"
-	"crypto/sha256"
+
 	"errors"
 	"fmt"
 	"io"
@@ -191,20 +191,11 @@ func (t *TmuxSession) Restore() error {
 }
 
 type statusMonitor struct {
-	// Store hashes to save memory.
-	prevOutputHash []byte
+	prevOutput []byte
 }
 
 func newStatusMonitor() *statusMonitor {
 	return &statusMonitor{}
-}
-
-// hash hashes the string.
-func (m *statusMonitor) hash(s string) []byte {
-	h := sha256.New()
-	// TODO: this allocation sucks since the string is probably large. Ideally, we hash the string directly.
-	h.Write([]byte(s))
-	return h.Sum(nil)
 }
 
 // TapEnter sends an enter keystroke to the tmux pane.
@@ -248,8 +239,9 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 		hasPrompt = strings.Contains(content, "Yes, allow once")
 	}
 
-	if !bytes.Equal(t.monitor.hash(content), t.monitor.prevOutputHash) {
-		t.monitor.prevOutputHash = t.monitor.hash(content)
+	contentBytes := []byte(content)
+	if !bytes.Equal(contentBytes, t.monitor.prevOutput) {
+		t.monitor.prevOutput = contentBytes
 		return true, hasPrompt
 	}
 	return false, hasPrompt

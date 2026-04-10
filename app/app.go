@@ -101,6 +101,10 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+
+	// lastSelectedTitle tracks the title of the last selected instance so we
+	// know when the selection changed and must force a preview refresh.
+	lastSelectedTitle string
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -186,7 +190,7 @@ func (m *home) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
 		func() tea.Msg {
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 			return previewTickMsg{}
 		},
 		tickUpdateMetadataCmd(m.snapshotActiveInstances()),
@@ -202,7 +206,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(
 			cmd,
 			func() tea.Msg {
-				time.Sleep(100 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 				return previewTickMsg{}
 			},
 		)
@@ -239,19 +243,24 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, r := range msg.results {
 			if r.updated {
 				r.instance.SetStatus(session.Running)
+				r.instance.MarkPreviewDirty()
 			} else if r.hasPrompt {
 				r.instance.TapEnter()
 			} else {
 				r.instance.SetStatus(session.Ready)
+				r.instance.MarkPreviewDirty()
 			}
-			if r.diffStats != nil && r.diffStats.Error != nil {
-				if !strings.Contains(r.diffStats.Error.Error(), "base commit SHA not set") {
-					log.WarningLog.Printf("could not update diff stats: %v", r.diffStats.Error)
+			if r.diffStats != nil {
+				if r.diffStats.Error != nil {
+					if !strings.Contains(r.diffStats.Error.Error(), "base commit SHA not set") {
+						log.WarningLog.Printf("could not update diff stats: %v", r.diffStats.Error)
+					}
+					r.instance.SetDiffStats(nil)
+				} else {
+					r.instance.SetDiffStats(r.diffStats)
 				}
-				r.instance.SetDiffStats(nil)
-			} else {
-				r.instance.SetDiffStats(r.diffStats)
 			}
+			// If r.diffStats is nil (content didn't change), keep existing diff stats
 		}
 		return m, tickUpdateMetadataCmd(m.snapshotActiveInstances())
 	case tea.MouseMsg:
@@ -805,9 +814,23 @@ func (m *home) instanceChanged() tea.Cmd {
 	// Update menu with current instance
 	m.menu.SetInstance(selected)
 
-	// If there's no selected instance, we don't need to update the preview.
-	if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
-		return m.handleError(err)
+	// Determine current title for selection-change detection.
+	currentTitle := ""
+	if selected != nil {
+		currentTitle = selected.Title
+	}
+	selectionChanged := currentTitle != m.lastSelectedTitle
+	m.lastSelectedTitle = currentTitle
+
+	// Only capture preview when the instance is dirty or the selection changed.
+	// This avoids redundant tmux capture-pane subprocess calls on every tick.
+	if selected == nil || selected.IsPreviewDirty() || selectionChanged {
+		if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
+			return m.handleError(err)
+		}
+		if selected != nil {
+			selected.ClearPreviewDirty()
+		}
 	}
 	if err := m.tabbedWindow.UpdateTerminal(selected); err != nil {
 		return m.handleError(err)
@@ -944,7 +967,9 @@ func tickUpdateMetadataCmd(active []*session.Instance) tea.Cmd {
 				r := &results[i]
 				r.instance = instance
 				r.updated, r.hasPrompt = instance.HasUpdated()
-				r.diffStats = instance.ComputeDiff()
+				if r.updated {
+					r.diffStats = instance.ComputeDiff()
+				}
 			}(idx, inst)
 		}
 		wg.Wait()
