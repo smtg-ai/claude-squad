@@ -101,6 +101,10 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+
+	// lastSelectedTitle tracks the title of the last selected instance so we
+	// know when the selection changed and must force a preview refresh.
+	lastSelectedTitle string
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -239,10 +243,12 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, r := range msg.results {
 			if r.updated {
 				r.instance.SetStatus(session.Running)
+				r.instance.MarkPreviewDirty()
 			} else if r.hasPrompt {
 				r.instance.TapEnter()
 			} else {
 				r.instance.SetStatus(session.Ready)
+				r.instance.MarkPreviewDirty()
 			}
 			if r.diffStats != nil {
 				if r.diffStats.Error != nil {
@@ -808,9 +814,23 @@ func (m *home) instanceChanged() tea.Cmd {
 	// Update menu with current instance
 	m.menu.SetInstance(selected)
 
-	// If there's no selected instance, we don't need to update the preview.
-	if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
-		return m.handleError(err)
+	// Determine current title for selection-change detection.
+	currentTitle := ""
+	if selected != nil {
+		currentTitle = selected.Title
+	}
+	selectionChanged := currentTitle != m.lastSelectedTitle
+	m.lastSelectedTitle = currentTitle
+
+	// Only capture preview when the instance is dirty or the selection changed.
+	// This avoids redundant tmux capture-pane subprocess calls on every tick.
+	if selected == nil || selected.IsPreviewDirty() || selectionChanged {
+		if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
+			return m.handleError(err)
+		}
+		if selected != nil {
+			selected.ClearPreviewDirty()
+		}
 	}
 	if err := m.tabbedWindow.UpdateTerminal(selected); err != nil {
 		return m.handleError(err)

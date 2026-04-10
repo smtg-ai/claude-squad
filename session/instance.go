@@ -58,6 +58,10 @@ type Instance struct {
 	// selectedBranch is the existing branch to start on (empty = new branch from HEAD)
 	selectedBranch string
 
+	// previewDirty indicates that the instance content has changed and
+	// the preview pane needs to be refreshed on the next tick.
+	previewDirty bool
+
 	// The below fields are initialized upon calling Start().
 
 	started bool
@@ -192,6 +196,15 @@ func (i *Instance) RepoName() (string, error) {
 func (i *Instance) SetStatus(status Status) {
 	i.Status = status
 }
+
+// MarkPreviewDirty marks the instance as needing a preview refresh.
+func (i *Instance) MarkPreviewDirty() { i.previewDirty = true }
+
+// ClearPreviewDirty clears the dirty flag after preview has been captured.
+func (i *Instance) ClearPreviewDirty() { i.previewDirty = false }
+
+// IsPreviewDirty returns whether the instance needs a preview refresh.
+func (i *Instance) IsPreviewDirty() bool { return i.previewDirty }
 
 // SetSelectedBranch sets the branch to use when starting the instance.
 func (i *Instance) SetSelectedBranch(branch string) {
