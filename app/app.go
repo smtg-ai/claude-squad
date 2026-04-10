@@ -244,14 +244,17 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				r.instance.SetStatus(session.Ready)
 			}
-			if r.diffStats != nil && r.diffStats.Error != nil {
-				if !strings.Contains(r.diffStats.Error.Error(), "base commit SHA not set") {
-					log.WarningLog.Printf("could not update diff stats: %v", r.diffStats.Error)
+			if r.diffStats != nil {
+				if r.diffStats.Error != nil {
+					if !strings.Contains(r.diffStats.Error.Error(), "base commit SHA not set") {
+						log.WarningLog.Printf("could not update diff stats: %v", r.diffStats.Error)
+					}
+					r.instance.SetDiffStats(nil)
+				} else {
+					r.instance.SetDiffStats(r.diffStats)
 				}
-				r.instance.SetDiffStats(nil)
-			} else {
-				r.instance.SetDiffStats(r.diffStats)
 			}
+			// If r.diffStats is nil (content didn't change), keep existing diff stats
 		}
 		return m, tickUpdateMetadataCmd(m.snapshotActiveInstances())
 	case tea.MouseMsg:
@@ -944,7 +947,9 @@ func tickUpdateMetadataCmd(active []*session.Instance) tea.Cmd {
 				r := &results[i]
 				r.instance = instance
 				r.updated, r.hasPrompt = instance.HasUpdated()
-				r.diffStats = instance.ComputeDiff()
+				if r.updated {
+					r.diffStats = instance.ComputeDiff()
+				}
 			}(idx, inst)
 		}
 		wg.Wait()
