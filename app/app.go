@@ -101,6 +101,8 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// pendingConfirmAction is the tea.Cmd to run when a confirmation overlay is accepted.
+	pendingConfirmAction tea.Cmd
 
 	// lastSelectedTitle tracks the title of the last selected instance so we
 	// know when the selection changed and must force a preview refresh.
@@ -573,8 +575,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	if m.state == stateConfirm {
 		shouldClose := m.confirmationOverlay.HandleKeyPress(msg)
 		if shouldClose {
+			action := m.pendingConfirmAction
 			m.state = stateDefault
 			m.confirmationOverlay = nil
+			m.pendingConfirmAction = nil
+			if action != nil {
+				return m, action
+			}
 			return m, nil
 		}
 		return m, nil
@@ -1014,27 +1021,16 @@ func (m *home) cancelPromptOverlay() tea.Cmd {
 	)
 }
 
-// confirmAction shows a confirmation modal and stores the action to execute on confirm
+// confirmAction shows a confirmation modal and stores the action to execute on confirm.
+// The action tea.Cmd runs asynchronously when the user presses 'y', keeping the UI responsive.
 func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 	m.state = stateConfirm
+	m.pendingConfirmAction = action
 
 	// Create and show the confirmation overlay using ConfirmationOverlay
 	m.confirmationOverlay = overlay.NewConfirmationOverlay(message)
 	// Set a fixed width for consistent appearance
 	m.confirmationOverlay.SetWidth(50)
-
-	// Set callbacks for confirmation and cancellation
-	m.confirmationOverlay.OnConfirm = func() {
-		m.state = stateDefault
-		// Execute the action if it exists
-		if action != nil {
-			_ = action()
-		}
-	}
-
-	m.confirmationOverlay.OnCancel = func() {
-		m.state = stateDefault
-	}
 
 	return nil
 }
