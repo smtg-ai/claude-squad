@@ -145,6 +145,70 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 	return instance, nil
 }
 
+// RecoverInstance creates an Instance from saved data and starts a new tmux session
+// without requiring the old tmux session to be alive. For Claude programs, it appends
+// --resume to pick up the previous conversation.
+func RecoverInstance(data InstanceData) (*Instance, error) {
+	instance := &Instance{
+		Title:     data.Title,
+		Path:      data.Path,
+		Branch:    data.Branch,
+		Status:    data.Status,
+		Height:    data.Height,
+		Width:     data.Width,
+		CreatedAt: data.CreatedAt,
+		UpdatedAt: data.UpdatedAt,
+		Program:   data.Program,
+		gitWorktree: git.NewGitWorktreeFromStorage(
+			data.Worktree.RepoPath,
+			data.Worktree.WorktreePath,
+			data.Worktree.SessionName,
+			data.Worktree.BranchName,
+			data.Worktree.BaseCommitSHA,
+			data.Worktree.IsExistingBranch,
+		),
+		diffStats: &git.DiffStats{
+			Added:   data.DiffStats.Added,
+			Removed: data.DiffStats.Removed,
+			Content: data.DiffStats.Content,
+		},
+	}
+
+	// For Claude, append --resume to pick up the previous conversation
+	program := data.Program
+	if strings.HasSuffix(program, tmux.ProgramClaude) && !strings.Contains(program, "--resume") {
+		program = program + " --resume"
+	}
+	instance.tmuxSession = tmux.NewTmuxSession(instance.Title, program)
+
+	// Start a new tmux session in the existing worktree directory
+	worktreePath := data.Worktree.WorktreePath
+	if err := instance.tmuxSession.Start(worktreePath); err != nil {
+		return nil, fmt.Errorf("failed to start tmux session: %w", err)
+	}
+
+	instance.started = true
+	instance.SetStatus(Running)
+
+	return instance, nil
+}
+
+// IsRecoverable checks if an instance can be recovered: worktree exists but tmux is dead.
+func IsRecoverable(data InstanceData) bool {
+	// Check if worktree directory exists
+	if _, err := os.Stat(data.Worktree.WorktreePath); os.IsNotExist(err) {
+		return false
+	}
+
+	// Check if tmux session is dead
+	ts := tmux.NewTmuxSession(data.Title, data.Program)
+	if ts.DoesSessionExist() {
+		return false // tmux is alive, no recovery needed
+	}
+
+	return true
+}
+
 // Options for creating a new instance
 type InstanceOptions struct {
 	// Title is the title of the instance.
