@@ -133,6 +133,120 @@ var (
 		},
 	}
 
+	recoverCmd = &cobra.Command{
+		Use:   "recover",
+		Short: "Recover instances with dead tmux sessions",
+		Long: `Recover instances whose tmux sessions died (e.g. after a system restart)
+but whose git worktrees are still intact. For Claude programs, sessions are
+restarted with --resume to pick up the previous conversation.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log.Initialize(false)
+			defer log.Close()
+
+			state := config.LoadState()
+			storage, err := session.NewStorage(state)
+			if err != nil {
+				return fmt.Errorf("failed to initialize storage: %w", err)
+			}
+
+			instancesData, err := storage.LoadInstancesRaw()
+			if err != nil {
+				return fmt.Errorf("failed to load instances: %w", err)
+			}
+
+			if len(instancesData) == 0 {
+				fmt.Println("No instances found.")
+				return nil
+			}
+
+			// Find recoverable instances
+			var recoverable []session.InstanceData
+			var alive []session.InstanceData
+			var dead []session.InstanceData
+
+			for _, data := range instancesData {
+				if data.Status == session.Paused {
+					continue
+				}
+				if session.IsRecoverable(data) {
+					recoverable = append(recoverable, data)
+				} else {
+					ts := tmux.NewTmuxSession(data.Title, data.Program)
+					if ts.DoesSessionExist() {
+						alive = append(alive, data)
+					} else {
+						dead = append(dead, data)
+					}
+				}
+			}
+
+			if len(alive) > 0 {
+				fmt.Printf("Alive (%d):\n", len(alive))
+				for _, d := range alive {
+					fmt.Printf("  ✓ %s [%s]\n", d.Title, d.Branch)
+				}
+			}
+
+			if len(dead) > 0 {
+				fmt.Printf("Dead (worktree missing, cannot recover) (%d):\n", len(dead))
+				for _, d := range dead {
+					fmt.Printf("  ✗ %s [%s]\n", d.Title, d.Branch)
+				}
+			}
+
+			if len(recoverable) == 0 {
+				fmt.Println("\nNo recoverable instances found.")
+				return nil
+			}
+
+			fmt.Printf("\nRecoverable (%d):\n", len(recoverable))
+			for _, d := range recoverable {
+				fmt.Printf("  ↻ %s [%s] %s\n", d.Title, d.Branch, d.Worktree.WorktreePath)
+			}
+
+			// Recover all instances
+			fmt.Printf("\nRecovering %d instance(s)...\n", len(recoverable))
+
+			// First, load all instances that are still alive (including paused)
+			var allInstances []*session.Instance
+			for _, data := range instancesData {
+				isRecoverable := false
+				for _, r := range recoverable {
+					if r.Title == data.Title {
+						isRecoverable = true
+						break
+					}
+				}
+
+				if isRecoverable {
+					instance, err := session.RecoverInstance(data)
+					if err != nil {
+						fmt.Printf("  ✗ Failed to recover %s: %v\n", data.Title, err)
+						continue
+					}
+					allInstances = append(allInstances, instance)
+					fmt.Printf("  ✓ Recovered %s\n", data.Title)
+				} else {
+					// For alive/paused instances, load normally but handle errors gracefully
+					instance, err := session.FromInstanceData(data)
+					if err != nil {
+						fmt.Printf("  ⚠ Skipping %s (load error: %v)\n", data.Title, err)
+						continue
+					}
+					allInstances = append(allInstances, instance)
+				}
+			}
+
+			// Save updated state
+			if err := storage.SaveInstances(allInstances); err != nil {
+				return fmt.Errorf("failed to save instances: %w", err)
+			}
+
+			fmt.Println("\nRecovery complete. Run 'cs' to manage your instances.")
+			return nil
+		},
+	}
+
 	versionCmd = &cobra.Command{
 		Use:   "version",
 		Short: "Print the version number of claude-squad",
@@ -160,6 +274,7 @@ func init() {
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
+	rootCmd.AddCommand(recoverCmd)
 }
 
 func main() {

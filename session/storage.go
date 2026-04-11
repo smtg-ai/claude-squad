@@ -72,6 +72,19 @@ func (s *Storage) SaveInstances(instances []*Instance) error {
 	return s.state.SaveInstances(jsonData)
 }
 
+// LoadInstancesRaw loads instance data without starting them.
+// This is useful for inspecting instances before attempting to restore tmux sessions.
+func (s *Storage) LoadInstancesRaw() ([]InstanceData, error) {
+	jsonData := s.state.GetInstances()
+
+	var instancesData []InstanceData
+	if err := json.Unmarshal(jsonData, &instancesData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal instances: %w", err)
+	}
+
+	return instancesData, nil
+}
+
 // LoadInstances loads the list of instances from disk
 func (s *Storage) LoadInstances() ([]*Instance, error) {
 	jsonData := s.state.GetInstances()
