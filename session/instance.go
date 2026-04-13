@@ -670,7 +670,8 @@ func (i *Instance) SendPrompt(prompt string) error {
 }
 
 // WaitAndSendPrompt waits for the agent to be ready, then sends the prompt.
-// It polls the tmux pane content looking for signs the agent is accepting input.
+// It polls the tmux pane content, dismissing trust prompts along the way,
+// until the agent shows its actual input prompt.
 func (i *Instance) WaitAndSendPrompt(prompt string, timeout time.Duration) error {
 	if !i.started {
 		return fmt.Errorf("instance not started")
@@ -680,28 +681,24 @@ func (i *Instance) WaitAndSendPrompt(prompt string, timeout time.Duration) error
 	}
 
 	deadline := time.Now().Add(timeout)
-	pollInterval := 500 * time.Millisecond
+	pollInterval := 200 * time.Millisecond
 
 	for time.Now().Before(deadline) {
+		// Dismiss trust/MCP prompts first — these appear before the agent is ready
+		// and contain characters (like >) that could cause false positives.
+		if i.CheckAndHandleTrustPrompt() {
+			time.Sleep(pollInterval)
+			continue
+		}
+
 		content, err := i.tmuxSession.CapturePaneContent()
 		if err != nil {
 			time.Sleep(pollInterval)
 			continue
 		}
 
-		// Check if the agent is ready for input.
 		if isAgentReady(content, i.Program) {
-			// Handle trust prompts first if needed
-			i.CheckAndHandleTrustPrompt()
-			// Brief pause to let any trust prompt handling settle
-			time.Sleep(500 * time.Millisecond)
-
-			// Re-check after trust prompt handling
-			content, err = i.tmuxSession.CapturePaneContent()
-			if err == nil && isAgentReady(content, i.Program) {
-				return i.SendPrompt(prompt)
-			}
-			// If not ready after trust prompt, keep polling
+			return i.SendPrompt(prompt)
 		}
 
 		time.Sleep(pollInterval)
@@ -713,49 +710,23 @@ func (i *Instance) WaitAndSendPrompt(prompt string, timeout time.Duration) error
 
 // isAgentReady checks if the agent program is ready to accept user input
 // by examining the tmux pane content for known ready indicators.
+// It explicitly rejects trust/startup screens to avoid false positives.
 func isAgentReady(content string, program string) bool {
-	// Trim trailing whitespace/newlines
 	content = strings.TrimRight(content, " \t\n\r")
 	if content == "" {
 		return false
 	}
 
-	lines := strings.Split(content, "\n")
-	if len(lines) == 0 {
+	// Reject known startup/trust screens — these contain > characters
+	// but the agent isn't actually ready for user prompts yet.
+	if strings.Contains(content, "Do you trust the files in this folder?") ||
+		strings.Contains(content, "new MCP server") ||
+		strings.Contains(content, "Open documentation url for more info") {
 		return false
 	}
 
-	// Check the last few non-empty lines for ready indicators
-	lastLines := ""
-	count := 0
-	for i := len(lines) - 1; i >= 0 && count < 5; i-- {
-		line := strings.TrimSpace(lines[i])
-		if line != "" {
-			lastLines += line + "\n"
-			count++
-		}
-	}
-
-	// Agent-specific ready indicators
-	if strings.HasSuffix(program, "claude") {
-		if strings.Contains(lastLines, ">") || strings.Contains(lastLines, "What would you like to do?") {
-			return true
-		}
-	}
-
-	if strings.HasPrefix(program, "aider") {
-		if strings.Contains(lastLines, ">") {
-			return true
-		}
-	}
-
-	if strings.HasPrefix(program, "gemini") {
-		if strings.Contains(lastLines, ">") || strings.Contains(lastLines, "❯") {
-			return true
-		}
-	}
-
-	// Generic fallback: if we see common prompt characters at the end
+	// Find the last non-empty line — this is where the input prompt appears.
+	lines := strings.Split(content, "\n")
 	lastLine := ""
 	for i := len(lines) - 1; i >= 0; i-- {
 		l := strings.TrimSpace(lines[i])
@@ -764,12 +735,31 @@ func isAgentReady(content string, program string) bool {
 			break
 		}
 	}
-	if strings.HasSuffix(lastLine, ">") || strings.HasSuffix(lastLine, "❯") ||
-		strings.HasSuffix(lastLine, "$") || strings.HasSuffix(lastLine, "%") {
-		return true
+	if lastLine == "" {
+		return false
 	}
 
-	return false
+	// Agent-specific ready indicators on the last non-empty line
+	if strings.HasSuffix(program, "claude") {
+		// Claude's input prompt ends with > on a line by itself, or shows
+		// a message like "What would you like to do?"
+		return lastLine == ">" || strings.HasSuffix(lastLine, "> ") ||
+			strings.Contains(lastLine, "What would you like to do?")
+	}
+
+	if strings.HasPrefix(program, "aider") {
+		return lastLine == ">" || strings.HasSuffix(lastLine, "> ")
+	}
+
+	if strings.HasPrefix(program, "gemini") {
+		return lastLine == ">" || lastLine == "❯" ||
+			strings.HasSuffix(lastLine, "> ") || strings.HasSuffix(lastLine, "❯ ")
+	}
+
+	// Generic fallback: last line IS a prompt character (not just contains one)
+	return lastLine == ">" || lastLine == "❯" || lastLine == "$" || lastLine == "%" ||
+		strings.HasSuffix(lastLine, "> ") || strings.HasSuffix(lastLine, "❯ ") ||
+		strings.HasSuffix(lastLine, "$ ") || strings.HasSuffix(lastLine, "% ")
 }
 
 // PreviewFullHistory captures the entire tmux pane output including full scrollback history
