@@ -190,21 +190,26 @@ func (o *ImportOverlay) discoverSessions() {
 		}
 	case SourceClaudeCode:
 		for _, s := range allSessions {
-			if strings.Contains(strings.ToLower(s.Program), "claude") {
+			// Check pane title (e.g. "✳ Claude Code") and command name
+			titleLower := strings.ToLower(s.PaneTitle)
+			progLower := strings.ToLower(s.Program)
+			if strings.Contains(titleLower, "claude") || strings.Contains(progLower, "claude") {
 				o.sessions = append(o.sessions, SessionInfo{
 					Name:    s.Name,
 					WorkDir: s.WorkDir,
-					Program: s.Program,
+					Program: s.PaneTitle,
 				})
 			}
 		}
 	case SourceCodex:
 		for _, s := range allSessions {
-			if strings.Contains(strings.ToLower(s.Program), "codex") {
+			titleLower := strings.ToLower(s.PaneTitle)
+			progLower := strings.ToLower(s.Program)
+			if strings.Contains(titleLower, "codex") || strings.Contains(progLower, "codex") {
 				o.sessions = append(o.sessions, SessionInfo{
 					Name:    s.Name,
 					WorkDir: s.WorkDir,
-					Program: s.Program,
+					Program: s.PaneTitle,
 				})
 			}
 		}
