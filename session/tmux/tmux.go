@@ -525,6 +525,42 @@ func ListExternalSessions(cmdExec cmd.Executor) ([]string, error) {
 	return sessions, nil
 }
 
+// ExternalSessionInfo holds information about a non-CS tmux session.
+type ExternalSessionInfo struct {
+	Name    string
+	WorkDir string
+	Program string // the command running in the pane
+}
+
+// ListExternalSessionsWithInfo returns running tmux sessions not managed by this tool,
+// including their working directory and running command.
+func ListExternalSessionsWithInfo(cmdExec cmd.Executor) ([]ExternalSessionInfo, error) {
+	names, err := ListExternalSessions(cmdExec)
+	if err != nil {
+		return nil, err
+	}
+
+	var sessions []ExternalSessionInfo
+	for _, name := range names {
+		workDir, _ := GetSessionWorkDir(cmdExec, name)
+
+		// Get the running command in the pane
+		progCmd := exec.Command("tmux", "display-message", "-t", name, "-p", "#{pane_current_command}")
+		progOutput, err := cmdExec.Output(progCmd)
+		program := "unknown"
+		if err == nil {
+			program = strings.TrimSpace(string(progOutput))
+		}
+
+		sessions = append(sessions, ExternalSessionInfo{
+			Name:    name,
+			WorkDir: workDir,
+			Program: program,
+		})
+	}
+	return sessions, nil
+}
+
 // GetSessionWorkDir returns the current working directory of a tmux session's active pane.
 func GetSessionWorkDir(cmdExec cmd.Executor, sessionName string) (string, error) {
 	displayCmd := exec.Command("tmux", "display-message", "-t", sessionName, "-p", "#{pane_current_path}")
