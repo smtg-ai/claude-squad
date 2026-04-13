@@ -217,6 +217,14 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case hideErrMsg:
 		m.errBox.Clear()
+	case killDoneMsg:
+		if msg.err != nil {
+			return m, m.handleError(msg.err)
+		}
+		// Now safe to remove from list on the main thread
+		m.tabbedWindow.CleanupTerminalForInstance(msg.title)
+		m.list.Kill()
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 	case previewTickMsg:
 		cmd := m.instanceChanged()
 		return m, tea.Batch(
@@ -785,37 +793,34 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 
-		// Create the kill action as a tea.Cmd
+		// Create the kill action as a tea.Cmd.
+		// Only I/O-heavy work runs in the background; list removal
+		// happens on the main thread when killDoneMsg is received.
+		title := selected.Title
 		killAction := func() tea.Msg {
 			// Skip worktree checks for imported sessions
 			if !selected.Imported {
-				// Get worktree and check if branch is checked out
 				worktree, err := selected.GetGitWorktree()
 				if err != nil {
-					return err
+					return killDoneMsg{title: title, err: err}
 				}
 
 				checkedOut, err := worktree.IsBranchCheckedOut()
 				if err != nil {
-					return err
+					return killDoneMsg{title: title, err: err}
 				}
 
 				if checkedOut {
-					return fmt.Errorf("instance %s is currently checked out", selected.Title)
+					return killDoneMsg{title: title, err: fmt.Errorf("instance %s is currently checked out", title)}
 				}
 			}
 
-			// Clean up terminal session for this instance
-			m.tabbedWindow.CleanupTerminalForInstance(selected.Title)
-
-			// Delete from storage first
-			if err := m.storage.DeleteInstance(selected.Title); err != nil {
-				return err
+			// Delete from storage
+			if err := m.storage.DeleteInstance(title); err != nil {
+				return killDoneMsg{title: title, err: err}
 			}
 
-			// Then kill the instance
-			m.list.Kill()
-			return instanceChangedMsg{}
+			return killDoneMsg{title: title}
 		}
 
 		// Show confirmation modal
@@ -969,6 +974,12 @@ type hideErrMsg struct{}
 type previewTickMsg struct{}
 
 type instanceChangedMsg struct{}
+
+// killDoneMsg is sent when the background kill I/O completes.
+type killDoneMsg struct {
+	title string
+	err   error
+}
 
 type instanceStartedMsg struct {
 	instance        *session.Instance
