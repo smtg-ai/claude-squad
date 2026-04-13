@@ -936,9 +936,9 @@ func (m *home) instanceChanged() tea.Cmd {
 	selectionChanged := currentTitle != m.lastSelectedTitle
 	m.lastSelectedTitle = currentTitle
 
-	// Only capture preview when the instance is dirty or the selection changed.
-	// This avoids redundant tmux capture-pane subprocess calls on every tick.
-	if selected == nil || selected.IsPreviewDirty() || selectionChanged {
+	// Only capture preview when the instance is dirty, the selection changed,
+	// or the instance is loading (to show progress updates).
+	if selected == nil || selected.IsPreviewDirty() || selectionChanged || selected.Status == session.Loading {
 		if err := m.tabbedWindow.UpdatePreview(selected); err != nil {
 			return m.handleError(err)
 		}
