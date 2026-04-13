@@ -56,7 +56,11 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 		p.setFallbackState("No agents running yet. Spin up a new instance with 'n' to get started!")
 		return nil
 	case instance.Status == session.Loading:
-		p.setFallbackState("Setting up workspace...")
+		loadingMsg := instance.GetLoadingStatus()
+		if loadingMsg == "" {
+			loadingMsg = "Setting up workspace..."
+		}
+		p.setFallbackState(loadingMsg)
 		return nil
 	case instance.Status == session.Paused:
 		p.setFallbackState(lipgloss.JoinVertical(lipgloss.Center,

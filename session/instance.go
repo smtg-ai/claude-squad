@@ -65,6 +65,9 @@ type Instance struct {
 	// the preview pane needs to be refreshed on the next tick.
 	previewDirty bool
 
+	// loadingStatus holds a progress message shown in the preview pane during startup.
+	loadingStatus string
+
 	// The below fields are initialized upon calling Start().
 
 	started bool
@@ -255,6 +258,12 @@ func (i *Instance) ClearPreviewDirty() { i.previewDirty = false }
 // IsPreviewDirty returns whether the instance needs a preview refresh.
 func (i *Instance) IsPreviewDirty() bool { return i.previewDirty }
 
+// GetLoadingStatus returns the current loading progress message.
+func (i *Instance) GetLoadingStatus() string { return i.loadingStatus }
+
+// setLoadingStatus updates the loading progress message.
+func (i *Instance) setLoadingStatus(msg string) { i.loadingStatus = msg }
+
 // SetSelectedBranch sets the branch to use when starting the instance.
 func (i *Instance) SetSelectedBranch(branch string) {
 	i.selectedBranch = branch
@@ -276,8 +285,11 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	}
 	i.tmuxSession = tmuxSession
 
+	i.setLoadingStatus("Preparing workspace for '" + i.Title + "'...")
+
 	if firstTimeSetup {
 		if i.selectedBranch != "" {
+			i.setLoadingStatus("Checking out branch '" + i.selectedBranch + "'...")
 			gitWorktree, err := git.NewGitWorktreeFromBranch(i.Path, i.selectedBranch, i.Title)
 			if err != nil {
 				return fmt.Errorf("failed to create git worktree from branch: %w", err)
@@ -285,6 +297,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 			i.gitWorktree = gitWorktree
 			i.Branch = i.selectedBranch
 		} else {
+			i.setLoadingStatus("Creating a fresh branch...")
 			gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
 			if err != nil {
 				return fmt.Errorf("failed to create git worktree: %w", err)
@@ -298,6 +311,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	var setupErr error
 	defer func() {
 		if setupErr != nil {
+			i.setLoadingStatus("Something went wrong, cleaning up...")
 			if cleanupErr := i.Kill(); cleanupErr != nil {
 				setupErr = fmt.Errorf("%v (cleanup error: %v)", setupErr, cleanupErr)
 			}
@@ -307,6 +321,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	}()
 
 	if !firstTimeSetup {
+		i.setLoadingStatus("Reconnecting to existing session...")
 		// Reuse existing session
 		if err := tmuxSession.Restore(); err != nil {
 			setupErr = fmt.Errorf("failed to restore existing session: %w", err)
@@ -314,11 +329,13 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 	} else {
 		// Setup git worktree first
+		i.setLoadingStatus("Setting up git worktree (isolating your workspace)...")
 		if err := i.gitWorktree.Setup(); err != nil {
 			setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
 			return setupErr
 		}
 
+		i.setLoadingStatus("Spinning up tmux session (almost there!)...")
 		// Create new session
 		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
 			// Cleanup git worktree if tmux session creation fails
@@ -330,6 +347,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		}
 	}
 
+	i.setLoadingStatus("Ready! Handing off to your agent...")
 	i.SetStatus(Running)
 
 	return nil
