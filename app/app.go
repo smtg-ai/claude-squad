@@ -1,16 +1,19 @@
 package app
 
 import (
+	cmd2 "claude-squad/cmd"
 	"claude-squad/config"
 	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/session"
 	"claude-squad/session/git"
+	"claude-squad/session/tmux"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -46,6 +49,8 @@ const (
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
+	// stateImport is the state when the user is importing an external tmux session.
+	stateImport
 )
 
 type home struct {
@@ -364,7 +369,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateImport {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -511,6 +516,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				prompt := m.textInputOverlay.GetValue()
 				selectedBranch := m.textInputOverlay.GetSelectedBranch()
 				selectedProgram := m.textInputOverlay.GetSelectedProgram()
+				selectedDir := m.textInputOverlay.GetDirValue()
 
 				if !selected.Started() {
 					// Shift+N flow: instance not started yet — set branch, start, then send prompt
@@ -519,6 +525,16 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					}
 					if selectedProgram != "" {
 						selected.Program = selectedProgram
+					}
+					if selectedDir != "" {
+						absDir, err := filepath.Abs(selectedDir)
+						if err != nil {
+							return m, m.handleError(fmt.Errorf("invalid directory: %w", err))
+						}
+						if !git.IsGitRepo(absDir) {
+							return m, m.handleError(fmt.Errorf("'%s' is not a git repository", selectedDir))
+						}
+						selected.Path = absDir
 					}
 					selected.Prompt = prompt
 
@@ -568,6 +584,55 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.scheduleBranchSearch(filter, version)
 		}
 
+		return m, nil
+	}
+
+	// Handle import state
+	if m.state == stateImport {
+		if msg.String() == "ctrl+c" || msg.Type == tea.KeyEsc {
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			return m, nil
+		}
+		shouldClose, _ := m.textInputOverlay.HandleKeyPress(msg)
+		if shouldClose {
+			if m.textInputOverlay.IsSubmitted() {
+				sessionName := strings.TrimSpace(m.textInputOverlay.GetValue())
+				if sessionName == "" {
+					m.textInputOverlay = nil
+					m.state = stateDefault
+					return m, nil
+				}
+
+				executor := cmd2.MakeExecutor()
+				workDir, err := tmux.GetSessionWorkDir(executor, sessionName)
+				if err != nil {
+					m.textInputOverlay = nil
+					m.state = stateDefault
+					return m, m.handleError(err)
+				}
+
+				instance, err := session.NewImportedInstance(sessionName, sessionName, workDir, "imported")
+				if err != nil {
+					m.textInputOverlay = nil
+					m.state = stateDefault
+					return m, m.handleError(err)
+				}
+
+				finalizer := m.list.AddInstance(instance)
+				finalizer()
+				m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+
+				if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+					m.textInputOverlay = nil
+					m.state = stateDefault
+					return m, m.handleError(err)
+				}
+			}
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+		}
 		return m, nil
 	}
 
@@ -621,6 +686,25 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	switch name {
 	case keys.KeyHelp:
 		return m.showHelpScreen(helpTypeGeneral{}, nil)
+	case keys.KeyImport:
+		if m.list.NumInstances() >= GlobalInstanceLimit {
+			return m, m.handleError(
+				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
+		}
+		// Discover external tmux sessions
+		executor := cmd2.MakeExecutor()
+		sessions, err := tmux.ListExternalSessions(executor)
+		if err != nil {
+			return m, m.handleError(err)
+		}
+		if len(sessions) == 0 {
+			return m, m.handleError(fmt.Errorf("no external tmux sessions found"))
+		}
+		sessionList := strings.Join(sessions, ", ")
+		m.state = stateImport
+		m.textInputOverlay = overlay.NewTextInputOverlay(
+			fmt.Sprintf("Import Session (available: %s)", sessionList), "")
+		return m, tea.WindowSize()
 	case keys.KeyPrompt:
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
@@ -694,19 +778,22 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		// Create the kill action as a tea.Cmd
 		killAction := func() tea.Msg {
-			// Get worktree and check if branch is checked out
-			worktree, err := selected.GetGitWorktree()
-			if err != nil {
-				return err
-			}
+			// Skip worktree checks for imported sessions
+			if !selected.Imported {
+				// Get worktree and check if branch is checked out
+				worktree, err := selected.GetGitWorktree()
+				if err != nil {
+					return err
+				}
 
-			checkedOut, err := worktree.IsBranchCheckedOut()
-			if err != nil {
-				return err
-			}
+				checkedOut, err := worktree.IsBranchCheckedOut()
+				if err != nil {
+					return err
+				}
 
-			if checkedOut {
-				return fmt.Errorf("instance %s is currently checked out", selected.Title)
+				if checkedOut {
+					return fmt.Errorf("instance %s is currently checked out", selected.Title)
+				}
 			}
 
 			// Clean up terminal session for this instance
@@ -730,6 +817,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if selected == nil || selected.Status == session.Loading {
 			return m, nil
 		}
+		if selected.Imported {
+			return m, m.handleError(fmt.Errorf("cannot push imported sessions (no managed worktree)"))
+		}
 
 		// Create the push action as a tea.Cmd
 		pushAction := func() tea.Msg {
@@ -752,6 +842,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		selected := m.list.GetSelectedInstance()
 		if selected == nil || selected.Status == session.Loading {
 			return m, nil
+		}
+		if selected.Imported {
+			return m, m.handleError(fmt.Errorf("cannot checkout imported sessions (no managed worktree)"))
 		}
 
 		// Show help screen before pausing
@@ -1001,7 +1094,8 @@ func (m *home) handleError(err error) tea.Cmd {
 }
 
 func (m *home) newPromptOverlay() *overlay.TextInputOverlay {
-	return overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "", m.appConfig.GetProfiles())
+	cwd, _ := os.Getwd()
+	return overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "", cwd, m.appConfig.GetProfiles())
 }
 
 // cancelPromptOverlay cancels the prompt overlay, cleaning up unstarted instances.
@@ -1047,7 +1141,7 @@ func (m *home) View() string {
 		m.errBox.String(),
 	)
 
-	if m.state == statePrompt {
+	if m.state == statePrompt || m.state == stateImport {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
