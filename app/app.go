@@ -7,7 +7,6 @@ import (
 	"claude-squad/log"
 	"claude-squad/session"
 	"claude-squad/session/git"
-	"claude-squad/session/tmux"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
 	"context"
@@ -110,6 +109,8 @@ type home struct {
 	confirmationOverlay *overlay.ConfirmationOverlay
 	// pendingConfirmAction is the tea.Cmd to run when a confirmation overlay is accepted.
 	pendingConfirmAction tea.Cmd
+	// importOverlay handles the structured import session overlay
+	importOverlay *overlay.ImportOverlay
 
 	// lastSelectedTitle tracks the title of the last selected instance so we
 	// know when the selection changed and must force a preview refresh.
@@ -191,6 +192,9 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	}
 	if m.textOverlay != nil {
 		m.textOverlay.SetWidth(int(float32(msg.Width) * 0.6))
+	}
+	if m.importOverlay != nil {
+		m.importOverlay.SetSize(int(float32(msg.Width)*0.6), int(float32(msg.Height)*0.5))
 	}
 
 	previewWidth, previewHeight := m.tabbedWindow.GetPreviewSize()
@@ -607,46 +611,35 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	// Handle import state
 	if m.state == stateImport {
 		if msg.String() == "ctrl+c" || msg.Type == tea.KeyEsc {
-			m.textInputOverlay = nil
+			m.importOverlay = nil
 			m.state = stateDefault
 			return m, nil
 		}
-		shouldClose, _ := m.textInputOverlay.HandleKeyPress(msg)
+		shouldClose := m.importOverlay.HandleKeyPress(msg)
 		if shouldClose {
-			if m.textInputOverlay.IsSubmitted() {
-				sessionName := strings.TrimSpace(m.textInputOverlay.GetValue())
-				if sessionName == "" {
-					m.textInputOverlay = nil
-					m.state = stateDefault
-					return m, nil
-				}
+			if m.importOverlay.IsSubmitted() {
+				selected := m.importOverlay.GetSelectedSession()
+				if selected != nil {
+					instance, err := session.NewImportedInstance(
+						selected.Name, selected.Name, selected.WorkDir, selected.Program)
+					if err != nil {
+						m.importOverlay = nil
+						m.state = stateDefault
+						return m, m.handleError(err)
+					}
 
-				executor := cmd2.MakeExecutor()
-				workDir, err := tmux.GetSessionWorkDir(executor, sessionName)
-				if err != nil {
-					m.textInputOverlay = nil
-					m.state = stateDefault
-					return m, m.handleError(err)
-				}
+					finalizer := m.list.AddInstance(instance)
+					finalizer()
+					m.list.SetSelectedInstance(m.list.NumInstances() - 1)
 
-				instance, err := session.NewImportedInstance(sessionName, sessionName, workDir, "imported")
-				if err != nil {
-					m.textInputOverlay = nil
-					m.state = stateDefault
-					return m, m.handleError(err)
-				}
-
-				finalizer := m.list.AddInstance(instance)
-				finalizer()
-				m.list.SetSelectedInstance(m.list.NumInstances() - 1)
-
-				if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
-					m.textInputOverlay = nil
-					m.state = stateDefault
-					return m, m.handleError(err)
+					if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+						m.importOverlay = nil
+						m.state = stateDefault
+						return m, m.handleError(err)
+					}
 				}
 			}
-			m.textInputOverlay = nil
+			m.importOverlay = nil
 			m.state = stateDefault
 			return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 		}
@@ -708,19 +701,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
-		// Discover external tmux sessions
 		executor := cmd2.MakeExecutor()
-		sessions, err := tmux.ListExternalSessions(executor)
-		if err != nil {
-			return m, m.handleError(err)
-		}
-		if len(sessions) == 0 {
-			return m, m.handleError(fmt.Errorf("no external tmux sessions found"))
-		}
-		sessionList := strings.Join(sessions, ", ")
+		m.importOverlay = overlay.NewImportOverlay(executor)
 		m.state = stateImport
-		m.textInputOverlay = overlay.NewTextInputOverlay(
-			fmt.Sprintf("Import Session (available: %s)", sessionList), "")
 		return m, tea.WindowSize()
 	case keys.KeyPrompt:
 		if m.list.NumInstances() >= GlobalInstanceLimit {
@@ -1160,11 +1143,16 @@ func (m *home) View() string {
 		m.errBox.String(),
 	)
 
-	if m.state == statePrompt || m.state == stateImport {
+	if m.state == statePrompt {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
 		return overlay.PlaceOverlay(0, 0, m.textInputOverlay.Render(), mainView, true, true)
+	} else if m.state == stateImport {
+		if m.importOverlay == nil {
+			log.ErrorLog.Printf("import overlay is nil")
+		}
+		return overlay.PlaceOverlay(0, 0, m.importOverlay.Render(), mainView, true, true)
 	} else if m.state == stateHelp {
 		if m.textOverlay == nil {
 			log.ErrorLog.Printf("text overlay is nil")
