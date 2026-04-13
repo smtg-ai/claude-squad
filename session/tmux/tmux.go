@@ -58,8 +58,23 @@ type TmuxSession struct {
 }
 
 const TmuxPrefix = "claudesquad_"
+const TmuxSocketName = "claudesquad"
 
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)
+
+var tmuxEnvBlacklist = map[string]struct{}{
+	"PWD":       {},
+	"TERM":      {},
+	"TMUX":      {},
+	"TMUX_PANE": {},
+}
+
+func tmuxCmd(args ...string) *exec.Cmd {
+	cmdArgs := make([]string, 0, len(args)+2)
+	cmdArgs = append(cmdArgs, "-L", TmuxSocketName)
+	cmdArgs = append(cmdArgs, args...)
+	return exec.Command("tmux", cmdArgs...)
+}
 
 func toClaudeSquadTmuxName(str string) string {
 	str = whiteSpaceRegex.ReplaceAllString(str, "")
@@ -86,6 +101,79 @@ func newTmuxSession(name string, program string, ptyFactory PtyFactory, cmdExec 
 	}
 }
 
+func envNamesForUpdate() []string {
+	names := make([]string, 0, len(os.Environ()))
+	seen := map[string]struct{}{}
+	for _, entry := range os.Environ() {
+		key, _, ok := strings.Cut(entry, "=")
+		if !ok || key == "" {
+			continue
+		}
+		if _, blocked := tmuxEnvBlacklist[key]; blocked {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		names = append(names, key)
+	}
+	return names
+}
+
+func mergeUpdateEnvironment(existing string, additional []string) string {
+	seen := map[string]struct{}{}
+	merged := make([]string, 0, len(strings.Fields(existing))+len(additional))
+
+	for _, name := range strings.Fields(existing) {
+		if name == "" {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		merged = append(merged, name)
+	}
+
+	for _, name := range additional {
+		if name == "" {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		merged = append(merged, name)
+	}
+
+	return strings.Join(merged, " ")
+}
+
+func (t *TmuxSession) syncUpdateEnvironment() {
+	if err := t.cmdExec.Run(tmuxCmd("start-server")); err != nil {
+		log.InfoLog.Printf("Warning: failed to start dedicated tmux server for session %s: %v", t.sanitizedName, err)
+		return
+	}
+
+	showCmd := tmuxCmd("show-options", "-gqv", "update-environment")
+	output, err := t.cmdExec.Output(showCmd)
+	if err != nil {
+		log.InfoLog.Printf("Warning: failed to inspect tmux update-environment for session %s: %v", t.sanitizedName, err)
+		return
+	}
+
+	merged := mergeUpdateEnvironment(string(output), envNamesForUpdate())
+	if strings.TrimSpace(merged) == "" || strings.TrimSpace(merged) == strings.TrimSpace(string(output)) {
+		return
+	}
+
+	setCmd := tmuxCmd("set-option", "-g", "update-environment", merged)
+	if err := t.cmdExec.Run(setCmd); err != nil {
+		log.InfoLog.Printf("Warning: failed to sync tmux update-environment for session %s: %v", t.sanitizedName, err)
+	}
+}
+
 // Start creates and starts a new tmux session, then attaches to it. Program is the command to run in
 // the session (ex. claude). workdir is the git worktree directory.
 func (t *TmuxSession) Start(workDir string) error {
@@ -94,14 +182,19 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
 	}
 
+	// Dedicated tmux servers do not automatically learn custom environment
+	// variables from the invoking shell. Sync the current process environment so
+	// newly created agent sessions inherit API keys and similar configuration.
+	t.syncUpdateEnvironment()
+
 	// Create a new detached tmux session and start claude in it
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
+	cmd := tmuxCmd("new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
 
 	ptmx, err := t.ptyFactory.Start(cmd)
 	if err != nil {
 		// Cleanup any partially created session if any exists.
 		if t.DoesSessionExist() {
-			cleanupCmd := exec.Command("tmux", "kill-session", "-t", t.sanitizedName)
+			cleanupCmd := tmuxCmd("kill-session", "-t", t.sanitizedName)
 			if cleanupErr := t.cmdExec.Run(cleanupCmd); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
 			}
@@ -130,13 +223,13 @@ func (t *TmuxSession) Start(workDir string) error {
 	ptmx.Close()
 
 	// Set history limit to enable scrollback (default is 2000, we'll use 10000 for more history)
-	historyCmd := exec.Command("tmux", "set-option", "-t", t.sanitizedName, "history-limit", "10000")
+	historyCmd := tmuxCmd("set-option", "-t", t.sanitizedName, "history-limit", "10000")
 	if err := t.cmdExec.Run(historyCmd); err != nil {
 		log.InfoLog.Printf("Warning: failed to set history-limit for session %s: %v", t.sanitizedName, err)
 	}
 
 	// Enable mouse scrolling for the session
-	mouseCmd := exec.Command("tmux", "set-option", "-t", t.sanitizedName, "mouse", "on")
+	mouseCmd := tmuxCmd("set-option", "-t", t.sanitizedName, "mouse", "on")
 	if err := t.cmdExec.Run(mouseCmd); err != nil {
 		log.InfoLog.Printf("Warning: failed to enable mouse scrolling for session %s: %v", t.sanitizedName, err)
 	}
@@ -181,7 +274,7 @@ func (t *TmuxSession) CheckAndHandleTrustPrompt() bool {
 
 // Restore attaches to an existing session and restores the window size
 func (t *TmuxSession) Restore() error {
-	ptmx, err := t.ptyFactory.Start(exec.Command("tmux", "attach-session", "-t", t.sanitizedName))
+	ptmx, err := t.ptyFactory.Start(tmuxCmd("attach-session", "-t", t.sanitizedName))
 	if err != nil {
 		return fmt.Errorf("error opening PTY: %w", err)
 	}
@@ -420,7 +513,7 @@ func (t *TmuxSession) Close() error {
 		t.ptmx = nil
 	}
 
-	cmd := exec.Command("tmux", "kill-session", "-t", t.sanitizedName)
+	cmd := tmuxCmd("kill-session", "-t", t.sanitizedName)
 	if err := t.cmdExec.Run(cmd); err != nil {
 		errs = append(errs, fmt.Errorf("error killing tmux session: %w", err))
 	}
@@ -457,14 +550,14 @@ func (t *TmuxSession) updateWindowSize(cols, rows int) error {
 
 func (t *TmuxSession) DoesSessionExist() bool {
 	// Using "-t name" does a prefix match, which is wrong. `-t=` does an exact match.
-	existsCmd := exec.Command("tmux", "has-session", fmt.Sprintf("-t=%s", t.sanitizedName))
+	existsCmd := tmuxCmd("has-session", fmt.Sprintf("-t=%s", t.sanitizedName))
 	return t.cmdExec.Run(existsCmd) == nil
 }
 
 // CapturePaneContent captures the content of the tmux pane
 func (t *TmuxSession) CapturePaneContent() (string, error) {
 	// Add -e flag to preserve escape sequences (ANSI color codes)
-	cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-t", t.sanitizedName)
+	cmd := tmuxCmd("capture-pane", "-p", "-e", "-J", "-t", t.sanitizedName)
 	output, err := t.cmdExec.Output(cmd)
 	if err != nil {
 		return "", fmt.Errorf("error capturing pane content: %v", err)
@@ -476,7 +569,7 @@ func (t *TmuxSession) CapturePaneContent() (string, error) {
 // start and end specify the starting and ending line numbers (use "-" for the start/end of history)
 func (t *TmuxSession) CapturePaneContentWithOptions(start, end string) (string, error) {
 	// Add -e flag to preserve escape sequences (ANSI color codes)
-	cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-J", "-S", start, "-E", end, "-t", t.sanitizedName)
+	cmd := tmuxCmd("capture-pane", "-p", "-e", "-J", "-S", start, "-E", end, "-t", t.sanitizedName)
 	output, err := t.cmdExec.Output(cmd)
 	if err != nil {
 		return "", fmt.Errorf("failed to capture tmux pane content with options: %v", err)
@@ -487,7 +580,7 @@ func (t *TmuxSession) CapturePaneContentWithOptions(start, end string) (string, 
 // CleanupSessions kills all tmux sessions that start with "session-"
 func CleanupSessions(cmdExec cmd.Executor) error {
 	// First try to list sessions
-	cmd := exec.Command("tmux", "ls")
+	cmd := tmuxCmd("ls")
 	output, err := cmdExec.Output(cmd)
 
 	// If there's an error and it's because no server is running, that's fine
@@ -507,7 +600,7 @@ func CleanupSessions(cmdExec cmd.Executor) error {
 
 	for _, match := range matches {
 		log.InfoLog.Printf("cleaning up session: %s", match)
-		if err := cmdExec.Run(exec.Command("tmux", "kill-session", "-t", match)); err != nil {
+		if err := cmdExec.Run(tmuxCmd("kill-session", "-t", match)); err != nil {
 			return fmt.Errorf("failed to kill tmux session %s: %v", match, err)
 		}
 	}
