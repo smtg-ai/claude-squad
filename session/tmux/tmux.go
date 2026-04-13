@@ -527,13 +527,14 @@ func ListExternalSessions(cmdExec cmd.Executor) ([]string, error) {
 
 // ExternalSessionInfo holds information about a non-CS tmux session.
 type ExternalSessionInfo struct {
-	Name    string
-	WorkDir string
-	Program string // the command running in the pane
+	Name      string
+	WorkDir   string
+	Program   string // detected program name (e.g. "claude", "codex", "bash")
+	PaneTitle string // the terminal pane title set by the running application
 }
 
 // ListExternalSessionsWithInfo returns running tmux sessions not managed by this tool,
-// including their working directory and running command.
+// including their working directory, running command, and pane title.
 func ListExternalSessionsWithInfo(cmdExec cmd.Executor) ([]ExternalSessionInfo, error) {
 	names, err := ListExternalSessions(cmdExec)
 	if err != nil {
@@ -544,7 +545,17 @@ func ListExternalSessionsWithInfo(cmdExec cmd.Executor) ([]ExternalSessionInfo, 
 	for _, name := range names {
 		workDir, _ := GetSessionWorkDir(cmdExec, name)
 
-		// Get the running command in the pane
+		// Get the pane title — this is the most reliable way to identify the
+		// running application. Tools like Claude Code set the pane title to
+		// "✳ Claude Code" while pane_current_command may show a version number.
+		titleCmd := exec.Command("tmux", "display-message", "-t", name, "-p", "#{pane_title}")
+		titleOutput, err := cmdExec.Output(titleCmd)
+		paneTitle := ""
+		if err == nil {
+			paneTitle = strings.TrimSpace(string(titleOutput))
+		}
+
+		// Also get pane_current_command as a fallback
 		progCmd := exec.Command("tmux", "display-message", "-t", name, "-p", "#{pane_current_command}")
 		progOutput, err := cmdExec.Output(progCmd)
 		program := "unknown"
@@ -553,9 +564,10 @@ func ListExternalSessionsWithInfo(cmdExec cmd.Executor) ([]ExternalSessionInfo, 
 		}
 
 		sessions = append(sessions, ExternalSessionInfo{
-			Name:    name,
-			WorkDir: workDir,
-			Program: program,
+			Name:      name,
+			WorkDir:   workDir,
+			Program:   program,
+			PaneTitle: paneTitle,
 		})
 	}
 	return sessions, nil
