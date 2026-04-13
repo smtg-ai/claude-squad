@@ -669,6 +669,109 @@ func (i *Instance) SendPrompt(prompt string) error {
 	return nil
 }
 
+// WaitAndSendPrompt waits for the agent to be ready, then sends the prompt.
+// It polls the tmux pane content looking for signs the agent is accepting input.
+func (i *Instance) WaitAndSendPrompt(prompt string, timeout time.Duration) error {
+	if !i.started {
+		return fmt.Errorf("instance not started")
+	}
+	if i.tmuxSession == nil {
+		return fmt.Errorf("tmux session not initialized")
+	}
+
+	deadline := time.Now().Add(timeout)
+	pollInterval := 500 * time.Millisecond
+
+	for time.Now().Before(deadline) {
+		content, err := i.tmuxSession.CapturePaneContent()
+		if err != nil {
+			time.Sleep(pollInterval)
+			continue
+		}
+
+		// Check if the agent is ready for input.
+		if isAgentReady(content, i.Program) {
+			// Handle trust prompts first if needed
+			i.CheckAndHandleTrustPrompt()
+			// Brief pause to let any trust prompt handling settle
+			time.Sleep(500 * time.Millisecond)
+
+			// Re-check after trust prompt handling
+			content, err = i.tmuxSession.CapturePaneContent()
+			if err == nil && isAgentReady(content, i.Program) {
+				return i.SendPrompt(prompt)
+			}
+			// If not ready after trust prompt, keep polling
+		}
+
+		time.Sleep(pollInterval)
+	}
+
+	// Timeout — try sending anyway as a last resort
+	return i.SendPrompt(prompt)
+}
+
+// isAgentReady checks if the agent program is ready to accept user input
+// by examining the tmux pane content for known ready indicators.
+func isAgentReady(content string, program string) bool {
+	// Trim trailing whitespace/newlines
+	content = strings.TrimRight(content, " \t\n\r")
+	if content == "" {
+		return false
+	}
+
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 {
+		return false
+	}
+
+	// Check the last few non-empty lines for ready indicators
+	lastLines := ""
+	count := 0
+	for i := len(lines) - 1; i >= 0 && count < 5; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" {
+			lastLines += line + "\n"
+			count++
+		}
+	}
+
+	// Agent-specific ready indicators
+	if strings.HasSuffix(program, "claude") {
+		if strings.Contains(lastLines, ">") || strings.Contains(lastLines, "What would you like to do?") {
+			return true
+		}
+	}
+
+	if strings.HasPrefix(program, "aider") {
+		if strings.Contains(lastLines, ">") {
+			return true
+		}
+	}
+
+	if strings.HasPrefix(program, "gemini") {
+		if strings.Contains(lastLines, ">") || strings.Contains(lastLines, "❯") {
+			return true
+		}
+	}
+
+	// Generic fallback: if we see common prompt characters at the end
+	lastLine := ""
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := strings.TrimSpace(lines[i])
+		if l != "" {
+			lastLine = l
+			break
+		}
+	}
+	if strings.HasSuffix(lastLine, ">") || strings.HasSuffix(lastLine, "❯") ||
+		strings.HasSuffix(lastLine, "$") || strings.HasSuffix(lastLine, "%") {
+		return true
+	}
+
+	return false
+}
+
 // PreviewFullHistory captures the entire tmux pane output including full scrollback history
 func (i *Instance) PreviewFullHistory() (string, error) {
 	if !i.started || i.Status == Paused {

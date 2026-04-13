@@ -344,18 +344,28 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.menu.SetState(ui.StatePrompt)
 			m.textInputOverlay = m.newPromptOverlay()
 		} else {
-			// If instance has a prompt (set from Shift+N flow), send it now
-			if msg.instance.Prompt != "" {
-				if err := msg.instance.SendPrompt(msg.instance.Prompt); err != nil {
-					log.ErrorLog.Printf("failed to send prompt: %v", err)
-				}
-				msg.instance.Prompt = ""
-			}
 			m.menu.SetState(ui.StateDefault)
 			m.showHelpScreen(helpStart(msg.instance), nil)
 		}
 
-		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+		var cmds []tea.Cmd
+		cmds = append(cmds, tea.WindowSize(), m.instanceChanged())
+
+		// If the instance has a pending prompt, send it asynchronously
+		// after waiting for the agent to be ready.
+		if msg.instance.Prompt != "" {
+			prompt := msg.instance.Prompt
+			inst := msg.instance
+			cmds = append(cmds, func() tea.Msg {
+				if err := inst.WaitAndSendPrompt(prompt, 30*time.Second); err != nil {
+					log.ErrorLog.Printf("failed to send prompt: %v", err)
+				}
+				return nil
+			})
+			msg.instance.Prompt = ""
+		}
+
+		return m, tea.Batch(cmds...)
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
