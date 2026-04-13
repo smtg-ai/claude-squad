@@ -60,6 +60,8 @@ type home struct {
 
 	program string
 	autoYes bool
+	// startDir is the working directory captured at startup, before anything can change it.
+	startDir string
 
 	// storage is the interface for saving/loading data to/from the app's state
 	storage *session.Storage
@@ -128,6 +130,12 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		os.Exit(1)
 	}
 
+	// Capture the working directory at startup before anything can change it.
+	startDir, err := filepath.Abs(".")
+	if err != nil {
+		startDir = "."
+	}
+
 	h := &home{
 		ctx:          ctx,
 		spinner:      spinner.New(spinner.WithSpinner(spinner.MiniDot)),
@@ -140,6 +148,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		autoYes:      autoYes,
 		state:        stateDefault,
 		appState:     appState,
+		startDir:     startDir,
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
 
@@ -712,15 +721,15 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		// Start a background fetch so branches are up to date by the time the picker opens
+		startDir := m.startDir
 		fetchCmd := func() tea.Msg {
-			currentDir, _ := os.Getwd()
-			git.FetchBranches(currentDir)
+			git.FetchBranches(startDir)
 			return nil
 		}
 
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:   "",
-			Path:    ".",
+			Path:    m.startDir,
 			Program: m.program,
 		})
 		if err != nil {
@@ -741,7 +750,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 		instance, err := session.NewInstance(session.InstanceOptions{
 			Title:   "",
-			Path:    ".",
+			Path:    m.startDir,
 			Program: m.program,
 		})
 		if err != nil {
@@ -992,9 +1001,9 @@ func (m *home) scheduleBranchSearch(filter string, version uint64) tea.Cmd {
 
 // runBranchSearch returns a tea.Cmd that performs the git search in the background.
 func (m *home) runBranchSearch(filter string, version uint64) tea.Cmd {
+	startDir := m.startDir
 	return func() tea.Msg {
-		currentDir, _ := os.Getwd()
-		branches, err := git.SearchBranches(currentDir, filter)
+		branches, err := git.SearchBranches(startDir, filter)
 		if err != nil {
 			log.WarningLog.Printf("branch search failed: %v", err)
 			return nil
@@ -1094,8 +1103,7 @@ func (m *home) handleError(err error) tea.Cmd {
 }
 
 func (m *home) newPromptOverlay() *overlay.TextInputOverlay {
-	cwd, _ := os.Getwd()
-	return overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "", cwd, m.appConfig.GetProfiles())
+	return overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "", m.startDir, m.appConfig.GetProfiles())
 }
 
 // cancelPromptOverlay cancels the prompt overlay, cleaning up unstarted instances.
