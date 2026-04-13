@@ -648,8 +648,11 @@ func (i *Instance) GetDiffStats() *git.DiffStats {
 	return i.diffStats
 }
 
-// SendPrompt sends a prompt to the tmux session
-func (i *Instance) SendPrompt(prompt string) error {
+// SendPrompt sends a prompt to the tmux session.
+// It types the prompt text and presses Enter. If retryEnter is true,
+// it also retries Enter after a delay in case the first was absorbed
+// by a trust/startup prompt.
+func (i *Instance) SendPrompt(prompt string, retryEnter ...bool) error {
 	if !i.started {
 		return fmt.Errorf("instance not started")
 	}
@@ -666,101 +669,18 @@ func (i *Instance) SendPrompt(prompt string) error {
 		return fmt.Errorf("error tapping enter: %w", err)
 	}
 
+	// If requested, retry Enter after a delay. This handles the case where
+	// the agent's startup screen (trust prompt, etc.) absorbs the first Enter.
+	if len(retryEnter) > 0 && retryEnter[0] {
+		go func() {
+			time.Sleep(3 * time.Second)
+			_ = i.tmuxSession.TapEnter()
+		}()
+	}
+
 	return nil
 }
 
-// WaitAndSendPrompt waits for the agent to be ready, then sends the prompt.
-// It polls the tmux pane content, dismissing trust prompts along the way,
-// until the agent shows its actual input prompt.
-func (i *Instance) WaitAndSendPrompt(prompt string, timeout time.Duration) error {
-	if !i.started {
-		return fmt.Errorf("instance not started")
-	}
-	if i.tmuxSession == nil {
-		return fmt.Errorf("tmux session not initialized")
-	}
-
-	deadline := time.Now().Add(timeout)
-	pollInterval := 200 * time.Millisecond
-
-	for time.Now().Before(deadline) {
-		// Dismiss trust/MCP prompts first — these appear before the agent is ready
-		// and contain characters (like >) that could cause false positives.
-		if i.CheckAndHandleTrustPrompt() {
-			time.Sleep(pollInterval)
-			continue
-		}
-
-		content, err := i.tmuxSession.CapturePaneContent()
-		if err != nil {
-			time.Sleep(pollInterval)
-			continue
-		}
-
-		if isAgentReady(content, i.Program) {
-			return i.SendPrompt(prompt)
-		}
-
-		time.Sleep(pollInterval)
-	}
-
-	// Timeout — try sending anyway as a last resort
-	return i.SendPrompt(prompt)
-}
-
-// isAgentReady checks if the agent program is ready to accept user input
-// by examining the tmux pane content for known ready indicators.
-// It explicitly rejects trust/startup screens to avoid false positives.
-func isAgentReady(content string, program string) bool {
-	content = strings.TrimRight(content, " \t\n\r")
-	if content == "" {
-		return false
-	}
-
-	// Reject known startup/trust screens — these contain > characters
-	// but the agent isn't actually ready for user prompts yet.
-	if strings.Contains(content, "Do you trust the files in this folder?") ||
-		strings.Contains(content, "new MCP server") ||
-		strings.Contains(content, "Open documentation url for more info") {
-		return false
-	}
-
-	// Find the last non-empty line — this is where the input prompt appears.
-	lines := strings.Split(content, "\n")
-	lastLine := ""
-	for i := len(lines) - 1; i >= 0; i-- {
-		l := strings.TrimSpace(lines[i])
-		if l != "" {
-			lastLine = l
-			break
-		}
-	}
-	if lastLine == "" {
-		return false
-	}
-
-	// Agent-specific ready indicators on the last non-empty line
-	if strings.HasSuffix(program, "claude") {
-		// Claude's input prompt ends with > on a line by itself, or shows
-		// a message like "What would you like to do?"
-		return lastLine == ">" || strings.HasSuffix(lastLine, "> ") ||
-			strings.Contains(lastLine, "What would you like to do?")
-	}
-
-	if strings.HasPrefix(program, "aider") {
-		return lastLine == ">" || strings.HasSuffix(lastLine, "> ")
-	}
-
-	if strings.HasPrefix(program, "gemini") {
-		return lastLine == ">" || lastLine == "❯" ||
-			strings.HasSuffix(lastLine, "> ") || strings.HasSuffix(lastLine, "❯ ")
-	}
-
-	// Generic fallback: last line IS a prompt character (not just contains one)
-	return lastLine == ">" || lastLine == "❯" || lastLine == "$" || lastLine == "%" ||
-		strings.HasSuffix(lastLine, "> ") || strings.HasSuffix(lastLine, "❯ ") ||
-		strings.HasSuffix(lastLine, "$ ") || strings.HasSuffix(lastLine, "% ")
-}
 
 // PreviewFullHistory captures the entire tmux pane output including full scrollback history
 func (i *Instance) PreviewFullHistory() (string, error) {
