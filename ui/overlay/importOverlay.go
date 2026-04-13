@@ -2,10 +2,11 @@ package overlay
 
 import (
 	"claude-squad/cmd"
+	"claude-squad/session/agents"
 	"claude-squad/session/tmux"
-	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -27,9 +28,11 @@ type SessionInfo struct {
 	Name       string
 	WorkDir    string
 	Program    string
-	Standalone bool   // true if this is a non-tmux process that needs wrapping
-	PID        string // PID for standalone processes
-	Command    string // full command for standalone processes
+	Standalone bool      // true if this is a non-tmux process that needs wrapping
+	PID        string    // PID for standalone processes
+	Command    string    // full command for standalone processes
+	SessionID  string    // for resume-based imports
+	UpdatedAt  time.Time // last activity time for resume-based imports
 }
 
 // ImportOverlay is a structured overlay for importing external tmux sessions.
@@ -184,13 +187,12 @@ func (o *ImportOverlay) discoverSessions() {
 	o.cursor = 0
 	o.sessions = nil
 
-	allSessions, err := tmux.ListExternalSessionsWithInfo(o.cmdExec)
-	if err != nil {
-		return
-	}
-
 	switch o.source {
 	case SourceTmux:
+		allSessions, err := tmux.ListExternalSessionsWithInfo(o.cmdExec)
+		if err != nil {
+			return
+		}
 		for _, s := range allSessions {
 			if o.existing[s.Name] {
 				continue
@@ -202,65 +204,35 @@ func (o *ImportOverlay) discoverSessions() {
 			})
 		}
 	case SourceClaudeCode:
-		for _, s := range allSessions {
-			if o.existing[s.Name] {
-				continue
-			}
-			titleLower := strings.ToLower(s.PaneTitle)
-			progLower := strings.ToLower(s.Program)
-			if strings.Contains(titleLower, "claude") || strings.Contains(progLower, "claude") {
-				o.sessions = append(o.sessions, SessionInfo{
-					Name:    s.Name,
-					WorkDir: s.WorkDir,
-					Program: s.PaneTitle,
-				})
-			}
-		}
-		// Also find standalone claude processes not in tmux
-		standalones, err := tmux.ListStandaloneAgents(o.cmdExec)
+		agentSessions, err := agents.ListClaudeCodeSessions(30)
 		if err == nil {
-			for _, s := range standalones {
-				if s.Program == "claude" && !o.existing[s.PID] && !o.existing[s.Command] {
-					o.sessions = append(o.sessions, SessionInfo{
-						Name:       fmt.Sprintf("%s (pid:%s)", s.Command, s.PID),
-						WorkDir:    s.WorkDir,
-						Program:    s.Program,
-						Standalone: true,
-						PID:        s.PID,
-						Command:    s.Command,
-					})
+			for _, s := range agentSessions {
+				if o.existing[s.SessionID] {
+					continue
 				}
+				o.sessions = append(o.sessions, SessionInfo{
+					Name:      s.Summary,
+					WorkDir:   s.WorkDir,
+					Program:   s.ResumeCmd,
+					SessionID: s.SessionID,
+					UpdatedAt: s.UpdatedAt,
+				})
 			}
 		}
 	case SourceCodex:
-		for _, s := range allSessions {
-			if o.existing[s.Name] {
-				continue
-			}
-			titleLower := strings.ToLower(s.PaneTitle)
-			progLower := strings.ToLower(s.Program)
-			if strings.Contains(titleLower, "codex") || strings.Contains(progLower, "codex") {
-				o.sessions = append(o.sessions, SessionInfo{
-					Name:    s.Name,
-					WorkDir: s.WorkDir,
-					Program: s.PaneTitle,
-				})
-			}
-		}
-		// Also find standalone codex processes not in tmux
-		standalones, err := tmux.ListStandaloneAgents(o.cmdExec)
+		agentSessions, err := agents.ListCodexSessions(30)
 		if err == nil {
-			for _, s := range standalones {
-				if s.Program == "codex" && !o.existing[s.PID] && !o.existing[s.Command] {
-					o.sessions = append(o.sessions, SessionInfo{
-						Name:       fmt.Sprintf("%s (pid:%s)", s.Command, s.PID),
-						WorkDir:    s.WorkDir,
-						Program:    s.Program,
-						Standalone: true,
-						PID:        s.PID,
-						Command:    s.Command,
-					})
+			for _, s := range agentSessions {
+				if o.existing[s.SessionID] {
+					continue
 				}
+				o.sessions = append(o.sessions, SessionInfo{
+					Name:      s.Summary,
+					WorkDir:   s.WorkDir,
+					Program:   s.ResumeCmd,
+					SessionID: s.SessionID,
+					UpdatedAt: s.UpdatedAt,
+				})
 			}
 		}
 	}
@@ -327,6 +299,10 @@ func (o *ImportOverlay) Render() string {
 				name = s.Command + "  (standalone)"
 			}
 			dir := shortenHome(s.WorkDir)
+			// Append relative timestamp for resume-based sessions
+			if s.SessionID != "" && !s.UpdatedAt.IsZero() {
+				dir += "  \u00b7  " + agents.TimeAgo(s.UpdatedAt)
+			}
 			if i == o.cursor && o.isList() {
 				content += ioSelectedStyle.Render("> " + name)
 				content += "\n"

@@ -620,6 +620,37 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.importOverlay.IsSubmitted() {
 				selected := m.importOverlay.GetSelectedSession()
 				if selected != nil {
+					if selected.SessionID != "" {
+						// Resume-based import: create a new managed session with the resume command
+						title := selected.Name
+						if len(title) > 32 {
+							title = title[:29] + "..."
+						}
+						instance, err := session.NewInstance(session.InstanceOptions{
+							Title:   title,
+							Path:    selected.WorkDir,
+							Program: selected.Program, // e.g. "claude --resume <uuid>"
+						})
+						if err != nil {
+							m.importOverlay = nil
+							m.state = stateDefault
+							return m, m.handleError(err)
+						}
+						instance.SetStatus(session.Loading)
+						finalizer := m.list.AddInstance(instance)
+						finalizer()
+						m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+
+						m.importOverlay = nil
+						m.state = stateDefault
+
+						startCmd := func() tea.Msg {
+							err := instance.Start(true)
+							return instanceStartedMsg{instance: instance, err: err}
+						}
+						return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
+					}
+
 					if selected.Standalone {
 						// Standalone process: create a new session in the same directory
 						title := filepath.Base(selected.WorkDir)
