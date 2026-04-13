@@ -53,6 +53,8 @@ func NewTextInputOverlay(title string, initialValue string) *TextInputOverlay {
 	return &TextInputOverlay{
 		textarea: ti,
 		Title:    title,
+		width:    50, // default width so Render() works before SetSize
+		height:   10,
 		numStops: 2, // textarea + enter button
 	}
 }
@@ -103,6 +105,9 @@ func newTextarea(initialValue string) textarea.Model {
 	ti.FocusedStyle.CursorLine = lipgloss.NewStyle()
 	ti.CharLimit = 0
 	ti.MaxHeight = 0
+	// Set default dimensions so View() doesn't panic before SetSize is called.
+	ti.SetWidth(40)
+	ti.SetHeight(3)
 	return ti
 }
 
