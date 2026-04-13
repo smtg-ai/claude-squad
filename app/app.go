@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -511,6 +512,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				prompt := m.textInputOverlay.GetValue()
 				selectedBranch := m.textInputOverlay.GetSelectedBranch()
 				selectedProgram := m.textInputOverlay.GetSelectedProgram()
+				selectedDir := m.textInputOverlay.GetDirValue()
 
 				if !selected.Started() {
 					// Shift+N flow: instance not started yet — set branch, start, then send prompt
@@ -519,6 +521,16 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					}
 					if selectedProgram != "" {
 						selected.Program = selectedProgram
+					}
+					if selectedDir != "" {
+						absDir, err := filepath.Abs(selectedDir)
+						if err != nil {
+							return m, m.handleError(fmt.Errorf("invalid directory: %w", err))
+						}
+						if !git.IsGitRepo(absDir) {
+							return m, m.handleError(fmt.Errorf("'%s' is not a git repository", selectedDir))
+						}
+						selected.Path = absDir
 					}
 					selected.Prompt = prompt
 
@@ -1001,7 +1013,8 @@ func (m *home) handleError(err error) tea.Cmd {
 }
 
 func (m *home) newPromptOverlay() *overlay.TextInputOverlay {
-	return overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "", m.appConfig.GetProfiles())
+	cwd, _ := os.Getwd()
+	return overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "", cwd, m.appConfig.GetProfiles())
 }
 
 // cancelPromptOverlay cancels the prompt overlay, cleaning up unstarted instances.

@@ -34,6 +34,7 @@ var (
 // TextInputOverlay represents a text input overlay with state management.
 type TextInputOverlay struct {
 	textarea      textarea.Model
+	dirInput      textarea.Model
 	Title         string
 	FocusIndex    int // index into focusable stops
 	Submitted     bool
@@ -58,22 +59,32 @@ func NewTextInputOverlay(title string, initialValue string) *TextInputOverlay {
 
 // NewTextInputOverlayWithBranchPicker creates a text input overlay that includes an
 // empty branch picker. Results are populated asynchronously via SetBranchResults.
-func NewTextInputOverlayWithBranchPicker(title string, initialValue string, profiles []config.Profile) *TextInputOverlay {
+func NewTextInputOverlayWithBranchPicker(title string, initialValue string, initialDir string, profiles []config.Profile) *TextInputOverlay {
 	ti := newTextarea(initialValue)
 	bp := NewBranchPicker()
+
+	dirTi := textarea.New()
+	dirTi.SetValue(initialDir)
+	dirTi.ShowLineNumbers = false
+	dirTi.Prompt = ""
+	dirTi.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	dirTi.CharLimit = 0
+	dirTi.MaxHeight = 0
+	dirTi.SetHeight(1)
 
 	var pp *ProfilePicker
 	if len(profiles) > 0 {
 		pp = NewProfilePicker(profiles)
 	}
 
-	numStops := 3 // textarea + branch picker + enter button
+	numStops := 4 // textarea + dir input + branch picker + enter button
 	if pp != nil && pp.HasMultiple() {
-		numStops = 4 // profile picker + textarea + branch picker + enter button
+		numStops = 5 // profile picker + textarea + dir input + branch picker + enter button
 	}
 
 	overlay := &TextInputOverlay{
 		textarea:      ti,
+		dirInput:      dirTi,
 		Title:         title,
 		profilePicker: pp,
 		branchPicker:  bp,
@@ -99,6 +110,7 @@ func (t *TextInputOverlay) SetSize(width, height int) {
 	t.textarea.SetHeight(height)
 	t.width = width
 	t.height = height
+	t.dirInput.SetWidth(width - 6)
 	if t.branchPicker != nil {
 		t.branchPicker.SetWidth(width - 6)
 	}
@@ -130,6 +142,14 @@ func (t *TextInputOverlay) isTextarea() bool {
 	return t.FocusIndex == 0
 }
 
+// isDirInput returns true if the current focus is on the directory input.
+func (t *TextInputOverlay) isDirInput() bool {
+	if t.profilePicker != nil && t.profilePicker.HasMultiple() {
+		return t.FocusIndex == 2
+	}
+	return t.FocusIndex == 1
+}
+
 // isEnterButton returns true if the current focus is on the enter button.
 func (t *TextInputOverlay) isEnterButton() bool {
 	return t.FocusIndex == t.numStops-1
@@ -141,9 +161,9 @@ func (t *TextInputOverlay) isBranchPicker() bool {
 		return false
 	}
 	if t.profilePicker != nil && t.profilePicker.HasMultiple() {
-		return t.FocusIndex == 2
+		return t.FocusIndex == 3
 	}
-	return t.FocusIndex == 1
+	return t.FocusIndex == 2
 }
 
 // setFocusIndex sets the focus index and syncs focus state.
@@ -152,12 +172,17 @@ func (t *TextInputOverlay) setFocusIndex(i int) {
 	t.updateFocusState()
 }
 
-// updateFocusState syncs the textarea/branchPicker/profilePicker focus/blur state.
+// updateFocusState syncs the textarea/branchPicker/profilePicker/dirInput focus/blur state.
 func (t *TextInputOverlay) updateFocusState() {
 	if t.isTextarea() {
 		t.textarea.Focus()
 	} else {
 		t.textarea.Blur()
+	}
+	if t.isDirInput() {
+		t.dirInput.Focus()
+	} else {
+		t.dirInput.Blur()
 	}
 	if t.branchPicker != nil {
 		if t.isBranchPicker() {
@@ -196,6 +221,11 @@ func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) (bool, bool) {
 			}
 			return true, false
 		}
+		if t.isDirInput() {
+			// Enter on dir input = advance to branch picker
+			t.setFocusIndex(t.FocusIndex + 1)
+			return false, false
+		}
 		if t.isBranchPicker() {
 			// Enter on branch picker = advance to enter button
 			t.setFocusIndex(t.numStops - 1)
@@ -216,6 +246,10 @@ func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) (bool, bool) {
 			t.textarea, _ = t.textarea.Update(msg)
 			return false, false
 		}
+		if t.isDirInput() {
+			t.dirInput, _ = t.dirInput.Update(msg)
+			return false, false
+		}
 		if t.isProfilePicker() {
 			if msg.Type == tea.KeyLeft || msg.Type == tea.KeyRight {
 				t.profilePicker.HandleKeyPress(msg)
@@ -233,6 +267,11 @@ func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) (bool, bool) {
 // GetValue returns the current value of the text input.
 func (t *TextInputOverlay) GetValue() string {
 	return t.textarea.Value()
+}
+
+// GetDirValue returns the current value of the directory input.
+func (t *TextInputOverlay) GetDirValue() string {
+	return t.dirInput.Value()
 }
 
 // GetSelectedBranch returns the selected branch name from the branch picker.
@@ -319,6 +358,11 @@ func (t *TextInputOverlay) Render() string {
 
 	content += tiTitleStyle.Render(t.Title) + "\n"
 	content += t.textarea.View() + "\n\n"
+
+	// Render directory input
+	content += divider + "\n\n"
+	content += tiTitleStyle.Render("Working Directory") + "\n"
+	content += t.dirInput.View() + "\n\n"
 
 	// Render branch picker if present, with dividers
 	if t.branchPicker != nil {
