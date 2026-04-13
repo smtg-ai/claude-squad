@@ -35,6 +35,7 @@ var (
 type TextInputOverlay struct {
 	textarea      textarea.Model
 	dirInput      textarea.Model
+	hasDirInput   bool
 	Title         string
 	FocusIndex    int // index into focusable stops
 	Submitted     bool
@@ -87,6 +88,7 @@ func NewTextInputOverlayWithBranchPicker(title string, initialValue string, init
 	overlay := &TextInputOverlay{
 		textarea:      ti,
 		dirInput:      dirTi,
+		hasDirInput:   true,
 		Title:         title,
 		profilePicker: pp,
 		branchPicker:  bp,
@@ -115,7 +117,9 @@ func (t *TextInputOverlay) SetSize(width, height int) {
 	t.textarea.SetHeight(height)
 	t.width = width
 	t.height = height
-	t.dirInput.SetWidth(width - 6)
+	if t.hasDirInput {
+		t.dirInput.SetWidth(width - 6)
+	}
 	if t.branchPicker != nil {
 		t.branchPicker.SetWidth(width - 6)
 	}
@@ -149,6 +153,9 @@ func (t *TextInputOverlay) isTextarea() bool {
 
 // isDirInput returns true if the current focus is on the directory input.
 func (t *TextInputOverlay) isDirInput() bool {
+	if !t.hasDirInput {
+		return false
+	}
 	if t.profilePicker != nil && t.profilePicker.HasMultiple() {
 		return t.FocusIndex == 2
 	}
@@ -184,10 +191,12 @@ func (t *TextInputOverlay) updateFocusState() {
 	} else {
 		t.textarea.Blur()
 	}
-	if t.isDirInput() {
-		t.dirInput.Focus()
-	} else {
-		t.dirInput.Blur()
+	if t.hasDirInput {
+		if t.isDirInput() {
+			t.dirInput.Focus()
+		} else {
+			t.dirInput.Blur()
+		}
 	}
 	if t.branchPicker != nil {
 		if t.isBranchPicker() {
@@ -276,6 +285,9 @@ func (t *TextInputOverlay) GetValue() string {
 
 // GetDirValue returns the current value of the directory input.
 func (t *TextInputOverlay) GetDirValue() string {
+	if !t.hasDirInput {
+		return ""
+	}
 	return t.dirInput.Value()
 }
 
@@ -364,10 +376,12 @@ func (t *TextInputOverlay) Render() string {
 	content += tiTitleStyle.Render(t.Title) + "\n"
 	content += t.textarea.View() + "\n\n"
 
-	// Render directory input
-	content += divider + "\n\n"
-	content += tiTitleStyle.Render("Working Directory") + "\n"
-	content += t.dirInput.View() + "\n\n"
+	// Render directory input if present
+	if t.hasDirInput {
+		content += divider + "\n\n"
+		content += tiTitleStyle.Render("Working Directory") + "\n"
+		content += t.dirInput.View() + "\n\n"
+	}
 
 	// Render branch picker if present, with dividers
 	if t.branchPicker != nil {
