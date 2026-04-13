@@ -620,6 +620,42 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			if m.importOverlay.IsSubmitted() {
 				selected := m.importOverlay.GetSelectedSession()
 				if selected != nil {
+					if selected.Standalone {
+						// Standalone process: create a new session in the same directory
+						title := filepath.Base(selected.WorkDir)
+						if title == "" || title == "." {
+							title = fmt.Sprintf("imported-%s", selected.PID)
+						}
+						instance, err := session.NewInstance(session.InstanceOptions{
+							Title:   title,
+							Path:    selected.WorkDir,
+							Program: selected.Program,
+						})
+						if err != nil {
+							m.importOverlay = nil
+							m.state = stateDefault
+							return m, m.handleError(err)
+						}
+
+						instance.SetStatus(session.Loading)
+						finalizer := m.list.AddInstance(instance)
+						finalizer()
+						m.list.SetSelectedInstance(m.list.NumInstances() - 1)
+
+						m.importOverlay = nil
+						m.state = stateDefault
+
+						startCmd := func() tea.Msg {
+							err := instance.Start(true)
+							return instanceStartedMsg{
+								instance:        instance,
+								err:             err,
+								promptAfterName: false,
+							}
+						}
+						return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
+					}
+
 					instance, err := session.NewImportedInstance(
 						selected.Name, selected.Name, selected.WorkDir, selected.Program)
 					if err != nil {

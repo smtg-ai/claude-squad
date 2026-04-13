@@ -583,6 +583,120 @@ func GetSessionWorkDir(cmdExec cmd.Executor, sessionName string) (string, error)
 	return strings.TrimSpace(string(output)), nil
 }
 
+// StandaloneAgentInfo holds info about an agent process running outside tmux.
+type StandaloneAgentInfo struct {
+	PID     string
+	Command string // e.g. "claude --effort high" or "codex"
+	WorkDir string
+	TTY     string
+	Program string // "claude" or "codex"
+}
+
+// ListStandaloneAgents finds agent processes (claude, codex) running in plain
+// terminals (not inside tmux sessions).
+func ListStandaloneAgents(cmdExec cmd.Executor) ([]StandaloneAgentInfo, error) {
+	// Step 1: Get all tmux pane TTYs
+	tmuxTTYs := make(map[string]bool)
+	paneCmd := exec.Command("tmux", "list-panes", "-a", "-F", "#{pane_tty}")
+	paneOutput, err := cmdExec.Output(paneCmd)
+	if err == nil {
+		for _, line := range strings.Split(strings.TrimSpace(string(paneOutput)), "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				tmuxTTYs[line] = true
+			}
+		}
+	}
+
+	// Step 2: Find claude/codex processes
+	psCmd := exec.Command("ps", "-eo", "pid,tty,command")
+	psOutput, err := cmdExec.Output(psCmd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list processes: %v", err)
+	}
+
+	var agents []StandaloneAgentInfo
+	for _, line := range strings.Split(string(psOutput), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Match lines containing claude or codex (but not claudesquad or grep)
+		lineLower := strings.ToLower(line)
+		if !strings.Contains(lineLower, "claude") && !strings.Contains(lineLower, "codex") {
+			continue
+		}
+		if strings.Contains(lineLower, "claudesquad") || strings.Contains(lineLower, "claude-squad") || strings.Contains(lineLower, "grep") {
+			continue
+		}
+
+		// Parse: PID TTY COMMAND
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		pid := fields[0]
+		tty := fields[1]
+		command := strings.Join(fields[2:], " ")
+
+		// Skip if TTY is "??" (background process)
+		if tty == "??" {
+			continue
+		}
+
+		// Convert tty format: "ttys025" -> "/dev/ttys025"
+		ttyPath := "/dev/" + tty
+
+		// Skip if this TTY belongs to a tmux pane
+		if tmuxTTYs[ttyPath] {
+			continue
+		}
+
+		// Determine program name
+		program := ""
+		if strings.Contains(lineLower, "codex") {
+			program = "codex"
+		} else if strings.Contains(lineLower, "claude") {
+			// Only match commands that start with "claude" not node wrappers
+			if strings.HasPrefix(fields[2], "claude") {
+				program = "claude"
+			} else {
+				continue
+			}
+		}
+		if program == "" {
+			continue
+		}
+
+		// Get working directory via lsof
+		workDir := ""
+		lsofCmd := exec.Command("lsof", "-p", pid)
+		lsofOutput, err := cmdExec.Output(lsofCmd)
+		if err == nil {
+			for _, lsofLine := range strings.Split(string(lsofOutput), "\n") {
+				if strings.Contains(lsofLine, "cwd") {
+					lsofFields := strings.Fields(lsofLine)
+					if len(lsofFields) > 0 {
+						workDir = lsofFields[len(lsofFields)-1]
+					}
+					break
+				}
+			}
+		}
+
+		agents = append(agents, StandaloneAgentInfo{
+			PID:     pid,
+			Command: command,
+			WorkDir: workDir,
+			TTY:     tty,
+			Program: program,
+		})
+	}
+
+	return agents, nil
+}
+
 // CleanupSessions kills all tmux sessions that start with "session-"
 func CleanupSessions(cmdExec cmd.Executor) error {
 	// First try to list sessions
