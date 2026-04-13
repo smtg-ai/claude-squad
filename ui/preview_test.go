@@ -42,7 +42,7 @@ func setupTestEnvironment(t *testing.T, cmdExec cmd_test.MockCmdExec) *testSetup
 	sessionName := fmt.Sprintf("test-preview-%s-%d-%d", t.Name(), time.Now().UnixNano(), random)
 
 	// Clean up any existing tmux session
-	cleanupCmd := exec.Command("tmux", "kill-session", "-t", "claudesquad_"+sessionName)
+	cleanupCmd := exec.Command("tmux", "-L", tmux.TmuxSocketName, "kill-session", "-t", "claudesquad_"+sessionName)
 	_ = cleanupCmd.Run() // Ignore errors if session doesn't exist
 
 	// Create instance
