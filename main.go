@@ -37,16 +37,6 @@ var (
 				return err
 			}
 
-			// Check if we're in a git repository
-			currentDir, err := filepath.Abs(".")
-			if err != nil {
-				return fmt.Errorf("failed to get current directory: %w", err)
-			}
-
-			if !git.IsGitRepo(currentDir) {
-				return fmt.Errorf("error: claude-squad must be run from within a git repository")
-			}
-
 			cfg := config.LoadConfig()
 
 			// Program flag overrides config
