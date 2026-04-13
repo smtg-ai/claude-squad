@@ -54,6 +54,19 @@ func (d *DiffPane) SetDiff(instance *session.Instance) {
 		return
 	}
 
+	// Imported sessions have no managed worktree, so diff is not available
+	if instance.Imported {
+		centeredMessage := lipgloss.Place(
+			d.width,
+			d.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			"Diff not available for imported sessions",
+		)
+		d.viewport.SetContent(centeredMessage)
+		return
+	}
+
 	stats := instance.GetDiffStats()
 	if stats == nil {
 		// Show loading message if worktree is not ready

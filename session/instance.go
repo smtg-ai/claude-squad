@@ -51,6 +51,9 @@ type Instance struct {
 	AutoYes bool
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
+	// Imported is true if this session was imported from an existing tmux session
+	// not originally managed by Claude Squad.
+	Imported bool
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
@@ -84,6 +87,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 		UpdatedAt: time.Now(),
 		Program:   i.Program,
 		AutoYes:   i.AutoYes,
+		Imported:  i.Imported,
 	}
 
 	// Only include worktree data if gitWorktree is initialized
@@ -112,6 +116,17 @@ func (i *Instance) ToInstanceData() InstanceData {
 
 // FromInstanceData creates a new Instance from serialized data
 func FromInstanceData(data InstanceData) (*Instance, error) {
+	if data.Imported {
+		// Imported sessions: reconnect to the existing tmux session
+		instance, err := NewImportedInstance(data.Title, data.Title, data.Path, data.Program)
+		if err != nil {
+			return nil, fmt.Errorf("failed to restore imported session: %w", err)
+		}
+		instance.CreatedAt = data.CreatedAt
+		instance.UpdatedAt = data.UpdatedAt
+		return instance, nil
+	}
+
 	instance := &Instance{
 		Title:     data.Title,
 		Path:      data.Path,
@@ -163,6 +178,37 @@ type InstanceOptions struct {
 	Branch string
 }
 
+// NewImportedInstance creates an Instance that wraps an existing tmux session
+// not originally managed by Claude Squad. The session is used as-is; no git
+// worktree is created.
+func NewImportedInstance(title string, tmuxSessionName string, workDir string, program string) (*Instance, error) {
+	t := time.Now()
+	absPath, err := filepath.Abs(workDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	instance := &Instance{
+		Title:     title,
+		Status:    Running,
+		Path:      absPath,
+		Program:   program,
+		CreatedAt: t,
+		UpdatedAt: t,
+		Imported:  true,
+		started:   true,
+	}
+
+	// Create a TmuxSession that wraps the existing session
+	ts := tmux.NewTmuxSessionFromExisting(tmuxSessionName, program)
+	if err := ts.Restore(); err != nil {
+		return nil, fmt.Errorf("failed to connect to tmux session: %w", err)
+	}
+	instance.tmuxSession = ts
+
+	return instance, nil
+}
+
 func NewInstance(opts InstanceOptions) (*Instance, error) {
 	t := time.Now()
 
@@ -189,6 +235,9 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 func (i *Instance) RepoName() (string, error) {
 	if !i.started {
 		return "", fmt.Errorf("cannot get repo name for instance that has not been started")
+	}
+	if i.gitWorktree == nil {
+		return "", fmt.Errorf("no git worktree for instance")
 	}
 	return i.gitWorktree.GetRepoName(), nil
 }
@@ -295,16 +344,23 @@ func (i *Instance) Kill() error {
 
 	var errs []error
 
-	// Always try to cleanup both resources, even if one fails
-	// Clean up tmux session first since it's using the git worktree
 	if i.tmuxSession != nil {
-		if err := i.tmuxSession.Close(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to close tmux session: %w", err))
+		if i.Imported {
+			// For imported sessions, just close the PTY -- don't kill the tmux session
+			if err := i.tmuxSession.ClosePty(); err != nil {
+				errs = append(errs, fmt.Errorf("failed to close pty for imported session: %w", err))
+			}
+		} else {
+			// Always try to cleanup both resources, even if one fails
+			// Clean up tmux session first since it's using the git worktree
+			if err := i.tmuxSession.Close(); err != nil {
+				errs = append(errs, fmt.Errorf("failed to close tmux session: %w", err))
+			}
 		}
 	}
 
-	// Then clean up git worktree
-	if i.gitWorktree != nil {
+	// Only clean up worktree for non-imported sessions
+	if !i.Imported && i.gitWorktree != nil {
 		if err := i.gitWorktree.Cleanup(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to cleanup git worktree: %w", err))
 		}
@@ -429,6 +485,9 @@ func (i *Instance) Pause() error {
 	if i.Status == Paused {
 		return fmt.Errorf("instance is already paused")
 	}
+	if i.Imported {
+		return fmt.Errorf("cannot pause imported sessions (no managed worktree)")
+	}
 
 	var errs []error
 
@@ -549,6 +608,12 @@ func (i *Instance) UpdateDiffStats() error {
 		return nil
 	}
 
+	if i.gitWorktree == nil {
+		// Imported sessions have no worktree, so no diff
+		i.diffStats = nil
+		return nil
+	}
+
 	stats := i.gitWorktree.Diff()
 	if stats.Error != nil {
 		if strings.Contains(stats.Error.Error(), "base commit SHA not set") {
@@ -566,7 +631,7 @@ func (i *Instance) UpdateDiffStats() error {
 // ComputeDiff runs the expensive git diff I/O and returns the result without
 // mutating instance state. Safe to call from a background goroutine.
 func (i *Instance) ComputeDiff() *git.DiffStats {
-	if !i.started || i.Status == Paused {
+	if !i.started || i.Status == Paused || i.gitWorktree == nil {
 		return nil
 	}
 	return i.gitWorktree.Diff()

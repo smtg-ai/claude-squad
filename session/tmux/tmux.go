@@ -401,6 +401,17 @@ func (t *TmuxSession) Detach() {
 	t.wg.Wait()
 }
 
+// ClosePty closes the PTY handle without killing the underlying tmux session.
+// This is used for imported sessions where we don't own the tmux session.
+func (t *TmuxSession) ClosePty() error {
+	if t.ptmx != nil {
+		err := t.ptmx.Close()
+		t.ptmx = nil
+		return err
+	}
+	return nil
+}
+
 // Close terminates the tmux session and cleans up resources
 func (t *TmuxSession) Close() error {
 	var errs []error
@@ -474,6 +485,54 @@ func (t *TmuxSession) CapturePaneContentWithOptions(start, end string) (string, 
 		return "", fmt.Errorf("failed to capture tmux pane content with options: %v", err)
 	}
 	return string(output), nil
+}
+
+// NewTmuxSessionFromExisting creates a TmuxSession that wraps an already-running tmux session.
+// Unlike NewTmuxSession, the session name is used as-is (no claudesquad_ prefix).
+func NewTmuxSessionFromExisting(sessionName string, program string) *TmuxSession {
+	return &TmuxSession{
+		sanitizedName: sessionName,
+		program:       program,
+		ptyFactory:    MakePtyFactory(),
+		cmdExec:       cmd.MakeExecutor(),
+	}
+}
+
+// ListExternalSessions returns running tmux sessions not managed by Claude Squad.
+// Each entry contains the session name.
+func ListExternalSessions(cmdExec cmd.Executor) ([]string, error) {
+	listCmd := exec.Command("tmux", "ls", "-F", "#{session_name}")
+	output, err := cmdExec.Output(listCmd)
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return nil, nil // No sessions
+		}
+		return nil, fmt.Errorf("failed to list tmux sessions: %v", err)
+	}
+
+	var sessions []string
+	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Skip CS-managed sessions
+		if strings.HasPrefix(line, TmuxPrefix) {
+			continue
+		}
+		sessions = append(sessions, line)
+	}
+	return sessions, nil
+}
+
+// GetSessionWorkDir returns the current working directory of a tmux session's active pane.
+func GetSessionWorkDir(cmdExec cmd.Executor, sessionName string) (string, error) {
+	displayCmd := exec.Command("tmux", "display-message", "-t", sessionName, "-p", "#{pane_current_path}")
+	output, err := cmdExec.Output(displayCmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to get session working directory: %v", err)
+	}
+	return strings.TrimSpace(string(output)), nil
 }
 
 // CleanupSessions kills all tmux sessions that start with "session-"
