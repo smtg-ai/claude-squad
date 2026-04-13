@@ -702,7 +702,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
 		executor := cmd2.MakeExecutor()
-		m.importOverlay = overlay.NewImportOverlay(executor)
+		var existingTitles []string
+		for _, inst := range m.list.GetInstances() {
+			existingTitles = append(existingTitles, inst.Title)
+		}
+		m.importOverlay = overlay.NewImportOverlay(executor, existingTitles)
 		m.state = stateImport
 		return m, tea.WindowSize()
 	case keys.KeyPrompt:

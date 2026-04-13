@@ -51,18 +51,25 @@ type ImportOverlay struct {
 	height int
 
 	// Session discovery
-	cmdExec cmd.Executor
+	cmdExec  cmd.Executor
+	existing map[string]bool // titles of already-imported sessions
 }
 
 // NewImportOverlay creates a new import overlay and discovers sessions for the
-// initial source (tmux).
-func NewImportOverlay(executor cmd.Executor) *ImportOverlay {
+// initial source (tmux). existingTitles is the set of session names already
+// managed by the app, which will be excluded from the list.
+func NewImportOverlay(executor cmd.Executor, existingTitles []string) *ImportOverlay {
+	existing := make(map[string]bool, len(existingTitles))
+	for _, t := range existingTitles {
+		existing[t] = true
+	}
 	o := &ImportOverlay{
 		source:   SourceTmux,
 		numStops: 3,
 		width:    50,
 		height:   20,
 		cmdExec:  executor,
+		existing: existing,
 	}
 	o.discoverSessions()
 	return o
@@ -180,8 +187,10 @@ func (o *ImportOverlay) discoverSessions() {
 
 	switch o.source {
 	case SourceTmux:
-		// Show all non-CS sessions
 		for _, s := range allSessions {
+			if o.existing[s.Name] {
+				continue
+			}
 			o.sessions = append(o.sessions, SessionInfo{
 				Name:    s.Name,
 				WorkDir: s.WorkDir,
@@ -190,7 +199,9 @@ func (o *ImportOverlay) discoverSessions() {
 		}
 	case SourceClaudeCode:
 		for _, s := range allSessions {
-			// Check pane title (e.g. "✳ Claude Code") and command name
+			if o.existing[s.Name] {
+				continue
+			}
 			titleLower := strings.ToLower(s.PaneTitle)
 			progLower := strings.ToLower(s.Program)
 			if strings.Contains(titleLower, "claude") || strings.Contains(progLower, "claude") {
@@ -203,6 +214,9 @@ func (o *ImportOverlay) discoverSessions() {
 		}
 	case SourceCodex:
 		for _, s := range allSessions {
+			if o.existing[s.Name] {
+				continue
+			}
 			titleLower := strings.ToLower(s.PaneTitle)
 			progLower := strings.ToLower(s.Program)
 			if strings.Contains(titleLower, "codex") || strings.Contains(progLower, "codex") {
