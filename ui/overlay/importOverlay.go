@@ -3,6 +3,7 @@ package overlay
 import (
 	"claude-squad/cmd"
 	"claude-squad/session/tmux"
+	"fmt"
 	"os"
 	"strings"
 
@@ -23,9 +24,12 @@ var importSources = []string{"tmux", "claude code", "codex"}
 
 // SessionInfo holds information about a discoverable tmux session.
 type SessionInfo struct {
-	Name    string
-	WorkDir string
-	Program string
+	Name       string
+	WorkDir    string
+	Program    string
+	Standalone bool   // true if this is a non-tmux process that needs wrapping
+	PID        string // PID for standalone processes
+	Command    string // full command for standalone processes
 }
 
 // ImportOverlay is a structured overlay for importing external tmux sessions.
@@ -212,6 +216,22 @@ func (o *ImportOverlay) discoverSessions() {
 				})
 			}
 		}
+		// Also find standalone claude processes not in tmux
+		standalones, err := tmux.ListStandaloneAgents(o.cmdExec)
+		if err == nil {
+			for _, s := range standalones {
+				if s.Program == "claude" && !o.existing[s.PID] && !o.existing[s.Command] {
+					o.sessions = append(o.sessions, SessionInfo{
+						Name:       fmt.Sprintf("%s (pid:%s)", s.Command, s.PID),
+						WorkDir:    s.WorkDir,
+						Program:    s.Program,
+						Standalone: true,
+						PID:        s.PID,
+						Command:    s.Command,
+					})
+				}
+			}
+		}
 	case SourceCodex:
 		for _, s := range allSessions {
 			if o.existing[s.Name] {
@@ -225,6 +245,22 @@ func (o *ImportOverlay) discoverSessions() {
 					WorkDir: s.WorkDir,
 					Program: s.PaneTitle,
 				})
+			}
+		}
+		// Also find standalone codex processes not in tmux
+		standalones, err := tmux.ListStandaloneAgents(o.cmdExec)
+		if err == nil {
+			for _, s := range standalones {
+				if s.Program == "codex" && !o.existing[s.PID] && !o.existing[s.Command] {
+					o.sessions = append(o.sessions, SessionInfo{
+						Name:       fmt.Sprintf("%s (pid:%s)", s.Command, s.PID),
+						WorkDir:    s.WorkDir,
+						Program:    s.Program,
+						Standalone: true,
+						PID:        s.PID,
+						Command:    s.Command,
+					})
+				}
 			}
 		}
 	}
@@ -287,6 +323,9 @@ func (o *ImportOverlay) Render() string {
 		for i := start; i < end; i++ {
 			s := o.sessions[i]
 			name := s.Name
+			if s.Standalone {
+				name = s.Command + "  (standalone)"
+			}
 			dir := shortenHome(s.WorkDir)
 			if i == o.cursor && o.isList() {
 				content += ioSelectedStyle.Render("> " + name)
