@@ -17,32 +17,47 @@ https://github.com/user-attachments/assets/aef18253-e58f-4525-9032-f5a3d66c975a
 
 <br />
 
+> **Note:** This is a personal fork of [smtg-ai/claude-squad](https://github.com/smtg-ai/claude-squad), maintained because upstream development has stopped. Install from this fork rather than Homebrew or the upstream install script.
+
 ### Installation
 
-Both Homebrew and manual installation will install Claude Squad as `cs` on your system.
-
-#### Homebrew
+Install with a single command (clones the fork, builds from source, installs to `~/.local/bin`, and sets up the `cs` alias):
 
 ```bash
-brew install claude-squad
-ln -s "$(brew --prefix)/bin/claude-squad" "$(brew --prefix)/bin/cs"
+curl -fsSL https://raw.githubusercontent.com/rakesh97/claude-squad/main/install.sh | bash
 ```
 
-#### Manual
+The script installs the required dependencies (`go`, `git`, `tmux`, `gh`) via your system package manager if they're missing, caches the source tree at `~/.cache/claude-squad-src`, and builds the binary with `go build`.
 
-Claude Squad can also be installed by running the following command:
+Re-run the same command at any time to update to the latest `main`.
+
+Environment overrides:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `BIN_DIR` | `$HOME/.local/bin` | Where the binary is installed |
+| `SRC_DIR` | `$HOME/.cache/claude-squad-src` | Where the source is cached |
+| `INSTALL_NAME` | `claude-squad` | Binary name |
+| `BRANCH` | `main` | Branch to build from |
+| `NO_ALIAS` | _(unset)_ | Set to any value to skip creating the `cs` alias |
+
+Example — skip the alias and install under a custom name:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/smtg-ai/claude-squad/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/rakesh97/claude-squad/main/install.sh \
+  | NO_ALIAS=1 INSTALL_NAME=my-cs bash
 ```
 
-This puts the `cs` binary in `~/.local/bin`.
+#### Migrating from the Homebrew version
 
-To use a custom name for the binary:
+If you previously ran `brew install claude-squad`, remove it and its `cs` symlink first, otherwise the old version will shadow this one:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/smtg-ai/claude-squad/main/install.sh | bash -s -- --name <your-binary-name>
+brew uninstall claude-squad
+rm -f "$(brew --prefix)/bin/cs"
 ```
+
+Also remove any existing `alias cs=...` line from your shell rc file — the install script will add a fresh one pointing at the new binary.
 
 ### Prerequisites
 
