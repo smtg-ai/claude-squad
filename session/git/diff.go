@@ -70,24 +70,29 @@ func (g *GitWorktree) DiffNumstat() *DiffStats {
 		return stats
 	}
 
+	stats.Added, stats.Removed = parseNumstat(out)
+	return stats
+}
+
+// parseNumstat sums the added/removed columns from `git diff --numstat` output.
+// Each line is formatted as <added>\t<removed>\t<path>. Binary files report
+// "-\t-\t<path>" and are ignored for line totals.
+func parseNumstat(out string) (added int, removed int) {
 	for _, line := range strings.Split(out, "\n") {
 		if line == "" {
 			continue
 		}
-		// Each line is: <added>\t<removed>\t<path>. Binary files report "-\t-\t<path>"
-		// and are skipped for the line-count totals.
 		fields := strings.SplitN(line, "\t", 3)
 		if len(fields) < 2 {
 			continue
 		}
-		added, aerr := strconv.Atoi(fields[0])
-		removed, rerr := strconv.Atoi(fields[1])
+		a, aerr := strconv.Atoi(fields[0])
+		r, rerr := strconv.Atoi(fields[1])
 		if aerr != nil || rerr != nil {
 			continue
 		}
-		stats.Added += added
-		stats.Removed += removed
+		added += a
+		removed += r
 	}
-
-	return stats
+	return added, removed
 }
