@@ -559,6 +559,17 @@ func (i *Instance) ComputeDiff() *git.DiffStats {
 	return i.gitWorktree.Diff()
 }
 
+// ComputeDiffNumstat runs a lightweight git diff --numstat and returns only the
+// added/removed line counts (Content is left empty). Safe to call from a
+// background goroutine. Use this for instances whose full diff content is not
+// currently needed so we avoid keeping large diffs in memory.
+func (i *Instance) ComputeDiffNumstat() *git.DiffStats {
+	if !i.started || i.Status == Paused {
+		return nil
+	}
+	return i.gitWorktree.DiffNumstat()
+}
+
 // SetDiffStats sets the diff statistics on the instance. Should be called from
 // the main event loop to avoid data races with View.
 func (i *Instance) SetDiffStats(stats *git.DiffStats) {
