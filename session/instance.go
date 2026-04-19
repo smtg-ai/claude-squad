@@ -58,6 +58,11 @@ type Instance struct {
 	// selectedBranch is the existing branch to start on (empty = new branch from HEAD)
 	selectedBranch string
 
+	// spawnEnv (fork feature) is forwarded to the tmux session on Start.
+	// Used by the `cs serve` HTTP server to inject per-instance OTEL +
+	// TRACEPARENT into the agent subprocess. Empty = inherit parent env.
+	spawnEnv []string
+
 	// The below fields are initialized upon calling Start().
 
 	started bool
@@ -198,6 +203,15 @@ func (i *Instance) SetSelectedBranch(branch string) {
 	i.selectedBranch = branch
 }
 
+// SetSpawnEnv (fork feature) stores extra KEY=VALUE strings to merge
+// into the tmux/agent subprocess environment when Start() fires. Used
+// by the `cs serve` HTTP server to inject per-instance OTEL + W3C
+// TRACEPARENT so the spawned agent's spans parent under the caller's
+// trace. Call before Start(); no effect once the session is live.
+func (i *Instance) SetSpawnEnv(env []string) {
+	i.spawnEnv = env
+}
+
 // firstTimeSetup is true if this is a new instance. Otherwise, it's one loaded from storage.
 func (i *Instance) Start(firstTimeSetup bool) error {
 	if i.Title == "" {
@@ -255,6 +269,12 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		if err := i.gitWorktree.Setup(); err != nil {
 			setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
 			return setupErr
+		}
+
+		// Fork feature: forward per-instance env (OTEL/TRACEPARENT) to
+		// tmux before it spawns the program. No-op when spawnEnv is nil.
+		if len(i.spawnEnv) > 0 {
+			i.tmuxSession.SetSpawnEnv(i.spawnEnv)
 		}
 
 		// Create new session
