@@ -6,6 +6,7 @@ import (
 	"claude-squad/config"
 	"claude-squad/daemon"
 	"claude-squad/log"
+	otelpkg "claude-squad/otel"
 	"claude-squad/server"
 	"claude-squad/session"
 	"claude-squad/session/git"
@@ -162,12 +163,35 @@ var (
 				token = os.Getenv("CS_AUTH_TOKEN")
 			}
 
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// Enable OTEL tracing if Langfuse credentials are in env.
+			// Silent no-op when unset — upstream behavior preserved.
+			var otelShutdown func(context.Context) error
+			var otelCfg otelpkg.Config
+			if cfg, ok := otelpkg.ConfigFromEnv(version); ok {
+				shutdown, err := otelpkg.Init(ctx, cfg)
+				if err != nil {
+					log.ErrorLog.Printf("otel init failed: %v (continuing without tracing)", err)
+				} else {
+					otelCfg = cfg
+					otelShutdown = shutdown
+				}
+			}
+			defer func() {
+				if otelShutdown != nil {
+					_ = otelShutdown(context.Background())
+				}
+			}()
+
 			srv := server.New(server.Options{
 				Addr:      serveAddr,
 				AuthToken: token,
 				Version:   version,
+				OtelCfg:   otelCfg,
 			})
-			return srv.Serve(context.Background())
+			return srv.Serve(ctx)
 		},
 	}
 )

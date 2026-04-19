@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,8 +11,14 @@ import (
 	"strings"
 	"time"
 
+	otelpkg "claude-squad/otel"
 	"claude-squad/session"
 	"claude-squad/session/git"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // register wires up all routes on the given mux.
@@ -87,6 +94,22 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		program = "claude"
 	}
 
+	// Propagate inbound W3C trace context so the `cs.instance.*` spans
+	// parent under whatever trace the caller started. When no
+	// traceparent header is present this is a fresh root trace.
+	ctx := propagation.TraceContext{}.Extract(r.Context(),
+		propagation.HeaderCarrier(r.Header))
+	ctx, span := s.tracer.Start(ctx, "cs.instance.create",
+		trace.WithAttributes(
+			attribute.String("cs.title", req.Title),
+			attribute.String("cs.program", program),
+			attribute.String("cs.branch", req.Branch),
+			attribute.String("cs.workspace_base", basePath),
+			attribute.Bool("cs.auto_yes", req.AutoYes),
+			attribute.Bool("cs.has_prompt", req.Prompt != ""),
+		))
+	defer span.End()
+
 	inst, err := session.NewInstance(session.InstanceOptions{
 		Title:   req.Title,
 		Path:    basePath,
@@ -95,17 +118,28 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		Branch:  req.Branch,
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		writeErr(w, http.StatusBadRequest, "failed to init instance: "+err.Error())
 		return
 	}
 
-	// The OTEL layer (commit 2) overrides this no-op with a real span
-	// wrapper. For now we extract incoming trace context straight from
-	// headers so the DTO carries it.
-	traceID, spanID := extractTraceHeaders(r)
+	spanCtx := span.SpanContext()
+	traceID, spanID := spanCtx.TraceID().String(), spanCtx.SpanID().String()
+
+	// If OTEL is configured, inject the current span's W3C traceparent
+	// + the full OTEL_* + CLAUDE_CODE_ENABLE_TELEMETRY bundle into the
+	// tmux subprocess env. The agent emits its own spans as descendants
+	// of cs.instance.create. Silent no-op when keys are unset.
+	if s.opts.OtelCfg.PublicKey != "" {
+		inst.SetSpawnEnv(otelpkg.SubprocessEnv(ctx, s.opts.OtelCfg,
+			fmt.Sprintf("cs-agent-%s", shortID(spanID))))
+	}
 
 	// Start creates the worktree + tmux session.
 	if err := inst.Start(true); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		writeErr(w, http.StatusInternalServerError, "failed to start instance: "+err.Error())
 		return
 	}
@@ -117,10 +151,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		go func(prompt string, inst *session.Instance) {
 			time.Sleep(800 * time.Millisecond)
 			if err := inst.SendPrompt(prompt); err != nil {
-				// Surface but don't fail the request; the create HTTP
-				// call has already returned.
-				pushEvent := s.bus.publish
-				pushEvent("instance.prompt_send_failed", "",
+				s.bus.publish("instance.prompt_send_failed", "",
 					map[string]string{"error": err.Error()})
 			}
 		}(req.Prompt, inst)
@@ -131,12 +162,35 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		"title":   m.Instance.Title,
 		"program": m.Instance.Program,
 		"branch":  m.Instance.Branch,
+		"traceId": traceID,
 	})
 	s.bus.publish(EventInstanceStarted, m.ID, map[string]string{
 		"worktreePath": inst.GetWorktreePath(),
 	})
+	span.SetAttributes(
+		attribute.String("cs.instance_id", m.ID),
+		attribute.String("cs.worktree_path", inst.GetWorktreePath()),
+	)
 
 	writeJSON(w, http.StatusCreated, toDTO(m))
+}
+
+// shortID returns the first 8 chars of a hex span id for readable
+// service.name suffixes on agent subprocesses.
+func shortID(s string) string {
+	if len(s) > 8 {
+		return s[:8]
+	}
+	return s
+}
+
+// quickSpan wraps a small synchronous handler body in an OTEL span
+// parented to whatever trace context the request carried. Used for
+// pause/resume/kill/diff where span attribution is cheap.
+func (s *Server) quickSpan(r *http.Request, name string, attrs ...attribute.KeyValue) (context.Context, trace.Span) {
+	ctx := propagation.TraceContext{}.Extract(r.Context(),
+		propagation.HeaderCarrier(r.Header))
+	return s.tracer.Start(ctx, name, trace.WithAttributes(attrs...))
 }
 
 // -------- /v1/instances/:id/... (per-instance operations) --------
@@ -252,8 +306,13 @@ func (s *Server) handleInput(w http.ResponseWriter, r *http.Request, m *managed)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
 }
 
-func (s *Server) handlePause(w http.ResponseWriter, _ *http.Request, m *managed) {
+func (s *Server) handlePause(w http.ResponseWriter, r *http.Request, m *managed) {
+	_, span := s.quickSpan(r, "cs.instance.pause",
+		attribute.String("cs.instance_id", m.ID))
+	defer span.End()
 	if err := m.Instance.Pause(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -261,8 +320,13 @@ func (s *Server) handlePause(w http.ResponseWriter, _ *http.Request, m *managed)
 	writeJSON(w, http.StatusOK, toDTO(m))
 }
 
-func (s *Server) handleResume(w http.ResponseWriter, _ *http.Request, m *managed) {
+func (s *Server) handleResume(w http.ResponseWriter, r *http.Request, m *managed) {
+	_, span := s.quickSpan(r, "cs.instance.resume",
+		attribute.String("cs.instance_id", m.ID))
+	defer span.End()
 	if err := m.Instance.Resume(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -270,8 +334,13 @@ func (s *Server) handleResume(w http.ResponseWriter, _ *http.Request, m *managed
 	writeJSON(w, http.StatusOK, toDTO(m))
 }
 
-func (s *Server) handleKill(w http.ResponseWriter, _ *http.Request, m *managed) {
+func (s *Server) handleKill(w http.ResponseWriter, r *http.Request, m *managed) {
+	_, span := s.quickSpan(r, "cs.instance.kill",
+		attribute.String("cs.instance_id", m.ID))
+	defer span.End()
 	if err := m.Instance.Kill(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}

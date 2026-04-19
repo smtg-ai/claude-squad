@@ -12,6 +12,9 @@ import (
 	"time"
 
 	"claude-squad/log"
+	otelpkg "claude-squad/otel"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Options configures the HTTP server.
@@ -24,6 +27,11 @@ type Options struct {
 	AuthToken string
 	// Version is echoed in the /v1/health response.
 	Version string
+	// OtelCfg, when its PublicKey + SecretKey are non-empty, activates
+	// per-instance OTEL span emission + TRACEPARENT injection into the
+	// spawned agent subprocess. Empty = tracing disabled (handlers
+	// still work, just without instrumentation).
+	OtelCfg otelpkg.Config
 }
 
 // Server is the runtime wrapper.
@@ -32,6 +40,7 @@ type Server struct {
 	store   *store
 	bus     *eventBus
 	httpSrv *http.Server
+	tracer  trace.Tracer
 }
 
 // New constructs a server but does not bind the socket. Call Serve().
@@ -43,9 +52,10 @@ func New(opts Options) *Server {
 		opts.Version = "unknown"
 	}
 	s := &Server{
-		opts:  opts,
-		store: newStore(),
-		bus:   newEventBus(),
+		opts:   opts,
+		store:  newStore(),
+		bus:    newEventBus(),
+		tracer: otelpkg.TracerFor(otelpkg.ServiceName),
 	}
 	mux := http.NewServeMux()
 	s.register(mux)
@@ -85,8 +95,8 @@ func (s *Server) Serve(ctx context.Context) error {
 	return s.httpSrv.Shutdown(shutdownCtx)
 }
 
-// Bus returns the server's event bus so the OTEL layer (commit 2) can
-// subscribe to lifecycle events and open/close spans accordingly.
+// Bus returns the server's event bus so future code can subscribe to
+// lifecycle events without routing them through HTTP.
 func (s *Server) Bus() *eventBus { return s.bus }
 
 // -------- middleware --------
