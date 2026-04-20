@@ -458,13 +458,13 @@ func (i *Instance) Pause() error {
 		}
 	}
 
+	i.SetStatus(Paused)
+	_ = clipboard.WriteAll(i.gitWorktree.GetBranchName())
+
 	if err := i.combineErrors(errs); err != nil {
 		log.ErrorLog.Print(err)
 		return err
 	}
-
-	i.SetStatus(Paused)
-	_ = clipboard.WriteAll(i.gitWorktree.GetBranchName())
 	return nil
 }
 
