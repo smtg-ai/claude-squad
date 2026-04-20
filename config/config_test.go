@@ -106,6 +106,7 @@ func TestDefaultConfig(t *testing.T) {
 		assert.NotEmpty(t, config.DefaultProgram)
 		assert.False(t, config.AutoYes)
 		assert.Equal(t, 1000, config.DaemonPollInterval)
+		assert.Equal(t, DefaultMaxInstances, config.MaxInstances)
 		assert.NotEmpty(t, config.BranchPrefix)
 		assert.True(t, strings.HasSuffix(config.BranchPrefix, "/"))
 	})
@@ -172,6 +173,50 @@ func TestLoadConfig(t *testing.T) {
 		assert.True(t, config.AutoYes)
 		assert.Equal(t, 2000, config.DaemonPollInterval)
 		assert.Equal(t, "test/", config.BranchPrefix)
+	})
+
+	t.Run("defaults max_instances when not set in config file", func(t *testing.T) {
+		tempHome := t.TempDir()
+		configDir := filepath.Join(tempHome, ".claude-squad")
+		err := os.MkdirAll(configDir, 0755)
+		require.NoError(t, err)
+
+		configPath := filepath.Join(configDir, ConfigFileName)
+		configContent := `{
+			"default_program": "claude",
+			"auto_yes": false
+		}`
+		err = os.WriteFile(configPath, []byte(configContent), 0644)
+		require.NoError(t, err)
+
+		originalHome := os.Getenv("HOME")
+		os.Setenv("HOME", tempHome)
+		defer os.Setenv("HOME", originalHome)
+
+		config := LoadConfig()
+		assert.Equal(t, DefaultMaxInstances, config.MaxInstances)
+	})
+
+	t.Run("respects custom max_instances", func(t *testing.T) {
+		tempHome := t.TempDir()
+		configDir := filepath.Join(tempHome, ".claude-squad")
+		err := os.MkdirAll(configDir, 0755)
+		require.NoError(t, err)
+
+		configPath := filepath.Join(configDir, ConfigFileName)
+		configContent := `{
+			"default_program": "claude",
+			"max_instances": 25
+		}`
+		err = os.WriteFile(configPath, []byte(configContent), 0644)
+		require.NoError(t, err)
+
+		originalHome := os.Getenv("HOME")
+		os.Setenv("HOME", tempHome)
+		defer os.Setenv("HOME", originalHome)
+
+		config := LoadConfig()
+		assert.Equal(t, 25, config.MaxInstances)
 	})
 
 	t.Run("returns default config on invalid JSON", func(t *testing.T) {

@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	ConfigFileName = "config.json"
-	defaultProgram = "claude"
+	ConfigFileName      = "config.json"
+	defaultProgram      = "claude"
+	DefaultMaxInstances = 10
 )
 
 // GetConfigDir returns the path to the application's configuration directory
@@ -44,6 +45,8 @@ type Config struct {
 	BranchPrefix string `json:"branch_prefix"`
 	// Profiles is a list of named program profiles.
 	Profiles []Profile `json:"profiles,omitempty"`
+	// MaxInstances is the maximum number of instances that can be open at the same time.
+	MaxInstances int `json:"max_instances"`
 }
 
 // GetProgram returns the program to run. If Profiles is non-empty and
@@ -93,6 +96,7 @@ func DefaultConfig() *Config {
 		DefaultProgram:     program,
 		AutoYes:            false,
 		DaemonPollInterval: 1000,
+		MaxInstances:       DefaultMaxInstances,
 		BranchPrefix: func() string {
 			user, err := user.Current()
 			if err != nil || user == nil || user.Username == "" {
@@ -179,6 +183,10 @@ func LoadConfig() *Config {
 	if err := json.Unmarshal(data, &config); err != nil {
 		log.ErrorLog.Printf("failed to parse config file: %v", err)
 		return DefaultConfig()
+	}
+
+	if config.MaxInstances <= 0 {
+		config.MaxInstances = DefaultMaxInstances
 	}
 
 	return &config
