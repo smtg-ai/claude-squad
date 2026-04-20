@@ -53,9 +53,15 @@ var autoYesStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("#dde4f0")).
 	Foreground(lipgloss.Color("#1a1a1a"))
 
+type listRenderedItem struct {
+	text  string
+	lines int
+}
+
 type List struct {
 	items         []*session.Instance
 	selectedIdx   int
+	scrollOffset  int
 	height, width int
 	renderer      *InstanceRenderer
 	autoyes       bool
@@ -252,14 +258,107 @@ func (l *List) String() string {
 	b.WriteString("\n")
 	b.WriteString("\n")
 
-	// Render the list.
+	// Header: 2 newlines + title line + 2 newlines = 4 lines consumed before items.
+	headerLines := 4
+
+	// Available lines for list items.
+	availableLines := l.height - headerLines
+	if availableLines < 1 {
+		availableLines = 1
+	}
+
+	// Render all items and measure their line heights (without separator).
+	rendered := make([]listRenderedItem, len(l.items))
 	for i, item := range l.items {
-		b.WriteString(l.renderer.Render(item, i+1, i == l.selectedIdx, len(l.repos) > 1))
-		if i != len(l.items)-1 {
+		text := l.renderer.Render(item, i+1, i == l.selectedIdx, len(l.repos) > 1)
+		lineCount := strings.Count(text, "\n") + 1
+		rendered[i] = listRenderedItem{text: text, lines: lineCount}
+	}
+	// Adjust scroll offset to keep the selected item visible.
+	l.adjustScrollOffset(rendered, availableLines)
+
+	// Render only items that fit within the viewport.
+	// Note: "\n\n" between items adds 2 newline chars but only 1 visible line,
+	// because the first \n terminates the previous item's last line.
+	linesUsed := 0
+	lastVisible := l.scrollOffset
+	for i := l.scrollOffset; i < len(rendered); i++ {
+		needed := rendered[i].lines
+		if i > l.scrollOffset {
+			needed += 1 // separator "\n\n" adds 1 empty line between items
+		}
+		if linesUsed+needed > availableLines && i > l.scrollOffset {
+			break
+		}
+		lastVisible = i
+		linesUsed += needed
+	}
+	for i := l.scrollOffset; i <= lastVisible; i++ {
+		b.WriteString(rendered[i].text)
+		if i != lastVisible {
 			b.WriteString("\n\n")
 		}
 	}
+
 	return lipgloss.Place(l.width, l.height, lipgloss.Left, lipgloss.Top, b.String())
+}
+
+// clampScrollOffset reduces the scroll offset so that the last item aligns
+// with the bottom of the viewport (no trailing empty space).
+func (l *List) clampScrollOffset() {
+	if l.scrollOffset <= 0 || len(l.items) == 0 {
+		return
+	}
+	// Each item is approximately 4 lines; separator adds 1 line between items.
+	// Use the same headerLines constant as String().
+	headerLines := 4
+	availableLines := l.height - headerLines
+	if availableLines < 1 {
+		return
+	}
+
+	for l.scrollOffset > 0 {
+		// Calculate total lines from scrollOffset to end.
+		linesUsed := 0
+		for i := l.scrollOffset; i < len(l.items); i++ {
+			lines := 4 // approximate item height
+			if i > l.scrollOffset {
+				lines += 1 // separator
+			}
+			linesUsed += lines
+		}
+		if linesUsed >= availableLines {
+			break
+		}
+		l.scrollOffset--
+	}
+}
+
+// adjustScrollOffset ensures the selected item is visible within the viewport.
+func (l *List) adjustScrollOffset(rendered []listRenderedItem, availableLines int) {
+	if len(rendered) == 0 {
+		return
+	}
+
+	// If selected is above the scroll offset, scroll up.
+	if l.selectedIdx < l.scrollOffset {
+		l.scrollOffset = l.selectedIdx
+		return
+	}
+
+	// If selected is below the visible area, scroll down.
+	linesUsed := 0
+	for i := l.scrollOffset; i <= l.selectedIdx && i < len(rendered); i++ {
+		needed := rendered[i].lines
+		if i > l.scrollOffset {
+			needed += 1 // separator adds 1 empty line
+		}
+		linesUsed += needed
+	}
+	for linesUsed > availableLines && l.scrollOffset < l.selectedIdx {
+		linesUsed -= rendered[l.scrollOffset].lines + 1 // remove item + its trailing separator
+		l.scrollOffset++
+	}
 }
 
 // Down selects the next item in the list.
@@ -299,6 +398,12 @@ func (l *List) Kill() {
 
 	// Since there's items after this, the selectedIdx can stay the same.
 	l.items = append(l.items[:l.selectedIdx], l.items[l.selectedIdx+1:]...)
+
+	// Adjust scroll offset so there's no empty space at the bottom after deletion.
+	if l.scrollOffset > 0 && l.scrollOffset >= len(l.items) {
+		l.scrollOffset = len(l.items) - 1
+	}
+	l.clampScrollOffset()
 }
 
 func (l *List) Attach() (chan struct{}, error) {
