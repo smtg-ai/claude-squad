@@ -377,6 +377,26 @@ func (l *List) SelectInstance(target *session.Instance) {
 	}
 }
 
+// MoveUp swaps the selected instance with the one above it.
+func (l *List) MoveUp() bool {
+	if l.selectedIdx <= 0 || len(l.items) < 2 {
+		return false
+	}
+	l.items[l.selectedIdx], l.items[l.selectedIdx-1] = l.items[l.selectedIdx-1], l.items[l.selectedIdx]
+	l.selectedIdx--
+	return true
+}
+
+// MoveDown swaps the selected instance with the one below it.
+func (l *List) MoveDown() bool {
+	if l.selectedIdx >= len(l.items)-1 || len(l.items) < 2 {
+		return false
+	}
+	l.items[l.selectedIdx], l.items[l.selectedIdx+1] = l.items[l.selectedIdx+1], l.items[l.selectedIdx]
+	l.selectedIdx++
+	return true
+}
+
 // GetInstances returns all instances in the list
 func (l *List) GetInstances() []*session.Instance {
 	return l.items
