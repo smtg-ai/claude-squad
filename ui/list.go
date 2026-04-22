@@ -269,6 +269,8 @@ func (l *List) Down() {
 	}
 	if l.selectedIdx < len(l.items)-1 {
 		l.selectedIdx++
+	} else {
+		l.selectedIdx = 0
 	}
 }
 
@@ -313,6 +315,8 @@ func (l *List) Up() {
 	}
 	if l.selectedIdx > 0 {
 		l.selectedIdx--
+	} else {
+		l.selectedIdx = len(l.items) - 1
 	}
 }
 
