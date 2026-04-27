@@ -101,6 +101,11 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// pendingMsg holds a tea.Msg produced by a confirmation action while a
+	// modal is closing. handleKeyPress drains it back into the event loop
+	// when the overlay dismisses, so action results (errors, refresh
+	// signals) are not lost between the OnConfirm callback and Update.
+	pendingMsg tea.Msg
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -566,6 +571,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if shouldClose {
 			m.state = stateDefault
 			m.confirmationOverlay = nil
+			if m.pendingMsg != nil {
+				pending := m.pendingMsg
+				m.pendingMsg = nil
+				return m, func() tea.Msg { return pending }
+			}
 			return m, nil
 		}
 		return m, nil
@@ -1003,7 +1013,7 @@ func (m *home) confirmAction(message string, action tea.Cmd) tea.Cmd {
 		m.state = stateDefault
 		// Execute the action if it exists
 		if action != nil {
-			_ = action()
+			m.pendingMsg = action()
 		}
 	}
 
