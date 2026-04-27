@@ -755,7 +755,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if err := selected.Resume(); err != nil {
 			return m, m.handleError(err)
 		}
-		return m, tea.WindowSize()
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
 	case keys.KeyEnter:
 		if m.list.NumInstances() == 0 {
 			return m, nil
