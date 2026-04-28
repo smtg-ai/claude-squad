@@ -432,6 +432,11 @@ func (i *Instance) Pause() error {
 			errs = append(errs, fmt.Errorf("failed to detach tmux session: %w", err))
 			log.ErrorLog.Print(err)
 		}
+		// Drop any leftover directory so a future Resume's `git worktree add` won't conflict.
+		if err := os.RemoveAll(i.gitWorktree.GetWorktreePath()); err != nil {
+			errs = append(errs, fmt.Errorf("failed to remove orphaned worktree directory: %w", err))
+			log.ErrorLog.Print(err)
+		}
 		if err := i.gitWorktree.Prune(); err != nil {
 			errs = append(errs, fmt.Errorf("failed to prune git worktrees: %w", err))
 			log.ErrorLog.Print(err)
