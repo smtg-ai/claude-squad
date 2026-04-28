@@ -3,7 +3,9 @@ package git
 import (
 	"claude-squad/log"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -155,6 +157,25 @@ func (g *GitWorktree) IsDirty() (bool, error) {
 		return false, fmt.Errorf("failed to check worktree status: %w", err)
 	}
 	return len(output) > 0, nil
+}
+
+// IsValidWorktree reports whether the worktree path exists and contains a
+// .git entry, i.e. git can still recognize it as a working tree.
+// Returns (false, nil) if the worktree is orphaned (path or .git missing).
+func (g *GitWorktree) IsValidWorktree() (bool, error) {
+	if _, err := os.Stat(g.worktreePath); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to stat worktree path: %w", err)
+	}
+	if _, err := os.Stat(filepath.Join(g.worktreePath, ".git")); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to stat worktree .git: %w", err)
+	}
+	return true, nil
 }
 
 // IsBranchCheckedOut checks if the instance branch is currently checked out
