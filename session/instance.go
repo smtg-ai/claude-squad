@@ -419,6 +419,28 @@ func (i *Instance) Pause() error {
 
 	var errs []error
 
+	// If the worktree is orphaned (path or .git missing), git cannot operate
+	// on it. Skip dirty check and Remove, prune any lingering metadata, then
+	// transition to Paused so the user can recover via Resume.
+	if valid, err := i.gitWorktree.IsValidWorktree(); err != nil {
+		errs = append(errs, fmt.Errorf("failed to validate worktree: %w", err))
+		log.ErrorLog.Print(err)
+	} else if !valid {
+		log.WarningLog.Printf("worktree at %s is orphaned; skipping dirty check and remove",
+			i.gitWorktree.GetWorktreePath())
+		if err := i.tmuxSession.DetachSafely(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to detach tmux session: %w", err))
+			log.ErrorLog.Print(err)
+		}
+		if err := i.gitWorktree.Prune(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to prune git worktrees: %w", err))
+			log.ErrorLog.Print(err)
+		}
+		i.SetStatus(Paused)
+		_ = clipboard.WriteAll(i.gitWorktree.GetBranchName())
+		return i.combineErrors(errs)
+	}
+
 	// Check if there are any changes to commit
 	if dirty, err := i.gitWorktree.IsDirty(); err != nil {
 		errs = append(errs, fmt.Errorf("failed to check if worktree is dirty: %w", err))
