@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -22,6 +23,7 @@ var (
 	programFlag string
 	autoYesFlag bool
 	daemonFlag  bool
+	binName     string
 	rootCmd     = &cobra.Command{
 		Use:   "claude-squad",
 		Short: "Claude Squad - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.",
@@ -44,7 +46,7 @@ var (
 			}
 
 			if !git.IsGitRepo(currentDir) {
-				return fmt.Errorf("error: claude-squad must be run from within a git repository")
+				return fmt.Errorf("error: %s must be run from within a git repository", binName)
 			}
 
 			cfg := config.LoadConfig()
@@ -135,9 +137,9 @@ var (
 
 	versionCmd = &cobra.Command{
 		Use:   "version",
-		Short: "Print the version number of claude-squad",
+		Short: "Print the version number",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("claude-squad version %s\n", version)
+			fmt.Printf("%s version %s\n", binName, version)
 			fmt.Printf("https://github.com/smtg-ai/claude-squad/releases/tag/v%s\n", version)
 		},
 	}
@@ -163,6 +165,10 @@ func init() {
 }
 
 func main() {
+	// Extract the binary name from how this was invoked
+	binName = filepath.Base(os.Args[0])
+	rootCmd.Use = binName
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 	}
