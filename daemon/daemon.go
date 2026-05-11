@@ -14,23 +14,33 @@ import (
 	"time"
 )
 
-// RunDaemon runs the daemon process which iterates over all sessions and runs AutoYes mode on them.
+// DaemonWorkspaceEnv is the env var the parent process sets to tell the daemon
+// which workspace it's scoped to.
+const DaemonWorkspaceEnv = "CS_DAEMON_WORKSPACE"
+
+// RunDaemon runs the daemon process which iterates over sessions and runs AutoYes mode on them.
+// If workspaceID is non-empty, the daemon only handles instances belonging to that workspace.
 // It's expected that the main process kills the daemon when the main process starts.
-func RunDaemon(cfg *config.Config) error {
-	log.InfoLog.Printf("starting daemon")
+func RunDaemon(cfg *config.Config, workspaceID string) error {
+	log.InfoLog.Printf("starting daemon (workspace=%q)", workspaceID)
 	state := config.LoadState()
 	storage, err := session.NewStorage(state)
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage: %w", err)
 	}
 
-	instances, err := storage.LoadInstances()
+	allInstances, err := storage.LoadInstances()
 	if err != nil {
 		return fmt.Errorf("failed to load instacnes: %w", err)
 	}
-	for _, instance := range instances {
+	var instances []*session.Instance
+	for _, inst := range allInstances {
+		if workspaceID != "" && inst.WorkspaceID != workspaceID {
+			continue
+		}
 		// Assume AutoYes is true if the daemon is running.
-		instance.AutoYes = true
+		inst.AutoYes = true
+		instances = append(instances, inst)
 	}
 
 	pollInterval := time.Duration(cfg.DaemonPollInterval) * time.Millisecond
@@ -81,14 +91,57 @@ func RunDaemon(cfg *config.Config) error {
 	close(stopCh)
 	wg.Wait()
 
-	if err := storage.SaveInstances(instances); err != nil {
+	// Save back, merging our (workspace-filtered) slice into the full list so
+	// we don't clobber instances owned by other workspaces' daemons.
+	if err := saveMerged(storage, allInstances, instances); err != nil {
 		log.ErrorLog.Printf("failed to save instances when terminating daemon: %v", err)
 	}
 	return nil
 }
 
-// LaunchDaemon launches the daemon process.
-func LaunchDaemon() error {
+func saveMerged(storage *session.Storage, all, scoped []*session.Instance) error {
+	byTitle := make(map[string]*session.Instance, len(scoped))
+	for _, inst := range scoped {
+		byTitle[inst.Title] = inst
+	}
+	out := make([]*session.Instance, len(all))
+	for i, inst := range all {
+		if updated, ok := byTitle[inst.Title]; ok {
+			out[i] = updated
+		} else {
+			out[i] = inst
+		}
+	}
+	return storage.SaveInstances(out)
+}
+
+// pidFilePath returns the PID file path for a given workspace. Empty workspaceID
+// uses the legacy global location for back-compat.
+func pidFilePath(workspaceID string) (string, error) {
+	if workspaceID == "" {
+		dir, err := config.GetConfigDir()
+		if err != nil {
+			return "", err
+		}
+		return filepath.Join(dir, "daemon.pid"), nil
+	}
+	reg := config.LoadWorkspaceRegistry()
+	ws := reg.Get(workspaceID)
+	if ws == nil {
+		return "", fmt.Errorf("workspace %s not found", workspaceID)
+	}
+	wsDir, err := ws.Dir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(wsDir, 0755); err != nil {
+		return "", err
+	}
+	return filepath.Join(wsDir, "daemon.pid"), nil
+}
+
+// LaunchDaemon launches a daemon process scoped to the given workspace.
+func LaunchDaemon(workspaceID string) error {
 	// Find the claude squad binary.
 	execPath, err := os.Executable()
 	if err != nil {
@@ -96,6 +149,8 @@ func LaunchDaemon() error {
 	}
 
 	cmd := exec.Command(execPath, "--daemon")
+	// Pass workspace id to the child via env so RunDaemon can scope itself.
+	cmd.Env = append(os.Environ(), DaemonWorkspaceEnv+"="+workspaceID)
 
 	// Detach the process from the parent
 	cmd.Stdin = nil
@@ -109,32 +164,35 @@ func LaunchDaemon() error {
 		return fmt.Errorf("failed to start child process: %w", err)
 	}
 
-	log.InfoLog.Printf("started daemon child process with PID: %d", cmd.Process.Pid)
+	log.InfoLog.Printf("started daemon child process (workspace=%q) with PID: %d", workspaceID, cmd.Process.Pid)
 
-	// Save PID to a file for later management
-	pidDir, err := config.GetConfigDir()
+	pidFile, err := pidFilePath(workspaceID)
 	if err != nil {
-		return fmt.Errorf("failed to get config directory: %w", err)
+		return err
 	}
-
-	pidFile := filepath.Join(pidDir, "daemon.pid")
 	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", cmd.Process.Pid)), 0644); err != nil {
 		return fmt.Errorf("failed to write PID file: %w", err)
 	}
 
-	// Don't wait for the child to exit, it's detached
 	return nil
 }
 
-// StopDaemon attempts to stop a running daemon process if it exists. Returns no error if the daemon is not found
-// (assumes the daemon does not exist).
-func StopDaemon() error {
-	pidDir, err := config.GetConfigDir()
+// StopDaemon stops the workspace's daemon if it exists. No error if the PID file is missing.
+func StopDaemon(workspaceID string) error {
+	pidFile, err := pidFilePath(workspaceID)
 	if err != nil {
-		return fmt.Errorf("failed to get config directory: %w", err)
+		return err
 	}
+	return stopAtPidFile(pidFile)
+}
 
-	pidFile := filepath.Join(pidDir, "daemon.pid")
+// StopLegacyDaemon stops a pre-workspace daemon (pid file at ~/.claude-squad/daemon.pid).
+// Called once during upgrade so we don't leave the old daemon orphaned.
+func StopLegacyDaemon() error {
+	return StopDaemon("")
+}
+
+func stopAtPidFile(pidFile string) error {
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -157,7 +215,6 @@ func StopDaemon() error {
 		return fmt.Errorf("failed to stop daemon process: %w", err)
 	}
 
-	// Clean up PID file
 	if err := os.Remove(pidFile); err != nil {
 		return fmt.Errorf("failed to remove PID file: %w", err)
 	}

@@ -22,7 +22,7 @@ func newMockTmuxSession(t *testing.T, name string, cmdExec cmd_test.MockCmdExec)
 		t:       t,
 		cmdExec: cmdExec,
 	}
-	return tmux.NewTmuxSessionWithDeps(name, "bash", ptyFactory, cmdExec)
+	return tmux.NewTmuxSessionWithDeps(name, "bash", "", ptyFactory, cmdExec)
 }
 
 // mockCmdExec returns a MockCmdExec that simulates a working tmux session.
@@ -97,7 +97,7 @@ func makeStartedInstance(t *testing.T, title string) *session.Instance {
 		t:       t,
 		cmdExec: cmdExec,
 	}
-	tmuxSession := tmux.NewTmuxSessionWithDeps(sessionName, "bash", ptyFactory, cmdExec)
+	tmuxSession := tmux.NewTmuxSessionWithDeps(sessionName, "bash", "", ptyFactory, cmdExec)
 	instance.SetTmuxSession(tmuxSession)
 
 	err = instance.Start(true)

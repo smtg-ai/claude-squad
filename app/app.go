@@ -11,6 +11,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -24,9 +26,9 @@ import (
 const GlobalInstanceLimit = 10
 
 // Run is the main entrypoint into the application.
-func Run(ctx context.Context, program string, autoYes bool) error {
+func Run(ctx context.Context, program string, autoYes bool, workspaceID string) error {
 	p := tea.NewProgram(
-		newHome(ctx, program, autoYes),
+		newHome(ctx, program, autoYes, workspaceID),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(), // Mouse scroll
 	)
@@ -46,6 +48,8 @@ const (
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
+	// stateAddWorkspace is the state while the "add workspace" overlay is open.
+	stateAddWorkspace
 )
 
 type home struct {
@@ -83,6 +87,9 @@ type home struct {
 	// startingInstance holds a reference to the instance being started in the background.
 	startingInstance *session.Instance
 
+	// workspaceID is the active workspace; new instances inherit it.
+	workspaceID string
+
 	// -- UI Components --
 
 	// list displays the list of instances
@@ -103,7 +110,224 @@ type home struct {
 	confirmationOverlay *overlay.ConfirmationOverlay
 }
 
-func newHome(ctx context.Context, program string, autoYes bool) *home {
+// nextWorkspace returns the workspace that should follow the currently-active one
+// when the user presses W. Returns nil if there's only one (or zero) workspaces
+// registered, in which case the key is a no-op.
+func (m *home) nextWorkspace() *config.Workspace {
+	reg := config.LoadWorkspaceRegistry()
+	if len(reg.Workspaces) < 2 {
+		return nil
+	}
+	idx := -1
+	for i, w := range reg.Workspaces {
+		if w.ID == m.workspaceID {
+			idx = i
+			break
+		}
+	}
+	next := reg.Workspaces[(idx+1)%len(reg.Workspaces)]
+	return &next
+}
+
+// sessionPath returns the git-repo path a new session should be rooted at.
+// When an active workspace is set we use its registered RepoPath (so cs-edge
+// can be launched anywhere — cwd doesn't have to be the repo). When no
+// workspace is active, we fall back to "." (the current behavior); the caller
+// should refuse to create a session in that case via requireWorkspace.
+func (m *home) sessionPath() string {
+	if m.workspaceID == "" {
+		return "."
+	}
+	reg := config.LoadWorkspaceRegistry()
+	if ws := reg.Get(m.workspaceID); ws != nil && ws.RepoPath != "" {
+		return ws.RepoPath
+	}
+	return "."
+}
+
+// requireWorkspace returns an error tea.Cmd suitable for refusing a new-session
+// action when no workspace is active. Returns nil if a workspace is set.
+func (m *home) requireWorkspace() tea.Cmd {
+	if m.workspaceID != "" {
+		return nil
+	}
+	return m.handleError(fmt.Errorf("no active workspace — press A to add one or W to switch into an existing one"))
+}
+
+// addWorkspaceFromPath handles a path the user typed into the Add-Workspace
+// overlay. It DTRTs across three cases:
+//   - path doesn't exist → mkdir -p, git init, empty initial commit
+//   - path exists but isn't a git repo → return a helpful error (we don't
+//     mutate existing directories implicitly)
+//   - path exists and is a git repo → register and switch to it
+//
+// On success the new workspace becomes the active one.
+func (m *home) addWorkspaceFromPath(rawPath string) error {
+	rawPath = strings.TrimSpace(rawPath)
+	if rawPath == "" {
+		return fmt.Errorf("path is empty")
+	}
+	if strings.HasPrefix(rawPath, "~") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("expand ~: %w", err)
+		}
+		rawPath = filepath.Join(home, rawPath[1:])
+	}
+	abs, err := filepath.Abs(rawPath)
+	if err != nil {
+		return fmt.Errorf("resolve path: %w", err)
+	}
+
+	info, err := os.Stat(abs)
+	switch {
+	case os.IsNotExist(err):
+		if err := os.MkdirAll(abs, 0755); err != nil {
+			return fmt.Errorf("mkdir: %w", err)
+		}
+		if out, err := exec.Command("git", "-C", abs, "init", "-q").CombinedOutput(); err != nil {
+			return fmt.Errorf("git init: %w\n%s", err, out)
+		}
+	case err != nil:
+		return fmt.Errorf("stat %s: %w", abs, err)
+	case !info.IsDir():
+		return fmt.Errorf("%s is not a directory", abs)
+	case !git.IsGitRepo(abs):
+		return fmt.Errorf("%s exists but isn't a git repository — `git init` it first or pick a different path", abs)
+	}
+
+	// cs creates worktrees off HEAD; a freshly-init'd repo has no commits and
+	// `git worktree add` fails. Plant an empty initial commit if needed — works
+	// regardless of whether we created the repo ourselves or the user did.
+	if err := exec.Command("git", "-C", abs, "rev-parse", "HEAD").Run(); err != nil {
+		if out, err := exec.Command("git", "-C", abs, "commit", "-q", "--allow-empty", "-m", "Initial commit").CombinedOutput(); err != nil {
+			return fmt.Errorf("initial commit: %w\n%s", err, out)
+		}
+	}
+
+	canonical, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		canonical = abs
+	}
+	reg := config.LoadWorkspaceRegistry()
+	ws, err := reg.EnsureWorkspace(canonical, git.FirstRemoteURL(canonical))
+	if err != nil {
+		return fmt.Errorf("register workspace: %w", err)
+	}
+
+	m.workspaceID = ws.ID
+	m.list.SetActiveWorkspace(ws.DisplayName)
+	m.list.SetActiveWorkspaceID(ws.ID)
+	return nil
+}
+
+// resolveWorkspaceProgram returns the program command and profile name a new
+// session in the active workspace should use. If the active workspace defines
+// any profiles, the first one is treated as the workspace default; otherwise
+// the caller's launch-time program (m.program) is used and the profile name
+// is empty.
+func (m *home) resolveWorkspaceProgram() (program, profileName string) {
+	program = m.program
+	if m.workspaceID == "" {
+		return
+	}
+	reg := config.LoadWorkspaceRegistry()
+	ws := reg.Get(m.workspaceID)
+	if ws == nil || len(ws.Profiles) == 0 {
+		return
+	}
+	return ws.Profiles[0].Program, ws.Profiles[0].Name
+}
+
+// cycleViewFilter advances the view filter through "All → ws1 → ws2 → ... → All"
+// in the exact same order the tab bar renders (registry order, then any orphan
+// workspace ids that exist only as instance metadata). Each non-All stop ALSO
+// sets the active workspace, so new sessions land in whatever you're looking at.
+// On "All", the active workspace is left untouched.
+func (m *home) cycleViewFilter() string {
+	candidates := m.tabOrderIDs()
+	if len(candidates) == 0 {
+		m.list.SetViewFilter("")
+		return "All"
+	}
+	current := m.list.GetViewFilter()
+	switch {
+	case current == "":
+		m.applyWorkspaceFocus(candidates[0])
+		return m.labelForFilter(candidates[0])
+	default:
+		for i, id := range candidates {
+			if id == current {
+				if i+1 < len(candidates) {
+					m.applyWorkspaceFocus(candidates[i+1])
+					return m.labelForFilter(candidates[i+1])
+				}
+				// Cycled past the last workspace — back to All.
+				m.list.SetViewFilter("")
+				return "All"
+			}
+		}
+		// Current filter has disappeared (e.g. user removed the workspace
+		// while filtered to it). Reset to All so the next press picks
+		// something valid.
+		m.list.SetViewFilter("")
+		return "All"
+	}
+}
+
+// applyWorkspaceFocus updates both the view filter and the active workspace
+// (i.e. the "new sessions land here" target) in one shot. Used by V so cycling
+// the view and switching the new-session target stay aligned.
+func (m *home) applyWorkspaceFocus(id string) {
+	m.list.SetViewFilter(id)
+	m.workspaceID = id
+	reg := config.LoadWorkspaceRegistry()
+	if ws := reg.Get(id); ws != nil {
+		m.list.SetActiveWorkspace(ws.DisplayName)
+		m.list.SetActiveWorkspaceID(ws.ID)
+	} else {
+		m.list.SetActiveWorkspace("(unknown workspace)")
+		m.list.SetActiveWorkspaceID(id)
+	}
+}
+
+// tabOrderIDs returns workspace ids in the same order the tab bar renders
+// them: registry order first, then orphan ids (instances whose workspace was
+// removed from the registry). Shared with the List so the cycle highlight
+// always advances in the visual direction of the tabs.
+func (m *home) tabOrderIDs() []string {
+	reg := config.LoadWorkspaceRegistry()
+	seen := map[string]struct{}{}
+	var ids []string
+	for _, w := range reg.Workspaces {
+		seen[w.ID] = struct{}{}
+		ids = append(ids, w.ID)
+	}
+	for _, inst := range m.list.GetInstances() {
+		if _, ok := seen[inst.WorkspaceID]; ok {
+			continue
+		}
+		seen[inst.WorkspaceID] = struct{}{}
+		ids = append(ids, inst.WorkspaceID)
+	}
+	return ids
+}
+
+// labelForFilter resolves a workspace id to its display name. Returns "(unknown
+// workspace)" for orphan ids (instances pointing to a workspace that's been
+// removed from the registry).
+func (m *home) labelForFilter(id string) string {
+	if id == "" {
+		return "All"
+	}
+	reg := config.LoadWorkspaceRegistry()
+	if ws := reg.Get(id); ws != nil {
+		return ws.DisplayName
+	}
+	return "(unknown workspace)"
+}
+
+func newHome(ctx context.Context, program string, autoYes bool, workspaceID string) *home {
 	// Load application config
 	appConfig := config.LoadConfig()
 
@@ -129,8 +353,19 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 		autoYes:      autoYes,
 		state:        stateDefault,
 		appState:     appState,
+		workspaceID:  workspaceID,
 	}
 	h.list = ui.NewList(&h.spinner, autoYes)
+
+	// Seed the list with the active workspace's display name so the title bar
+	// shows it from launch (and `W` to switch is discoverable in the menu).
+	if workspaceID != "" {
+		reg := config.LoadWorkspaceRegistry()
+		if ws := reg.Get(workspaceID); ws != nil {
+			h.list.SetActiveWorkspace(ws.DisplayName)
+			h.list.SetActiveWorkspaceID(ws.ID)
+		}
+	}
 
 	// Load saved instances
 	instances, err := storage.LoadInstances()
@@ -353,7 +588,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateAddWorkspace {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -558,6 +793,32 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		}
 
 		return m, nil
+	} else if m.state == stateAddWorkspace {
+		if msg.String() == "ctrl+c" {
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			return m, tea.WindowSize()
+		}
+		// The underlying TextInputOverlay uses a multi-line textarea and routes
+		// Enter to "add newline" unless focus is on a separate submit button.
+		// For this single-line path entry we shortcut Enter directly to submit.
+		if msg.Type == tea.KeyEnter {
+			path := m.textInputOverlay.GetValue()
+			m.textInputOverlay = nil
+			m.state = stateDefault
+			if err := m.addWorkspaceFromPath(path); err != nil {
+				return m, tea.Batch(tea.WindowSize(), m.handleError(err))
+			}
+			return m, tea.WindowSize()
+		}
+		shouldClose, _ := m.textInputOverlay.HandleKeyPress(msg)
+		if !shouldClose {
+			return m, nil
+		}
+		// shouldClose only reaches here from Esc (cancel) since Enter is handled above.
+		m.textInputOverlay = nil
+		m.state = stateDefault
+		return m, tea.WindowSize()
 	}
 
 	// Handle confirmation state
@@ -611,17 +872,24 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
 
+		if cmd := m.requireWorkspace(); cmd != nil {
+			return m, cmd
+		}
+		repoPath := m.sessionPath()
+
 		// Start a background fetch so branches are up to date by the time the picker opens
 		fetchCmd := func() tea.Msg {
-			currentDir, _ := os.Getwd()
-			git.FetchBranches(currentDir)
+			git.FetchBranches(repoPath)
 			return nil
 		}
 
+		program, profileName := m.resolveWorkspaceProgram()
 		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
+			Title:       "",
+			Path:        repoPath,
+			Program:     program,
+			WorkspaceID: m.workspaceID,
+			ProfileName: profileName,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -639,10 +907,16 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
+		if cmd := m.requireWorkspace(); cmd != nil {
+			return m, cmd
+		}
+		program, profileName := m.resolveWorkspaceProgram()
 		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
+			Title:       "",
+			Path:        m.sessionPath(),
+			Program:     program,
+			WorkspaceID: m.workspaceID,
+			ProfileName: profileName,
 		})
 		if err != nil {
 			return m, m.handleError(err)
@@ -755,6 +1029,31 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if err := selected.Resume(); err != nil {
 			return m, m.handleError(err)
 		}
+		return m, tea.WindowSize()
+	case keys.KeySwitchWorkspace:
+		next := m.nextWorkspace()
+		if next == nil {
+			return m, nil
+		}
+		m.workspaceID = next.ID
+		m.list.SetActiveWorkspace(next.DisplayName)
+		m.list.SetActiveWorkspaceID(next.ID)
+		return m, nil
+	case keys.KeyViewFilter:
+		m.cycleViewFilter()
+		return m, nil
+	case keys.KeyCollapseWorkspace:
+		m.list.ToggleCollapseCurrent()
+		return m, nil
+	case keys.KeyAddWorkspace:
+		m.textInputOverlay = overlay.NewTextInputOverlay(
+			"Add workspace (enter a path; new dirs are git-init'd automatically)",
+			"",
+		)
+		m.state = stateAddWorkspace
+		// tea.WindowSize triggers updateHandleWindowSizeEvent which calls
+		// m.textInputOverlay.SetSize. Without this, the embedded textarea has
+		// width 0 → renders one char per line.
 		return m, tea.WindowSize()
 	case keys.KeyEnter:
 		if m.list.NumInstances() == 0 {
@@ -1026,7 +1325,7 @@ func (m *home) View() string {
 		m.errBox.String(),
 	)
 
-	if m.state == statePrompt {
+	if m.state == statePrompt || m.state == stateAddWorkspace {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}

@@ -42,11 +42,15 @@ func NewMockPtyFactory(t *testing.T) *MockPtyFactory {
 }
 
 func TestSanitizeName(t *testing.T) {
-	session := NewTmuxSession("asdf", "program")
+	session := NewTmuxSession("asdf", "program", "")
 	require.Equal(t, TmuxPrefix+"asdf", session.sanitizedName)
 
-	session = NewTmuxSession("a sd f . . asdf", "program")
+	session = NewTmuxSession("a sd f . . asdf", "program", "")
 	require.Equal(t, TmuxPrefix+"asdf__asdf", session.sanitizedName)
+
+	// With workspace id, name is prefixed with the (truncated) workspace id.
+	session = NewTmuxSession("asdf", "program", "abcdef0123456789")
+	require.Equal(t, TmuxPrefix+"abcdef01_asdf", session.sanitizedName)
 }
 
 func TestStartTmuxSession(t *testing.T) {
@@ -67,9 +71,9 @@ func TestStartTmuxSession(t *testing.T) {
 	}
 
 	workdir := t.TempDir()
-	session := newTmuxSession("test-session", "claude", ptyFactory, cmdExec)
+	session := newTmuxSession("test-session", "claude", "", ptyFactory, cmdExec)
 
-	err := session.Start(workdir)
+	err := session.Start(workdir, nil)
 	require.NoError(t, err)
 	require.Equal(t, 2, len(ptyFactory.cmds))
 	require.Equal(t, fmt.Sprintf("tmux new-session -d -s claudesquad_test-session -c %s claude", workdir),
