@@ -9,15 +9,17 @@ import (
 
 // InstanceData represents the serializable data of an Instance
 type InstanceData struct {
-	Title     string    `json:"title"`
-	Path      string    `json:"path"`
-	Branch    string    `json:"branch"`
-	Status    Status    `json:"status"`
-	Height    int       `json:"height"`
-	Width     int       `json:"width"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	AutoYes   bool      `json:"auto_yes"`
+	Title       string    `json:"title"`
+	Path        string    `json:"path"`
+	Branch      string    `json:"branch"`
+	Status      Status    `json:"status"`
+	Height      int       `json:"height"`
+	Width       int       `json:"width"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+	AutoYes     bool      `json:"auto_yes"`
+	WorkspaceID string    `json:"workspace_id,omitempty"`
+	ProfileName string    `json:"profile_name,omitempty"`
 
 	Program   string          `json:"program"`
 	Worktree  GitWorktreeData `json:"worktree"`

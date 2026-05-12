@@ -62,3 +62,28 @@ func findGitRepoRoot(path string) (string, error) {
 	}
 	return strings.TrimSpace(string(out)), nil
 }
+
+// FindGitRepoRoot is the exported wrapper around findGitRepoRoot.
+func FindGitRepoRoot(path string) (string, error) {
+	return findGitRepoRoot(path)
+}
+
+// FirstRemoteURL returns the URL of the first git remote for the given repo,
+// or "" if no remote is configured.
+func FirstRemoteURL(repoPath string) string {
+	cmd := exec.Command("git", "-C", repoPath, "remote")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	remotes := strings.Fields(strings.TrimSpace(string(out)))
+	if len(remotes) == 0 {
+		return ""
+	}
+	cmd = exec.Command("git", "-C", repoPath, "remote", "get-url", remotes[0])
+	out, err = cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}

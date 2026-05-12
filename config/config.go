@@ -13,12 +13,24 @@ import (
 )
 
 const (
-	ConfigFileName = "config.json"
-	defaultProgram = "claude"
+	ConfigFileName    = "config.json"
+	defaultProgram    = "claude"
+	ConfigHomeEnvVar  = "CLAUDE_SQUAD_HOME"
 )
 
-// GetConfigDir returns the path to the application's configuration directory
+// GetConfigDir returns the path to the application's configuration directory.
+// If $CLAUDE_SQUAD_HOME is set, it overrides the default (~/.claude-squad).
 func GetConfigDir() (string, error) {
+	if v := os.Getenv(ConfigHomeEnvVar); v != "" {
+		if strings.HasPrefix(v, "~") {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("failed to expand home directory: %w", err)
+			}
+			v = filepath.Join(homeDir, v[1:])
+		}
+		return v, nil
+	}
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get config home directory: %w", err)

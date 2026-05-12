@@ -1,10 +1,21 @@
 package ui
 
 import (
+	"claude-squad/config"
 	"claude-squad/log"
 	"claude-squad/session"
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 )
+
+var sessionContextStyle = lipgloss.NewStyle().
+	Padding(0, 1).
+	Foreground(lipgloss.AdaptiveColor{Light: "#7A7474", Dark: "#9C9494"})
+
+var sessionContextLabelStyle = lipgloss.NewStyle().
+	Bold(true).
+	Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#dddddd"})
 
 func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
 	border := lipgloss.RoundedBorder()
@@ -85,9 +96,11 @@ func (w *TabbedWindow) SetSize(width, height int) {
 	// Calculate the content height by subtracting:
 	// 1. Tab height (including border and padding)
 	// 2. Window style vertical frame size
-	// 3. Additional padding/spacing (2 for the newline and spacing)
+	// 3. Session-context line we render above the tabs
+	// 4. Additional padding/spacing (2 for the newline and spacing)
 	tabHeight := activeTabStyle.GetVerticalFrameSize() + 1
-	contentHeight := height - tabHeight - windowStyle.GetVerticalFrameSize() - 2
+	contextHeight := 1
+	contentHeight := height - tabHeight - contextHeight - windowStyle.GetVerticalFrameSize() - 2
 	contentWidth := w.width - windowStyle.GetHorizontalFrameSize()
 
 	w.preview.SetSize(contentWidth, contentHeight)
@@ -266,8 +279,37 @@ func (w *TabbedWindow) String() string {
 	}
 	window := windowStyle.Render(
 		lipgloss.Place(
-			w.width, w.height-2-windowStyle.GetVerticalFrameSize()-tabHeight,
+			w.width, w.height-3-windowStyle.GetVerticalFrameSize()-tabHeight,
 			lipgloss.Left, lipgloss.Top, content))
 
-	return lipgloss.JoinVertical(lipgloss.Left, "\n", row, window)
+	contextLine := w.renderSessionContext()
+	return lipgloss.JoinVertical(lipgloss.Left, "\n", contextLine, row, window)
 }
+
+// renderSessionContext renders a one-line summary "Session: <title> · Workspace: <ws> · Branch: <branch>"
+// above the tab bar so the user always sees what they're looking at. Truncates to width.
+func (w *TabbedWindow) renderSessionContext() string {
+	if w.instance == nil {
+		return sessionContextStyle.Render(strings.Repeat(" ", max(1, w.width-1)))
+	}
+	parts := []string{}
+	if w.instance.Title != "" {
+		parts = append(parts, sessionContextLabelStyle.Render("Session:")+" "+w.instance.Title)
+	}
+	if w.instance.WorkspaceID != "" {
+		reg := config.LoadWorkspaceRegistry()
+		if ws := reg.Get(w.instance.WorkspaceID); ws != nil {
+			parts = append(parts, sessionContextLabelStyle.Render("Workspace:")+" "+ws.DisplayName)
+		}
+	}
+	if w.instance.Branch != "" {
+		parts = append(parts, sessionContextLabelStyle.Render("Branch:")+" "+w.instance.Branch)
+	}
+	line := strings.Join(parts, "  ·  ")
+	if w.width > 0 && lipgloss.Width(line) > w.width-2 {
+		// Defer to lipgloss for safe truncation across ANSI codes.
+		line = lipgloss.NewStyle().MaxWidth(w.width - 2).Render(line)
+	}
+	return sessionContextStyle.Render(line)
+}
+

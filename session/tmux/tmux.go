@@ -58,28 +58,44 @@ type TmuxSession struct {
 }
 
 const TmuxPrefix = "claudesquad_"
+const wsPrefixLen = 8
 
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)
 
-func toClaudeSquadTmuxName(str string) string {
-	str = whiteSpaceRegex.ReplaceAllString(str, "")
-	str = strings.ReplaceAll(str, ".", "_") // tmux replaces all . with _
-	return fmt.Sprintf("%s%s", TmuxPrefix, str)
+// SessionName returns the canonical tmux session name for a given instance
+// title and workspace id. If workspaceID is empty, the legacy unprefixed name
+// is returned — preserving back-compat with sessions created before workspaces.
+func SessionName(title, workspaceID string) string {
+	return toClaudeSquadTmuxName(title, workspaceID)
 }
 
-// NewTmuxSession creates a new TmuxSession with the given name and program.
-func NewTmuxSession(name string, program string) *TmuxSession {
-	return newTmuxSession(name, program, MakePtyFactory(), cmd.MakeExecutor())
+func toClaudeSquadTmuxName(str, workspaceID string) string {
+	str = whiteSpaceRegex.ReplaceAllString(str, "")
+	str = strings.ReplaceAll(str, ".", "_") // tmux replaces all . with _
+	if workspaceID == "" {
+		return fmt.Sprintf("%s%s", TmuxPrefix, str)
+	}
+	short := workspaceID
+	if len(short) > wsPrefixLen {
+		short = short[:wsPrefixLen]
+	}
+	return fmt.Sprintf("%s%s_%s", TmuxPrefix, short, str)
+}
+
+// NewTmuxSession creates a new TmuxSession with the given name, program, and workspace id.
+// workspaceID may be "" for legacy / non-workspace sessions.
+func NewTmuxSession(name, program, workspaceID string) *TmuxSession {
+	return newTmuxSession(name, program, workspaceID, MakePtyFactory(), cmd.MakeExecutor())
 }
 
 // NewTmuxSessionWithDeps creates a new TmuxSession with provided dependencies for testing.
-func NewTmuxSessionWithDeps(name string, program string, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
-	return newTmuxSession(name, program, ptyFactory, cmdExec)
+func NewTmuxSessionWithDeps(name, program, workspaceID string, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
+	return newTmuxSession(name, program, workspaceID, ptyFactory, cmdExec)
 }
 
-func newTmuxSession(name string, program string, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
+func newTmuxSession(name, program, workspaceID string, ptyFactory PtyFactory, cmdExec cmd.Executor) *TmuxSession {
 	return &TmuxSession{
-		sanitizedName: toClaudeSquadTmuxName(name),
+		sanitizedName: toClaudeSquadTmuxName(name, workspaceID),
 		program:       program,
 		ptyFactory:    ptyFactory,
 		cmdExec:       cmdExec,
@@ -87,15 +103,21 @@ func newTmuxSession(name string, program string, ptyFactory PtyFactory, cmdExec 
 }
 
 // Start creates and starts a new tmux session, then attaches to it. Program is the command to run in
-// the session (ex. claude). workdir is the git worktree directory.
-func (t *TmuxSession) Start(workDir string) error {
+// the session (ex. claude). workdir is the git worktree directory. env is exported per-session
+// via "tmux new-session -e KEY=VALUE", which works even when joining an existing tmux server
+// (fixes the env-staleness behavior reported in #277).
+func (t *TmuxSession) Start(workDir string, env []string) error {
 	// Check if the session already exists
 	if t.DoesSessionExist() {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
 	}
 
-	// Create a new detached tmux session and start claude in it
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
+	args := []string{"new-session"}
+	for _, kv := range env {
+		args = append(args, "-e", kv)
+	}
+	args = append(args, "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
+	cmd := exec.Command("tmux", args...)
 
 	ptmx, err := t.ptyFactory.Start(cmd)
 	if err != nil {

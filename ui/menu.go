@@ -53,9 +53,47 @@ type Menu struct {
 	keyDown keys.KeyName
 }
 
-var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyPrompt, keys.KeyHelp, keys.KeyQuit}
+var defaultMenuOptions = []keys.KeyName{
+	keys.KeyNew, keys.KeyPrompt,
+	keys.KeyAddWorkspace, keys.KeySwitchWorkspace,
+	keys.KeyHelp, keys.KeyQuit,
+}
 var newInstanceMenuOptions = []keys.KeyName{keys.KeySubmitName}
 var promptMenuOptions = []keys.KeyName{keys.KeySubmitName}
+
+// menuGroup tags each menu option with the visual group it belongs to so
+// String() can insert a vertical separator on group transitions without
+// hardcoded index ranges. Order of declaration is the visual order.
+type menuGroup int
+
+const (
+	menuGroupInstance menuGroup = iota // n / D
+	menuGroupAction                    // enter / submit / resume / checkout / shift-arrow
+	menuGroupWorkspace                 // A / W / V / z
+	menuGroupSystem                    // tab / ? / q
+)
+
+// keyMenuGroup is the canonical group for each KeyName. New keys must be added
+// here for them to render with the correct separator placement.
+var keyMenuGroup = map[keys.KeyName]menuGroup{
+	keys.KeyNew:               menuGroupInstance,
+	keys.KeyPrompt:             menuGroupInstance,
+	keys.KeyKill:               menuGroupInstance,
+	keys.KeyEnter:              menuGroupAction,
+	keys.KeySubmit:             menuGroupAction,
+	keys.KeyResume:             menuGroupAction,
+	keys.KeyCheckout:           menuGroupAction,
+	keys.KeyShiftUp:            menuGroupAction,
+	keys.KeyShiftDown:          menuGroupAction,
+	keys.KeyAddWorkspace:       menuGroupWorkspace,
+	keys.KeySwitchWorkspace:    menuGroupWorkspace,
+	keys.KeyViewFilter:         menuGroupWorkspace,
+	keys.KeyCollapseWorkspace:  menuGroupWorkspace,
+	keys.KeyTab:                menuGroupSystem,
+	keys.KeyHelp:               menuGroupSystem,
+	keys.KeyQuit:               menuGroupSystem,
+	keys.KeySubmitName:         menuGroupAction,
+}
 
 func NewMenu() *Menu {
 	return &Menu{
@@ -143,11 +181,16 @@ func (m *Menu) addInstanceOptions() {
 		actionGroup = append(actionGroup, keys.KeyShiftUp)
 	}
 
+	// Workspace group: workspace-management keys, surfaced in every state so
+	// users discover them without opening the full help screen.
+	workspaceGroup := []keys.KeyName{keys.KeyAddWorkspace, keys.KeySwitchWorkspace}
+
 	// System group
 	systemGroup := []keys.KeyName{keys.KeyTab, keys.KeyHelp, keys.KeyQuit}
 
-	// Combine all groups
+	// Combine all groups in visual order.
 	options = append(options, actionGroup...)
+	options = append(options, workspaceGroup...)
 	options = append(options, systemGroup...)
 
 	m.options = options
@@ -161,16 +204,6 @@ func (m *Menu) SetSize(width, height int) {
 
 func (m *Menu) String() string {
 	var s strings.Builder
-
-	// Define group boundaries
-	groups := []struct {
-		start int
-		end   int
-	}{
-		{0, 2}, // Instance management group (n, d)
-		{2, 5}, // Action group (enter, submit, pause/resume)
-		{6, 8}, // System group (tab, help, q)
-	}
 
 	for i, k := range m.options {
 		binding := keys.GlobalkeyBindings[k]
@@ -186,17 +219,9 @@ func (m *Menu) String() string {
 			localDescStyle = localDescStyle.Underline(true)
 		}
 
-		var inActionGroup bool
-		switch m.state {
-		case StateEmpty:
-			// For empty state, the action group is the first group
-			inActionGroup = i <= 1
-		default:
-			// For other states, the action group is the second group
-			inActionGroup = i >= groups[1].start && i < groups[1].end
-		}
-
-		if inActionGroup {
+		// The action group (enter / push / resume / etc.) is the "primary"
+		// group and gets emphasized styling.
+		if keyMenuGroup[k] == menuGroupAction {
 			s.WriteString(localActionStyle.Render(binding.Help().Key))
 			s.WriteString(" ")
 			s.WriteString(localActionStyle.Render(binding.Help().Desc))
@@ -206,17 +231,12 @@ func (m *Menu) String() string {
 			s.WriteString(localDescStyle.Render(binding.Help().Desc))
 		}
 
-		// Add appropriate separator
+		// Group-transition separators (vertical bar) vs. intra-group separators (bullet).
 		if i != len(m.options)-1 {
-			isGroupEnd := false
-			for _, group := range groups {
-				if i == group.end-1 {
-					s.WriteString(sepStyle.Render(verticalSeparator))
-					isGroupEnd = true
-					break
-				}
-			}
-			if !isGroupEnd {
+			nextGroupDiffers := keyMenuGroup[k] != keyMenuGroup[m.options[i+1]]
+			if nextGroupDiffers {
+				s.WriteString(sepStyle.Render(verticalSeparator))
+			} else {
 				s.WriteString(sepStyle.Render(separator))
 			}
 		}

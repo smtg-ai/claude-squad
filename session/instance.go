@@ -1,6 +1,7 @@
 package session
 
 import (
+	"claude-squad/config"
 	"claude-squad/log"
 	"claude-squad/session/git"
 	"claude-squad/session/tmux"
@@ -8,6 +9,7 @@ import (
 
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -51,6 +53,11 @@ type Instance struct {
 	AutoYes bool
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
+	// WorkspaceID is the id of the workspace this instance belongs to. Empty for
+	// pre-workspace instances; populated by migration on first load.
+	WorkspaceID string
+	// ProfileName is the workspace profile this instance was launched with.
+	ProfileName string
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
@@ -70,16 +77,18 @@ type Instance struct {
 // ToInstanceData converts an Instance to its serializable form
 func (i *Instance) ToInstanceData() InstanceData {
 	data := InstanceData{
-		Title:     i.Title,
-		Path:      i.Path,
-		Branch:    i.Branch,
-		Status:    i.Status,
-		Height:    i.Height,
-		Width:     i.Width,
-		CreatedAt: i.CreatedAt,
-		UpdatedAt: time.Now(),
-		Program:   i.Program,
-		AutoYes:   i.AutoYes,
+		Title:       i.Title,
+		Path:        i.Path,
+		Branch:      i.Branch,
+		Status:      i.Status,
+		Height:      i.Height,
+		Width:       i.Width,
+		CreatedAt:   i.CreatedAt,
+		UpdatedAt:   time.Now(),
+		Program:     i.Program,
+		AutoYes:     i.AutoYes,
+		WorkspaceID: i.WorkspaceID,
+		ProfileName: i.ProfileName,
 	}
 
 	// Only include worktree data if gitWorktree is initialized
@@ -109,15 +118,17 @@ func (i *Instance) ToInstanceData() InstanceData {
 // FromInstanceData creates a new Instance from serialized data
 func FromInstanceData(data InstanceData) (*Instance, error) {
 	instance := &Instance{
-		Title:     data.Title,
-		Path:      data.Path,
-		Branch:    data.Branch,
-		Status:    data.Status,
-		Height:    data.Height,
-		Width:     data.Width,
-		CreatedAt: data.CreatedAt,
-		UpdatedAt: data.UpdatedAt,
-		Program:   data.Program,
+		Title:       data.Title,
+		Path:        data.Path,
+		Branch:      data.Branch,
+		Status:      data.Status,
+		Height:      data.Height,
+		Width:       data.Width,
+		CreatedAt:   data.CreatedAt,
+		UpdatedAt:   data.UpdatedAt,
+		Program:     data.Program,
+		WorkspaceID: data.WorkspaceID,
+		ProfileName: data.ProfileName,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,
@@ -135,7 +146,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 
 	if instance.Paused() {
 		instance.started = true
-		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program)
+		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program, instance.WorkspaceID)
 	} else {
 		if err := instance.Start(false); err != nil {
 			return nil, err
@@ -157,6 +168,11 @@ type InstanceOptions struct {
 	AutoYes bool
 	// Branch is an existing branch name to start the session on (empty = new branch from HEAD)
 	Branch string
+	// WorkspaceID is the workspace this instance belongs to. Optional; resolved
+	// later if empty.
+	WorkspaceID string
+	// ProfileName is the workspace profile to use. Optional.
+	ProfileName string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -179,6 +195,8 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		UpdatedAt:      t,
 		AutoYes:        false,
 		selectedBranch: opts.Branch,
+		WorkspaceID:    opts.WorkspaceID,
+		ProfileName:    opts.ProfileName,
 	}, nil
 }
 
@@ -210,20 +228,20 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		tmuxSession = i.tmuxSession
 	} else {
 		// Create new tmux session
-		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program)
+		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program, i.WorkspaceID)
 	}
 	i.tmuxSession = tmuxSession
 
 	if firstTimeSetup {
 		if i.selectedBranch != "" {
-			gitWorktree, err := git.NewGitWorktreeFromBranch(i.Path, i.selectedBranch, i.Title)
+			gitWorktree, err := git.NewGitWorktreeFromBranch(i.Path, i.selectedBranch, i.Title, i.WorkspaceID)
 			if err != nil {
 				return fmt.Errorf("failed to create git worktree from branch: %w", err)
 			}
 			i.gitWorktree = gitWorktree
 			i.Branch = i.selectedBranch
 		} else {
-			gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title)
+			gitWorktree, branchName, err := git.NewGitWorktree(i.Path, i.Title, i.WorkspaceID)
 			if err != nil {
 				return fmt.Errorf("failed to create git worktree: %w", err)
 			}
@@ -257,8 +275,27 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 			return setupErr
 		}
 
+		// Run post-worktree hook (e.g. set up env files, allocate ports). #260
+		if err := i.runPostWorktreeHook(); err != nil {
+			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
+				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+			}
+			setupErr = fmt.Errorf("post-worktree hook failed: %w", err)
+			return setupErr
+		}
+
+		// Resolve workspace-profile env (Env + EnvFiles + AgentHome dirs).
+		env, err := i.resolveEnv()
+		if err != nil {
+			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
+				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+			}
+			setupErr = fmt.Errorf("failed to resolve env: %w", err)
+			return setupErr
+		}
+
 		// Create new session
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath(), env); err != nil {
 			// Cleanup git worktree if tmux session creation fails
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
 				err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
@@ -491,13 +528,19 @@ func (i *Instance) Resume() error {
 		return fmt.Errorf("failed to setup git worktree: %w", err)
 	}
 
+	env, err := i.resolveEnv()
+	if err != nil {
+		log.ErrorLog.Print(err)
+		return fmt.Errorf("failed to resolve env: %w", err)
+	}
+
 	// Check if tmux session still exists from pause, otherwise create new one
 	if i.tmuxSession.DoesSessionExist() {
 		// Session exists, just restore PTY connection to it
 		if err := i.tmuxSession.Restore(); err != nil {
 			log.ErrorLog.Print(err)
 			// If restore fails, fall back to creating new session
-			if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+			if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath(), env); err != nil {
 				log.ErrorLog.Print(err)
 				// Cleanup git worktree if tmux session creation fails
 				if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
@@ -509,7 +552,7 @@ func (i *Instance) Resume() error {
 		}
 	} else {
 		// Create new tmux session
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath(), env); err != nil {
 			log.ErrorLog.Print(err)
 			// Cleanup git worktree if tmux session creation fails
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
@@ -610,4 +653,68 @@ func (i *Instance) SendKeys(keys string) error {
 		return fmt.Errorf("cannot send keys to instance that has not been started or is paused")
 	}
 	return i.tmuxSession.SendKeys(keys)
+}
+
+// resolveEnv builds the merged env that should be injected into the tmux session.
+// Returns nil if no workspace or profile is configured — preserving today's
+// no-overlay behavior. Also mkdir-creates any AgentHome target dirs so the agent
+// CLI (claude, gh, ...) doesn't error on a missing config dir.
+func (i *Instance) resolveEnv() ([]string, error) {
+	if i.WorkspaceID == "" {
+		return nil, nil
+	}
+	reg := config.LoadWorkspaceRegistry()
+	ws := reg.Get(i.WorkspaceID)
+	if ws == nil {
+		return nil, nil
+	}
+	profile := ws.FindProfile(i.ProfileName)
+	if profile == nil {
+		return nil, nil
+	}
+	wsDir, err := ws.Dir()
+	if err != nil {
+		return nil, err
+	}
+	for _, rel := range profile.AgentHome {
+		full := rel
+		if !filepath.IsAbs(full) {
+			full = filepath.Join(wsDir, full)
+		}
+		if err := os.MkdirAll(full, 0700); err != nil {
+			return nil, fmt.Errorf("create agent home %s: %w", full, err)
+		}
+	}
+	return ws.ResolveEnv(profile)
+}
+
+// runPostWorktreeHook runs the workspace's post-worktree hook (if any) with the
+// standard CS_* env vars exposed. See #260.
+func (i *Instance) runPostWorktreeHook() error {
+	if i.WorkspaceID == "" {
+		return nil
+	}
+	reg := config.LoadWorkspaceRegistry()
+	ws := reg.Get(i.WorkspaceID)
+	if ws == nil || ws.Hooks.PostWorktree == "" {
+		return nil
+	}
+	wsDir, err := ws.Dir()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command("sh", "-c", ws.Hooks.PostWorktree)
+	cmd.Dir = wsDir
+	cmd.Env = append(os.Environ(),
+		"CS_REPO_PATH="+i.gitWorktree.GetRepoPath(),
+		"CS_WORKTREE_PATH="+i.gitWorktree.GetWorktreePath(),
+		"CS_BRANCH="+i.gitWorktree.GetBranchName(),
+		"CS_SESSION="+i.Title,
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.ErrorLog.Printf("post-worktree hook failed: %v\n%s", err, out)
+		return fmt.Errorf("hook %q: %w", ws.Hooks.PostWorktree, err)
+	}
+	return nil
 }
