@@ -1,8 +1,10 @@
 package session
 
 import (
+	"claude-squad/config"
 	"claude-squad/log"
 	"claude-squad/session/git"
+	"claude-squad/session/hooks"
 	"claude-squad/session/tmux"
 	"path/filepath"
 
@@ -255,6 +257,29 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		if err := i.gitWorktree.Setup(); err != nil {
 			setupErr = fmt.Errorf("failed to setup git worktree: %w", err)
 			return setupErr
+		}
+
+		// Run worktree setup hook if configured
+		cfg := config.LoadConfig()
+		if cfg.WorktreeSetupHook != "" {
+			hookCtx := hooks.WorktreeContext{
+				RepoPath:     i.Path,
+				WorktreePath: i.gitWorktree.GetWorktreePath(),
+				BranchName:   i.Branch,
+				SessionName:  i.Title,
+			}
+			if err := hooks.RunWorktreeSetupHook(
+				cfg.WorktreeSetupHook,
+				cfg.WorktreeSetupHookFailMode,
+				hookCtx,
+			); err != nil {
+				// Only reaches here if fail_mode is "fail"
+				if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
+					err = fmt.Errorf("%v (cleanup error: %v)", err, cleanupErr)
+				}
+				setupErr = fmt.Errorf("worktree setup hook failed: %w", err)
+				return setupErr
+			}
 		}
 
 		// Create new session
