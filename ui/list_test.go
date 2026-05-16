@@ -54,4 +54,31 @@ func TestInstanceRendererDescription(t *testing.T) {
 		assert.Contains(t, result, "☰")
 		assert.Contains(t, result, "…")
 	})
+
+	t.Run("renders description line when descInputActive even if Description is empty", func(t *testing.T) {
+		inst, err := session.NewInstance(session.InstanceOptions{
+			Title:   "test",
+			Path:    ".",
+			Program: "claude",
+		})
+		require.NoError(t, err)
+		inst.SetStatus(session.Ready)
+		r.descInputActive = true
+		result := r.Render(inst, 1, false, false)
+		assert.Contains(t, result, "☰")
+		r.descInputActive = false
+	})
+
+	t.Run("does not render description line when not active and Description is empty", func(t *testing.T) {
+		inst, err := session.NewInstance(session.InstanceOptions{
+			Title:   "test",
+			Path:    ".",
+			Program: "claude",
+		})
+		require.NoError(t, err)
+		inst.SetStatus(session.Ready)
+		r.descInputActive = false
+		result := r.Render(inst, 1, false, false)
+		assert.NotContains(t, result, "☰")
+	})
 }

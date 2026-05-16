@@ -64,6 +64,9 @@ type List struct {
 	height, width int
 	renderer      *InstanceRenderer
 	autoyes       bool
+	// descInputActive is true when the user is in stateDescription, typing a description.
+	// When true, the ☰ line is rendered even if Description is empty, with a blinking cursor.
+	descInputActive bool
 
 	// map of repo name to number of instances using it. Used to display the repo name only if there are
 	// multiple repos in play.
@@ -108,12 +111,20 @@ func (l *List) NumInstances() int {
 
 // InstanceRenderer handles rendering of session.Instance objects
 type InstanceRenderer struct {
-	spinner *spinner.Model
-	width   int
+	spinner         *spinner.Model
+	width           int
+	descInputActive bool
 }
 
 func (r *InstanceRenderer) setWidth(width int) {
 	r.width = AdjustPreviewWidth(width)
+}
+
+// SetDescInputActive sets whether the description input is active.
+// When active, the ☰ line is rendered even for empty descriptions, with a cursor.
+func (l *List) SetDescInputActive(active bool) {
+	l.descInputActive = active
+	l.renderer.descInputActive = active
 }
 
 // ɹ and ɻ are other options.
@@ -224,15 +235,28 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 
 	branchLine := fmt.Sprintf("%s %s-%s%s%s", strings.Repeat(" ", len(prefix)), branchIcon, branch, spaces, diff)
 
-	// Description 行（仅在有描述时显示）
-	if i.Description != "" {
+	// Description 行：有描述内容或正在输入描述时显示
+	showDescLine := i.Description != "" || r.descInputActive
+	if showDescLine {
 		descPrefix := strings.Repeat(" ", len(prefix))
 		descText := i.Description
 		descWidthAvail := r.width - 3 - runewidth.StringWidth(prefix) - runewidth.StringWidth("☰ ")
+		// 为光标预留 1 个字符宽度
+		if r.descInputActive {
+			descWidthAvail -= 1
+		}
 		if descWidthAvail > 0 && runewidth.StringWidth(descText) > descWidthAvail {
 			descText = runewidth.Truncate(descText, descWidthAvail-1, "…")
 		}
-		descLine := fmt.Sprintf("%s ☰ %s", descPrefix, descText)
+		// 闪烁光标：利用 spinner 的当前帧判断是否显示
+		cursor := ""
+		if r.descInputActive {
+			// spinner.View() 每 tick 返回不同内容，用其长度交替显示光标
+			if len(r.spinner.View()) > 0 {
+				cursor = "|"
+			}
+		}
+		descLine := fmt.Sprintf("%s ☰ %s%s", descPrefix, descText, cursor)
 		text := lipgloss.JoinVertical(
 			lipgloss.Left,
 			title,
