@@ -36,3 +36,17 @@ func TestDescriptionInput(t *testing.T) {
 		assert.True(t, o.isEnterButton())
 	})
 }
+
+func TestDescriptionOverlay(t *testing.T) {
+	t.Run("NewDescriptionOverlay has descriptionOnly flag", func(t *testing.T) {
+		o := NewDescriptionOverlay()
+		assert.True(t, o.descriptionOnly)
+		assert.True(t, o.isDescriptionInput())
+		assert.Equal(t, "", o.GetDescription())
+	})
+
+	t.Run("NewDescriptionOverlay has no prompt symbol", func(t *testing.T) {
+		o := NewDescriptionOverlay()
+		assert.Equal(t, "", o.descriptionInput.Prompt)
+	})
+}
