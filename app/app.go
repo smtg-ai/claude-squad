@@ -432,6 +432,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			// n 键流程：进入 Description 输入
 			m.state = stateDescription
 			m.menu.SetState(ui.StateDescription)
+			m.list.SetDescInputActive(true)
 			return m, tea.WindowSize()
 		case tea.KeyRunes:
 			if runewidth.StringWidth(instance.Title) >= 32 {
@@ -473,6 +474,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			// 取消整个创建流程
 			m.state = stateDefault
 			m.promptAfterName = false
+			m.list.SetDescInputActive(false)
 			m.list.Kill()
 			return m, tea.Sequence(
 				tea.WindowSize(),
@@ -487,6 +489,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		switch msg.Type {
 		case tea.KeyEnter:
 			// 确认 Description（留空即跳过），启动 instance
+			m.list.SetDescInputActive(false)
 			instance.SetStatus(session.Loading)
 			m.newInstanceFinalizer()
 			m.promptAfterName = false
@@ -524,6 +527,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 		case tea.KeyEsc:
 			// Esc 跳过 Description，直接启动
+			m.list.SetDescInputActive(false)
 			instance.SetStatus(session.Loading)
 			m.newInstanceFinalizer()
 			m.promptAfterName = false
