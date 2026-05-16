@@ -257,6 +257,12 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 			}
 		}
 		descLine := fmt.Sprintf("%s ☰ %s%s", descPrefix, descText, cursor)
+		// 填充空格使背景色覆盖到右侧（与 branch 行一致）
+		descContentWidth := runewidth.StringWidth(descPrefix) + runewidth.StringWidth("☰ ") + runewidth.StringWidth(descText) + runewidth.StringWidth(cursor)
+		descRemaining := r.width - 3 - descContentWidth
+		if descRemaining > 0 {
+			descLine += strings.Repeat(" ", descRemaining)
+		}
 		text := lipgloss.JoinVertical(
 			lipgloss.Left,
 			title,
