@@ -22,8 +22,9 @@ const (
 
 	KeyCheckout
 	KeyResume
-	KeyPrompt // New key for entering a prompt
-	KeyHelp   // Key for showing help screen
+	KeyPrompt       // New key for entering a prompt
+	KeyHelp         // Key for showing help screen
+	KeySubmitDescription // Submit description in the new instance flow
 
 	// Diff keybindings
 	KeyShiftUp
@@ -115,5 +116,9 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeySubmitName: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "submit name"),
+	),
+	KeySubmitDescription: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "submit description (optional)"),
 	),
 }
