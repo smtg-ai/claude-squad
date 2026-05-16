@@ -526,23 +526,19 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			instance.SetDescription(instance.Description + " ")
 
 		case tea.KeyEsc:
-			// Esc 跳过 Description，直接启动
+			// Esc 取消整个创建流程（与 stateNew 下 Esc 行为一致）
 			m.list.SetDescInputActive(false)
-			instance.SetStatus(session.Loading)
-			m.newInstanceFinalizer()
-			m.promptAfterName = false
+			m.list.Kill()
 			m.state = stateDefault
-			m.menu.SetState(ui.StateDefault)
-
-			startCmd := func() tea.Msg {
-				err := instance.Start(true)
-				return instanceStartedMsg{
-					instance:        instance,
-					err:             err,
-					promptAfterName: false,
-				}
-			}
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
+			m.promptAfterName = false
+			m.instanceChanged()
+			return m, tea.Sequence(
+				tea.WindowSize(),
+				func() tea.Msg {
+					m.menu.SetState(ui.StateDefault)
+					return nil
+				},
+			)
 		}
 		return m, nil
 	} else if m.state == statePrompt {
