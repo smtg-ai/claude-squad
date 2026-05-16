@@ -539,11 +539,12 @@ func TestSearchStateTransitions(t *testing.T) {
 
 	t.Run("Esc 退出搜索态并清空搜索词", func(t *testing.T) {
 		h := &home{
-			ctx:       context.Background(),
-			state:     stateSearch,
-			appConfig: config.DefaultConfig(),
-			list:      list,
-			menu:      ui.NewMenu(),
+			ctx:           context.Background(),
+			state:         stateSearch,
+			appConfig:     config.DefaultConfig(),
+			list:          list,
+			menu:          ui.NewMenu(),
+			tabbedWindow:  ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewTerminalPane()),
 		}
 		h.list.SetSearchFocused(true)
 
@@ -558,11 +559,12 @@ func TestSearchStateTransitions(t *testing.T) {
 
 	t.Run("Enter 退出搜索态但保留搜索词", func(t *testing.T) {
 		h := &home{
-			ctx:       context.Background(),
-			state:     stateSearch,
-			appConfig: config.DefaultConfig(),
-			list:      list,
-			menu:      ui.NewMenu(),
+			ctx:           context.Background(),
+			state:         stateSearch,
+			appConfig:     config.DefaultConfig(),
+			list:          list,
+			menu:          ui.NewMenu(),
+			tabbedWindow:  ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewTerminalPane()),
 		}
 		h.list.SetSearchFocused(true)
 		h.list.SetSearchQuery("test")

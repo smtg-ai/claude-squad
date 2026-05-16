@@ -357,12 +357,12 @@ func (m *home) handleSearchState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// 确认搜索，焦点回到列表（保留搜索词和过滤结果）
 		m.list.SetSearchFocused(false)
 		m.state = stateDefault
-		return m, nil
+		return m, m.instanceChanged()
 	case tea.KeyEsc:
 		// 取消搜索，清空搜索词
 		m.list.ClearSearch()
 		m.state = stateDefault
-		return m, nil
+		return m, m.instanceChanged()
 	case tea.KeyRunes, tea.KeyBackspace, tea.KeySpace:
 		// 将输入转发给搜索框
 		m.list.HandleSearchInput(msg)

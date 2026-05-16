@@ -65,26 +65,39 @@ var matchHighlightStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("#5B4A8A")).
 	Foreground(lipgloss.Color("#FFFFFF"))
 
-// HighlightMatch 在文本中高亮匹配搜索词的子串
+// HighlightMatch 在文本中高亮匹配搜索词的子串（rune 级匹配，安全处理多字节字符）
 func HighlightMatch(text, query string) string {
 	if query == "" {
 		return text
 	}
-	lowerText := strings.ToLower(text)
-	lowerQuery := strings.ToLower(query)
+	textRunes := []rune(text)
+	lowerRunes := []rune(strings.ToLower(text))
+	lowerQuery := []rune(strings.ToLower(query))
 
 	var b strings.Builder
-	lastIdx := 0
+	lastRuneIdx := 0
 	for {
-		idx := strings.Index(lowerText[lastIdx:], lowerQuery)
-		if idx == -1 {
-			b.WriteString(text[lastIdx:])
+		found := false
+		for i := lastRuneIdx; i <= len(lowerRunes)-len(lowerQuery); i++ {
+			match := true
+			for j, qr := range lowerQuery {
+				if lowerRunes[i+j] != qr {
+					match = false
+					break
+				}
+			}
+			if match {
+				b.WriteString(string(textRunes[lastRuneIdx:i]))
+				b.WriteString(matchHighlightStyle.Render(string(textRunes[i : i+len(lowerQuery)])))
+				lastRuneIdx = i + len(lowerQuery)
+				found = true
+				break
+			}
+		}
+		if !found {
+			b.WriteString(string(textRunes[lastRuneIdx:]))
 			break
 		}
-		absIdx := lastIdx + idx
-		b.WriteString(text[lastIdx:absIdx])
-		b.WriteString(matchHighlightStyle.Render(text[absIdx : absIdx+len(query)]))
-		lastIdx = absIdx + len(query)
 	}
 	return b.String()
 }
@@ -559,11 +572,6 @@ func (l *List) IsSearchFocused() bool {
 	return l.searchFocused
 }
 
-// SearchInput 返回搜索框的指针，用于处理键盘事件
-func (l *List) SearchInput() *textinput.Model {
-	return &l.searchInput
-}
-
 // SetSearchQuery 设置搜索词并更新过滤结果
 func (l *List) SetSearchQuery(query string) {
 	l.searchInput.SetValue(query)
@@ -631,11 +639,6 @@ func (l *List) updateFilteredItems() {
 // HandleSearchInput 将键盘事件转发给搜索框并更新过滤
 func (l *List) HandleSearchInput(msg tea.KeyMsg) {
 	l.searchInput, _ = l.searchInput.Update(msg)
-	l.updateFilteredItems()
-}
-
-// UpdateFilter 重新计算过滤结果（在搜索输入变化后调用）
-func (l *List) UpdateFilter() {
 	l.updateFilteredItems()
 }
 
