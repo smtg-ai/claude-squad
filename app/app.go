@@ -40,6 +40,8 @@ const (
 	stateDefault state = iota
 	// stateNew is the state when the user is creating a new instance.
 	stateNew
+	// stateDescription is the state when the user is entering a description for a new instance.
+	stateDescription
 	// statePrompt is the state when the user is entering a prompt.
 	statePrompt
 	// stateHelp is the state when a help screen is displayed.
@@ -374,6 +376,9 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 	if name == keys.KeyEnter && m.state == stateNew {
 		name = keys.KeySubmitName
 	}
+	if name == keys.KeyEnter && m.state == stateDescription {
+		name = keys.KeySubmitDescription
+	}
 	m.keySent = true
 	return tea.Batch(
 		func() tea.Msg { return msg },
@@ -424,24 +429,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, tea.Batch(tea.WindowSize(), initialSearch)
 			}
 
-			// Set Loading status and finalize into the list immediately
-			instance.SetStatus(session.Loading)
-			m.newInstanceFinalizer()
-			m.promptAfterName = false
-			m.state = stateDefault
-			m.menu.SetState(ui.StateDefault)
-
-			// Return a tea.Cmd that runs instance.Start in the background
-			startCmd := func() tea.Msg {
-				err := instance.Start(true)
-				return instanceStartedMsg{
-					instance:        instance,
-					err:             err,
-					promptAfterName: false,
-				}
-			}
-
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
+			// n 键流程：进入 Description 输入
+			m.state = stateDescription
+			m.menu.SetState(ui.StateDescription)
+			return m, tea.WindowSize()
 		case tea.KeyRunes:
 			if runewidth.StringWidth(instance.Title) >= 32 {
 				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
@@ -474,6 +465,80 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				},
 			)
 		default:
+		}
+		return m, nil
+	}
+	if m.state == stateDescription {
+		if msg.String() == "ctrl+c" {
+			// 取消整个创建流程
+			m.state = stateDefault
+			m.promptAfterName = false
+			m.list.Kill()
+			return m, tea.Sequence(
+				tea.WindowSize(),
+				func() tea.Msg {
+					m.menu.SetState(ui.StateDefault)
+					return nil
+				},
+			)
+		}
+
+		instance := m.list.GetInstances()[m.list.NumInstances()-1]
+		switch msg.Type {
+		case tea.KeyEnter:
+			// 确认 Description（留空即跳过），启动 instance
+			instance.SetStatus(session.Loading)
+			m.newInstanceFinalizer()
+			m.promptAfterName = false
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+
+			startCmd := func() tea.Msg {
+				err := instance.Start(true)
+				return instanceStartedMsg{
+					instance:        instance,
+					err:             err,
+					promptAfterName: false,
+				}
+			}
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
+
+		case tea.KeyRunes:
+			if runewidth.StringWidth(instance.Description) >= 128 {
+				return m, m.handleError(fmt.Errorf("description cannot be longer than 128 characters"))
+			}
+			instance.SetDescription(instance.Description + string(msg.Runes))
+
+		case tea.KeyBackspace:
+			runes := []rune(instance.Description)
+			if len(runes) == 0 {
+				return m, nil
+			}
+			instance.SetDescription(string(runes[:len(runes)-1]))
+
+		case tea.KeySpace:
+			if runewidth.StringWidth(instance.Description) >= 128 {
+				return m, m.handleError(fmt.Errorf("description cannot be longer than 128 characters"))
+			}
+			instance.SetDescription(instance.Description + " ")
+
+		case tea.KeyEsc:
+			// Esc 跳过 Description，直接启动
+			instance.SetStatus(session.Loading)
+			m.newInstanceFinalizer()
+			m.promptAfterName = false
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+
+			startCmd := func() tea.Msg {
+				err := instance.Start(true)
+				return instanceStartedMsg{
+					instance:        instance,
+					err:             err,
+					promptAfterName: false,
+				}
+			}
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
 		}
 		return m, nil
 	} else if m.state == statePrompt {
@@ -510,6 +575,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						selected.Program = selectedProgram
 					}
 					selected.Prompt = prompt
+				selected.SetDescription(m.textInputOverlay.GetDescription())
 
 					// Finalize into list and start
 					selected.SetStatus(session.Loading)

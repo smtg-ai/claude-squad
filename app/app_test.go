@@ -464,3 +464,44 @@ func TestConfirmationModalVisualAppearance(t *testing.T) {
 	// Test that the danger indicator is preserved
 	assert.Contains(t, rendered, "[!")
 }
+
+// TestDescriptionStateTransitions tests state transitions for the description input flow
+func TestDescriptionStateTransitions(t *testing.T) {
+	spinner := spinner.New(spinner.WithSpinner(spinner.MiniDot))
+	list := ui.NewList(&spinner, false)
+
+	instance, err := session.NewInstance(session.InstanceOptions{
+		Title:   "test",
+		Path:    t.TempDir(),
+		Program: "claude",
+	})
+	require.NoError(t, err)
+	_ = list.AddInstance(instance)
+	list.SetSelectedInstance(0)
+
+	t.Run("stateDescription enter key starts instance", func(t *testing.T) {
+		h := &home{
+			ctx:                 context.Background(),
+			state:               stateDescription,
+			appConfig:           config.DefaultConfig(),
+			list:                list,
+			menu:                ui.NewMenu(),
+			newInstanceFinalizer: func() {},
+		}
+
+		instance.SetDescription("测试描述")
+		assert.Equal(t, "测试描述", instance.Description)
+		assert.Equal(t, stateDescription, h.state)
+	})
+
+	t.Run("stateDescription exists as valid state", func(t *testing.T) {
+		h := &home{
+			ctx:       context.Background(),
+			state:     stateDescription,
+			appConfig: config.DefaultConfig(),
+			list:      ui.NewList(&spinner, false),
+			menu:      ui.NewMenu(),
+		}
+		assert.Equal(t, stateDescription, h.state)
+	})
+}
