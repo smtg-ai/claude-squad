@@ -25,8 +25,8 @@
 | 11 | 截断 | 硬截断 + 省略号 `…` |
 | 12 | 字符限制 | 128 字符，单行 |
 | 13 | 持久化 | `InstanceData` 新增 `Description string` 字段，向前兼容 |
-| 14 | `n` 键流程 Description 输入视觉 | 进入 `stateDescription` 时提前渲染 `☰` 行（即使 Description 为空），末尾显示闪烁竖线光标 `|` |
-| 15 | Description 行选中样式 | 选中时 Description 行统一背景色（与 branch 行一致 `#dde4f0`），前景色用暗色区分（如 `#888888`），避免输入前后视觉跳变 |
+| 14 | Description 行选中样式 | 选中时 Description 行统一背景色（与 branch 行一致 `#dde4f0`），前景色用暗色区分（如 `#888888`） |
+| 15 | Overlay Description 风格 | 与 Enter Prompt 保持一致：完整分割线 + 独立蓝色粗体标题 + 输入框，输入框无 `>` 符号 |
 
 ---
 
@@ -239,6 +239,30 @@ if m.state == stateDescription {
 
 ```go
 descriptionInput textinput.Model  // 使用 bubbles/textinput 组件
+descriptionOnly  bool              // true 时 overlay 只包含 Description 输入框（无 textarea/pickers）
+```
+
+#### `ui/overlay/textInput.go` — NewDescriptionOverlay
+
+新增构造函数，创建仅包含 Description 输入框的 overlay（供 `n` 键流程的 overlay 化使用）：
+
+```go
+func NewDescriptionOverlay() *TextInputOverlay {
+    di := textinput.New()
+    di.Placeholder = "Add a description..."
+    di.CharLimit = 128
+    di.Prompt = "" // 去掉默认的 > 符号
+    di.Focus()
+
+    overlay := &TextInputOverlay{
+        descriptionInput: di,
+        numStops:         2, // description input + enter button
+        FocusIndex:       0,
+        descriptionOnly:  true,
+    }
+    overlay.updateFocusState()
+    return overlay
+}
 ```
 
 #### `ui/overlay/textInput.go` — NewTextInputOverlayWithBranchPicker
@@ -249,6 +273,7 @@ descriptionInput textinput.Model  // 使用 bubbles/textinput 组件
 di := textinput.New()
 di.Placeholder = "Add a description..."
 di.CharLimit = 128
+di.Prompt = "" // 去掉默认的 > 符号
 di.Width = innerWidth  // 与其他组件宽度一致
 ```
 
@@ -279,6 +304,9 @@ if pp != nil && pp.HasMultiple() {
 
 ```go
 func (t *TextInputOverlay) isDescriptionInput() bool {
+    if t.descriptionOnly {
+        return t.FocusIndex == 0
+    }
     if t.profilePicker != nil && t.profilePicker.HasMultiple() {
         return t.FocusIndex == 2
     }
@@ -299,10 +327,18 @@ if t.isDescriptionInput() {
 }
 ```
 
-在 `tea.KeyEnter` 中增加 `isDescriptionInput` 时前进到下一个焦点（类似 profile picker 的行为）：
+在 `tea.KeyEnter` 中增加 `isDescriptionInput` 时的处理：
 
 ```go
 if t.isDescriptionInput() {
+    // Description overlay: Enter 直接提交；Prompt overlay: Enter 跳到下一个焦点
+    if t.descriptionOnly {
+        t.Submitted = true
+        if t.OnSubmit != nil {
+            t.OnSubmit()
+        }
+        return true, false
+    }
     t.setFocusIndex(t.FocusIndex + 1)
     return false, false
 }
@@ -310,26 +346,37 @@ if t.isDescriptionInput() {
 
 #### `ui/overlay/textInput.go` — updateFocusState
 
-增加 descriptionInput 的 focus/blur 控制：
+增加 descriptionInput 的 focus/blur 控制，`descriptionOnly` 模式下不操作 textarea：
 
 ```go
-if t.isDescriptionInput() {
-    t.descriptionInput.Focus()
-} else {
-    t.descriptionInput.Blur()
+func (t *TextInputOverlay) updateFocusState() {
+    if !t.descriptionOnly {
+        if t.isTextarea() {
+            t.textarea.Focus()
+        } else {
+            t.textarea.Blur()
+        }
+    }
+    // ... branchPicker, profilePicker 不变 ...
+    if t.isDescriptionInput() {
+        t.descriptionInput.Focus()
+    } else {
+        t.descriptionInput.Blur()
+    }
 }
 ```
 
 #### `ui/overlay/textInput.go` — Render
 
-在 textarea 和 branch picker 之间渲染 descriptionInput：
+在 textarea 和 branch picker 之间渲染 descriptionInput。Description 区域风格与 Enter Prompt 保持一致：完整分割线 + 独立蓝色粗体标题 + 输入框：
 
 ```go
 content += tiTitleStyle.Render(t.Title) + "\n"
 content += t.textarea.View() + "\n\n"
 
-// Description input
-content += tiDividerStyle.Render("─ " + "Description") + "\n"
+// Description input（风格与 Enter Prompt 一致：分割线 + 标题 + 输入框）
+content += divider + "\n\n"
+content += tiTitleStyle.Render("Description") + "\n"
 content += t.descriptionInput.View() + "\n\n"
 
 // Branch picker
@@ -339,12 +386,33 @@ if t.branchPicker != nil {
 }
 ```
 
-#### `ui/overlay/textInput.go` — SetSize
-
-设置 descriptionInput 宽度：
+当 `descriptionOnly == true` 时（`NewDescriptionOverlay`），只渲染 Description 输入框：
 
 ```go
-t.descriptionInput.Width = width - 6
+if t.descriptionOnly {
+    t.descriptionInput.Width = innerWidth
+    content += tiTitleStyle.Render("Description") + "\n"
+    content += t.descriptionInput.View() + "\n\n"
+    content += divider + "\n\n"
+    content += enterButton
+    return tiStyle.Render(content)
+}
+```
+
+#### `ui/overlay/textInput.go` — SetSize
+
+设置 descriptionInput 宽度，`descriptionOnly` 模式下不操作 textarea：
+
+```go
+func (t *TextInputOverlay) SetSize(width, height int) {
+    if !t.descriptionOnly {
+        t.textarea.SetHeight(height)
+    }
+    t.width = width
+    t.height = height
+    // ... branchPicker, profilePicker 不变 ...
+    t.descriptionInput.Width = width - 6
+}
 ```
 
 #### `ui/overlay/textInput.go` — 新增 GetDescription 方法
@@ -527,7 +595,7 @@ if name == keys.KeyEnter && m.state == stateDescription {
 
 1. `n` 键流程：Title → Enter → Description 输入 → Enter → 启动
 2. `n` 键流程：Title → Enter → Description 留空 → Enter → 启动
-3. `n` 键流程：Title → Enter → Description 输入 → Esc 跳过 → 启动
+3. `n` 键流程：Title → Enter → Description 输入 → Esc 取消创建
 4. `n` 键流程：Title → Enter → ctrl+c 取消整个创建
 5. `N` 键流程：Title → Enter → Prompt Overlay 中填写 Description → 提交 → 启动
 6. `N` 键流程：Title → Enter → Prompt Overlay 中不填 Description → 提交 → 启动
@@ -536,3 +604,7 @@ if name == keys.KeyEnter && m.state == stateDescription {
 9. 中文字符：Description 支持中文输入和显示
 10. 持久化：重启后 Description 保留
 11. 向前兼容：加载无 description 字段的老版本 state.json 不报错
+12. N 键 Overlay：Description 输入框无 `>` 符号
+13. N 键 Overlay：Description 区域有完整分割线 + 独立蓝色粗体标题（与 Enter Prompt 风格一致）
+14. N 键 Overlay：Description 输入框聚焦时 Tab 可跳到下一个焦点
+15. descriptionOnly 模式：Enter 直接提交（不跳到下一个焦点）
