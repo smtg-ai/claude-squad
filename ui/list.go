@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 const readyIcon = "● "
@@ -625,6 +626,12 @@ func (l *List) updateFilteredItems() {
 	} else if len(l.filteredItems) > 0 {
 		l.selectedIdx = 0
 	}
+}
+
+// HandleSearchInput 将键盘事件转发给搜索框并更新过滤
+func (l *List) HandleSearchInput(msg tea.KeyMsg) {
+	l.searchInput, _ = l.searchInput.Update(msg)
+	l.updateFilteredItems()
 }
 
 // UpdateFilter 重新计算过滤结果（在搜索输入变化后调用）

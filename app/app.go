@@ -365,13 +365,11 @@ func (m *home) handleSearchState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyRunes, tea.KeyBackspace, tea.KeySpace:
 		// 将输入转发给搜索框
-		m.list.SearchInput().Update(msg)
-		m.list.UpdateFilter()
+		m.list.HandleSearchInput(msg)
 		return m, nil
 	default:
 		// 其他按键也转发给 textinput
-		m.list.SearchInput().Update(msg)
-		m.list.UpdateFilter()
+		m.list.HandleSearchInput(msg)
 		return m, nil
 	}
 }
