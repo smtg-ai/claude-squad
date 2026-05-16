@@ -258,7 +258,8 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		}
 		descLine := fmt.Sprintf("%s ☰ %s%s", descPrefix, descText, cursor)
 		// 填充空格使背景色覆盖到右侧（与 branch 行一致）
-		descContentWidth := runewidth.StringWidth(descPrefix) + runewidth.StringWidth("☰ ") + runewidth.StringWidth(descText) + runewidth.StringWidth(cursor)
+		// descLine 格式: "%s ☰ %s%s" = descPrefix + 空格 + ☰ + 空格 + descText + cursor
+		descContentWidth := runewidth.StringWidth(descPrefix) + 1 + runewidth.StringWidth("☰ ") + runewidth.StringWidth(descText) + runewidth.StringWidth(cursor)
 		descRemaining := r.width - descContentWidth
 		if descRemaining > 0 {
 			descLine += strings.Repeat(" ", descRemaining)
