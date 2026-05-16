@@ -132,3 +132,25 @@ func TestListSearchFilter(t *testing.T) {
 		assert.Equal(t, 0, l.NumFilteredInstances())
 	})
 }
+
+func TestHighlightMatch(t *testing.T) {
+	t.Run("高亮匹配子串", func(t *testing.T) {
+		result := HighlightMatch("feat-login", "login")
+		assert.Contains(t, result, "login")
+	})
+
+	t.Run("空搜索词不改变原文", func(t *testing.T) {
+		result := HighlightMatch("feat-login", "")
+		assert.Equal(t, "feat-login", result)
+	})
+
+	t.Run("大小写不敏感高亮", func(t *testing.T) {
+		result := HighlightMatch("feat-LOGIN", "login")
+		assert.Contains(t, result, "LOGIN")
+	})
+
+	t.Run("无匹配时不改变原文", func(t *testing.T) {
+		result := HighlightMatch("feat-login", "不存在")
+		assert.Equal(t, "feat-login", result)
+	})
+}

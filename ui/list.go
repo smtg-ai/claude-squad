@@ -59,6 +59,35 @@ var autoYesStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("#dde4f0")).
 	Foreground(lipgloss.Color("#1a1a1a"))
 
+// matchHighlightStyle 搜索匹配子串的高亮样式
+var matchHighlightStyle = lipgloss.NewStyle().
+	Background(lipgloss.Color("#5B4A8A")).
+	Foreground(lipgloss.Color("#FFFFFF"))
+
+// HighlightMatch 在文本中高亮匹配搜索词的子串
+func HighlightMatch(text, query string) string {
+	if query == "" {
+		return text
+	}
+	lowerText := strings.ToLower(text)
+	lowerQuery := strings.ToLower(query)
+
+	var b strings.Builder
+	lastIdx := 0
+	for {
+		idx := strings.Index(lowerText[lastIdx:], lowerQuery)
+		if idx == -1 {
+			b.WriteString(text[lastIdx:])
+			break
+		}
+		absIdx := lastIdx + idx
+		b.WriteString(text[lastIdx:absIdx])
+		b.WriteString(matchHighlightStyle.Render(text[absIdx : absIdx+len(query)]))
+		lastIdx = absIdx + len(query)
+	}
+	return b.String()
+}
+
 type List struct {
 	items         []*session.Instance
 	selectedIdx   int
@@ -127,6 +156,7 @@ type InstanceRenderer struct {
 	spinner         *spinner.Model
 	width           int
 	descInputActive bool
+	searchQuery     string
 }
 
 func (r *InstanceRenderer) setWidth(width int) {
@@ -138,6 +168,11 @@ func (r *InstanceRenderer) setWidth(width int) {
 func (l *List) SetDescInputActive(active bool) {
 	l.descInputActive = active
 	l.renderer.descInputActive = active
+}
+
+// SetSearchQueryOnRenderer 设置渲染器的搜索词（用于高亮）
+func (l *List) SetSearchQueryOnRenderer(query string) {
+	l.renderer.searchQuery = query
 }
 
 // ɹ and ɻ are other options.
@@ -176,6 +211,9 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	widthAvail := r.width - 3 - runewidth.StringWidth(prefix) - 1
 	if widthAvail > 0 && runewidth.StringWidth(titleText) > widthAvail {
 		titleText = runewidth.Truncate(titleText, widthAvail-3, "...")
+	}
+	if r.searchQuery != "" {
+		titleText = HighlightMatch(titleText, r.searchQuery)
 	}
 	title := titleS.Render(lipgloss.JoinHorizontal(
 		lipgloss.Left,
@@ -240,6 +278,10 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	}
 	remainingWidth -= runewidth.StringWidth(branch)
 
+	if r.searchQuery != "" {
+		branch = HighlightMatch(branch, r.searchQuery)
+	}
+
 	// Add spaces to fill the remaining width.
 	spaces := ""
 	if remainingWidth > 0 {
@@ -260,6 +302,9 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		}
 		if descWidthAvail > 0 && runewidth.StringWidth(descText) > descWidthAvail {
 			descText = runewidth.Truncate(descText, descWidthAvail-1, "…")
+		}
+		if r.searchQuery != "" {
+			descText = HighlightMatch(descText, r.searchQuery)
 		}
 		// 闪烁光标：利用 spinner 的当前帧判断是否显示
 		cursor := ""
@@ -542,8 +587,12 @@ func (l *List) updateFilteredItems() {
 	query := l.searchInput.Value()
 	if query == "" {
 		l.filteredItems = nil
+		l.SetSearchQueryOnRenderer("")
 		return
 	}
+
+	// 保存原始搜索词用于高亮
+	l.SetSearchQueryOnRenderer(query)
 
 	// 保存当前选中实例（从 visibleItems 获取，而非 l.items）
 	var currentSelected *session.Instance
@@ -551,12 +600,12 @@ func (l *List) updateFilteredItems() {
 		currentSelected = vis[l.selectedIdx]
 	}
 
-	query = strings.ToLower(query)
+	queryLower := strings.ToLower(query)
 	l.filteredItems = []*session.Instance{}
 	for _, item := range l.items {
-		if strings.Contains(strings.ToLower(item.Title), query) ||
-			strings.Contains(strings.ToLower(item.Description), query) ||
-			strings.Contains(strings.ToLower(item.Branch), query) {
+		if strings.Contains(strings.ToLower(item.Title), queryLower) ||
+			strings.Contains(strings.ToLower(item.Description), queryLower) ||
+			strings.Contains(strings.ToLower(item.Branch), queryLower) {
 			l.filteredItems = append(l.filteredItems, item)
 		}
 	}
