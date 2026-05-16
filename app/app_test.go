@@ -505,3 +505,74 @@ func TestDescriptionStateTransitions(t *testing.T) {
 		assert.Equal(t, stateDescription, h.state)
 	})
 }
+
+func TestSearchStateTransitions(t *testing.T) {
+	sp := spinner.New(spinner.WithSpinner(spinner.MiniDot))
+	list := ui.NewList(&sp, false)
+
+	instance, err := session.NewInstance(session.InstanceOptions{
+		Title:   "test-search",
+		Path:    t.TempDir(),
+		Program: "claude",
+	})
+	require.NoError(t, err)
+	_ = list.AddInstance(instance)
+	list.SetSelectedInstance(0)
+
+	t.Run("按 / 进入搜索态", func(t *testing.T) {
+		h := &home{
+			ctx:       context.Background(),
+			state:     stateDefault,
+			appConfig: config.DefaultConfig(),
+			list:      list,
+			menu:      ui.NewMenu(),
+			keySent:   true, // 跳过菜单高亮的第一次拦截
+		}
+
+		keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")}
+		model, _ := h.handleKeyPress(keyMsg)
+		homeModel, ok := model.(*home)
+		require.True(t, ok)
+		assert.Equal(t, stateSearch, homeModel.state)
+		assert.True(t, homeModel.list.IsSearchFocused())
+	})
+
+	t.Run("Esc 退出搜索态并清空搜索词", func(t *testing.T) {
+		h := &home{
+			ctx:       context.Background(),
+			state:     stateSearch,
+			appConfig: config.DefaultConfig(),
+			list:      list,
+			menu:      ui.NewMenu(),
+		}
+		h.list.SetSearchFocused(true)
+
+		keyMsg := tea.KeyMsg{Type: tea.KeyEscape}
+		model, _ := h.handleKeyPress(keyMsg)
+		homeModel, ok := model.(*home)
+		require.True(t, ok)
+		assert.Equal(t, stateDefault, homeModel.state)
+		assert.False(t, homeModel.list.IsSearchFocused())
+		assert.Equal(t, "", homeModel.list.SearchQuery())
+	})
+
+	t.Run("Enter 退出搜索态但保留搜索词", func(t *testing.T) {
+		h := &home{
+			ctx:       context.Background(),
+			state:     stateSearch,
+			appConfig: config.DefaultConfig(),
+			list:      list,
+			menu:      ui.NewMenu(),
+		}
+		h.list.SetSearchFocused(true)
+		h.list.SetSearchQuery("test")
+
+		keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+		model, _ := h.handleKeyPress(keyMsg)
+		homeModel, ok := model.(*home)
+		require.True(t, ok)
+		assert.Equal(t, stateDefault, homeModel.state)
+		assert.False(t, homeModel.list.IsSearchFocused())
+		assert.Equal(t, "test", homeModel.list.SearchQuery())
+	})
+}

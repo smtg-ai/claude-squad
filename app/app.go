@@ -48,6 +48,8 @@ const (
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
+	// stateSearch is the state when the search input is focused.
+	stateSearch
 )
 
 type home struct {
@@ -341,6 +343,39 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleSearchState 处理搜索态下的键盘事件
+func (m *home) handleSearchState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Ctrl+C 退出搜索（而非退出应用）
+	if msg.String() == "ctrl+c" {
+		m.list.ClearSearch()
+		m.state = stateDefault
+		return m, m.instanceChanged()
+	}
+
+	switch msg.Type {
+	case tea.KeyEnter:
+		// 确认搜索，焦点回到列表（保留搜索词和过滤结果）
+		m.list.SetSearchFocused(false)
+		m.state = stateDefault
+		return m, nil
+	case tea.KeyEsc:
+		// 取消搜索，清空搜索词
+		m.list.ClearSearch()
+		m.state = stateDefault
+		return m, nil
+	case tea.KeyRunes, tea.KeyBackspace, tea.KeySpace:
+		// 将输入转发给搜索框
+		m.list.SearchInput().Update(msg)
+		m.list.UpdateFilter()
+		return m, nil
+	default:
+		// 其他按键也转发给 textinput
+		m.list.SearchInput().Update(msg)
+		m.list.UpdateFilter()
+		return m, nil
+	}
+}
+
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
 		return m, m.handleError(err)
@@ -355,7 +390,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateSearch {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -637,6 +672,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	}
 
+	if m.state == stateSearch {
+		return m.handleSearchState(msg)
+	}
+
 	// Exit scrolling mode when ESC is pressed and preview pane is in scrolling mode
 	// Check if Escape key was pressed and we're not in the diff tab (meaning we're in preview tab)
 	// Always check for escape key first to ensure it doesn't get intercepted elsewhere
@@ -854,6 +893,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.state = stateDefault
 			m.instanceChanged()
 		})
+		return m, nil
+	case keys.KeySearch:
+		m.list.SetSearchFocused(true)
+		m.state = stateSearch
 		return m, nil
 	default:
 		return m, nil
