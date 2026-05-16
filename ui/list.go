@@ -45,6 +45,11 @@ var selectedDescStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("#dde4f0")).
 	Foreground(lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#1a1a1a"})
 
+var selectedDescLineStyle = lipgloss.NewStyle().
+	Padding(0, 1, 0, 1).
+	Background(lipgloss.Color("#dde4f0")).
+	Foreground(lipgloss.AdaptiveColor{Light: "#888888", Dark: "#888888"})
+
 var mainTitle = lipgloss.NewStyle().
 	Background(lipgloss.Color("62")).
 	Foreground(lipgloss.Color("230"))
@@ -124,6 +129,10 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	if !selected {
 		titleS = titleStyle
 		descS = listDescStyle
+	}
+	descLineS := listDescStyle
+	if selected {
+		descLineS = selectedDescLineStyle
 	}
 
 	// add spinner next to title if it's running
@@ -227,7 +236,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		text := lipgloss.JoinVertical(
 			lipgloss.Left,
 			title,
-			descS.Render(descLine),
+			descLineS.Render(descLine),
 			descS.Render(branchLine),
 		)
 		return text
