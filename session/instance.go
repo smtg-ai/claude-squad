@@ -51,6 +51,8 @@ type Instance struct {
 	AutoYes bool
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
+	// Description is an optional description for the instance (supports Unicode).
+	Description string
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
@@ -80,6 +82,7 @@ func (i *Instance) ToInstanceData() InstanceData {
 		UpdatedAt: time.Now(),
 		Program:   i.Program,
 		AutoYes:   i.AutoYes,
+		Description: i.Description,
 	}
 
 	// Only include worktree data if gitWorktree is initialized
@@ -118,6 +121,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 		CreatedAt: data.CreatedAt,
 		UpdatedAt: data.UpdatedAt,
 		Program:   data.Program,
+		Description: data.Description,
 		gitWorktree: git.NewGitWorktreeFromStorage(
 			data.Worktree.RepoPath,
 			data.Worktree.WorktreePath,
@@ -157,6 +161,8 @@ type InstanceOptions struct {
 	AutoYes bool
 	// Branch is an existing branch name to start the session on (empty = new branch from HEAD)
 	Branch string
+	// Description is an optional description for the instance.
+	Description string
 }
 
 func NewInstance(opts InstanceOptions) (*Instance, error) {
@@ -179,6 +185,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		UpdatedAt:      t,
 		AutoYes:        false,
 		selectedBranch: opts.Branch,
+		Description:     opts.Description,
 	}, nil
 }
 
@@ -191,6 +198,11 @@ func (i *Instance) RepoName() (string, error) {
 
 func (i *Instance) SetStatus(status Status) {
 	i.Status = status
+}
+
+// SetDescription sets the description of the instance.
+func (i *Instance) SetDescription(desc string) {
+	i.Description = desc
 }
 
 // SetSelectedBranch sets the branch to use when starting the instance.
