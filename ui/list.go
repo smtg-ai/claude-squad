@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 )
@@ -71,14 +72,25 @@ type List struct {
 	// map of repo name to number of instances using it. Used to display the repo name only if there are
 	// multiple repos in play.
 	repos map[string]int
+
+	searchInput   textinput.Model
+	searchFocused bool
+	filteredItems []*session.Instance
 }
 
 func NewList(spinner *spinner.Model, autoYes bool) *List {
+	si := textinput.New()
+	si.Placeholder = "/ Search..."
+	si.CharLimit = 64
+	si.Width = 20
+
 	return &List{
-		items:    []*session.Instance{},
-		renderer: &InstanceRenderer{spinner: spinner},
-		repos:    make(map[string]int),
-		autoyes:  autoYes,
+		items:         []*session.Instance{},
+		renderer:      &InstanceRenderer{spinner: spinner},
+		repos:         make(map[string]int),
+		autoyes:       autoYes,
+		searchInput:   si,
+		filteredItems: nil, // nil 表示未过滤，显示全部
 	}
 }
 
@@ -87,6 +99,7 @@ func (l *List) SetSize(width, height int) {
 	l.width = width
 	l.height = height
 	l.renderer.setWidth(width)
+	l.searchInput.Width = AdjustPreviewWidth(width) - 4
 }
 
 // SetSessionPreviewSize sets the height and width for the tmux sessions. This makes the stdout line have the correct
@@ -106,7 +119,7 @@ func (l *List) SetSessionPreviewSize(width, height int) (err error) {
 }
 
 func (l *List) NumInstances() int {
-	return len(l.items)
+	return len(l.visibleItems())
 }
 
 // InstanceRenderer handles rendering of session.Instance objects
@@ -310,11 +323,31 @@ func (l *List) String() string {
 	b.WriteString("\n")
 	b.WriteString("\n")
 
-	// Render the list.
-	for i, item := range l.items {
-		b.WriteString(l.renderer.Render(item, i+1, i == l.selectedIdx, len(l.repos) > 1))
-		if i != len(l.items)-1 {
-			b.WriteString("\n\n")
+	// 渲染搜索框
+	searchStyle := lipgloss.NewStyle().
+		Padding(0, 1).
+		Width(AdjustPreviewWidth(l.width))
+	if l.searchFocused {
+		searchStyle = searchStyle.Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("99"))
+	} else {
+		searchStyle = searchStyle.Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("3C3C3C"))
+	}
+	b.WriteString(searchStyle.Render(l.searchInput.View()))
+	b.WriteString("\n")
+
+	// 渲染列表项
+	items := l.visibleItems()
+	if len(items) == 0 && l.filteredItems != nil {
+		noMatchStyle := lipgloss.NewStyle().
+			Padding(1, 1).
+			Foreground(lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"})
+		b.WriteString(noMatchStyle.Render("No matching instances"))
+	} else {
+		for i, item := range items {
+			b.WriteString(l.renderer.Render(item, i+1, i == l.selectedIdx, len(l.repos) > 1))
+			if i != len(items)-1 {
+				b.WriteString("\n\n")
+			}
 		}
 	}
 	return lipgloss.Place(l.width, l.height, lipgloss.Left, lipgloss.Top, b.String())
@@ -322,32 +355,39 @@ func (l *List) String() string {
 
 // Down selects the next item in the list.
 func (l *List) Down() {
-	if len(l.items) == 0 {
+	items := l.visibleItems()
+	if len(items) == 0 {
 		return
 	}
-	if l.selectedIdx < len(l.items)-1 {
+	if l.selectedIdx < len(items)-1 {
 		l.selectedIdx++
 	}
 }
 
 // Kill selects the next item in the list.
 func (l *List) Kill() {
-	if len(l.items) == 0 {
+	items := l.visibleItems()
+	if len(items) == 0 {
 		return
 	}
-	targetInstance := l.items[l.selectedIdx]
+	targetInstance := items[l.selectedIdx]
 
-	// Kill the tmux session
 	if err := targetInstance.Kill(); err != nil {
 		log.ErrorLog.Printf("could not kill instance: %v", err)
 	}
 
-	// If you delete the last one in the list, select the previous one.
-	if l.selectedIdx == len(l.items)-1 {
-		defer l.Up()
+	// 在完整列表中找到并删除
+	realIdx := -1
+	for i, item := range l.items {
+		if item == targetInstance {
+			realIdx = i
+			break
+		}
+	}
+	if realIdx == -1 {
+		return
 	}
 
-	// Unregister the reponame.
 	repoName, err := targetInstance.RepoName()
 	if err != nil {
 		log.ErrorLog.Printf("could not get repo name: %v", err)
@@ -355,18 +395,32 @@ func (l *List) Kill() {
 		l.rmRepo(repoName)
 	}
 
-	// Since there's items after this, the selectedIdx can stay the same.
-	l.items = append(l.items[:l.selectedIdx], l.items[l.selectedIdx+1:]...)
+	l.items = append(l.items[:realIdx], l.items[realIdx+1:]...)
+
+	// 确保 selectedIdx 在合法范围内
+	if l.selectedIdx >= len(l.items) {
+		l.selectedIdx = len(l.items) - 1
+	}
+	if l.selectedIdx < 0 {
+		l.selectedIdx = 0
+	}
+
+	l.updateFilteredItems()
 }
 
 func (l *List) Attach() (chan struct{}, error) {
-	targetInstance := l.items[l.selectedIdx]
+	items := l.visibleItems()
+	if len(items) == 0 {
+		return nil, fmt.Errorf("no instances to attach")
+	}
+	targetInstance := items[l.selectedIdx]
 	return targetInstance.Attach()
 }
 
 // Up selects the prev item in the list.
 func (l *List) Up() {
-	if len(l.items) == 0 {
+	items := l.visibleItems()
+	if len(items) == 0 {
 		return
 	}
 	if l.selectedIdx > 0 {
@@ -397,7 +451,7 @@ func (l *List) rmRepo(repo string) {
 // When creating a new one and entering the name, you want to call the finalizer once the name is done.
 func (l *List) AddInstance(instance *session.Instance) (finalize func()) {
 	l.items = append(l.items, instance)
-	// The finalizer registers the repo name once the instance is started.
+	l.updateFilteredItems()
 	return func() {
 		repoName, err := instance.RepoName()
 		if err != nil {
@@ -411,15 +465,19 @@ func (l *List) AddInstance(instance *session.Instance) (finalize func()) {
 
 // GetSelectedInstance returns the currently selected instance
 func (l *List) GetSelectedInstance() *session.Instance {
-	if len(l.items) == 0 {
+	items := l.visibleItems()
+	if len(items) == 0 {
 		return nil
 	}
-	return l.items[l.selectedIdx]
+	if l.selectedIdx >= len(items) {
+		return nil
+	}
+	return items[l.selectedIdx]
 }
 
 // SetSelectedInstance sets the selected index. Noop if the index is out of bounds.
 func (l *List) SetSelectedInstance(idx int) {
-	if idx >= len(l.items) {
+	if idx >= len(l.visibleItems()) {
 		return
 	}
 	l.selectedIdx = idx
@@ -427,7 +485,7 @@ func (l *List) SetSelectedInstance(idx int) {
 
 // SelectInstance finds and selects the given instance in the list.
 func (l *List) SelectInstance(target *session.Instance) {
-	for i, inst := range l.items {
+	for i, inst := range l.visibleItems() {
 		if inst == target {
 			l.SetSelectedInstance(i)
 			return
@@ -438,4 +496,119 @@ func (l *List) SelectInstance(target *session.Instance) {
 // GetInstances returns all instances in the list
 func (l *List) GetInstances() []*session.Instance {
 	return l.items
+}
+
+// SetSearchFocused 设置搜索框的聚焦状态
+func (l *List) SetSearchFocused(focused bool) {
+	l.searchFocused = focused
+	if focused {
+		l.searchInput.Focus()
+	} else {
+		l.searchInput.Blur()
+	}
+}
+
+// IsSearchFocused 返回搜索框是否聚焦
+func (l *List) IsSearchFocused() bool {
+	return l.searchFocused
+}
+
+// SearchInput 返回搜索框的指针，用于处理键盘事件
+func (l *List) SearchInput() *textinput.Model {
+	return &l.searchInput
+}
+
+// SetSearchQuery 设置搜索词并更新过滤结果
+func (l *List) SetSearchQuery(query string) {
+	l.searchInput.SetValue(query)
+	l.updateFilteredItems()
+}
+
+// SearchQuery 返回当前搜索词
+func (l *List) SearchQuery() string {
+	return l.searchInput.Value()
+}
+
+// ClearSearch 清空搜索词并取消聚焦
+func (l *List) ClearSearch() {
+	l.searchInput.SetValue("")
+	l.searchInput.Blur()
+	l.searchFocused = false
+	l.filteredItems = nil
+}
+
+// updateFilteredItems 根据当前搜索词过滤实例列表
+func (l *List) updateFilteredItems() {
+	query := l.searchInput.Value()
+	if query == "" {
+		l.filteredItems = nil
+		return
+	}
+
+	// 保存当前选中实例（从 visibleItems 获取，而非 l.items）
+	var currentSelected *session.Instance
+	if vis := l.visibleItems(); l.selectedIdx < len(vis) {
+		currentSelected = vis[l.selectedIdx]
+	}
+
+	query = strings.ToLower(query)
+	l.filteredItems = []*session.Instance{}
+	for _, item := range l.items {
+		if strings.Contains(strings.ToLower(item.Title), query) ||
+			strings.Contains(strings.ToLower(item.Description), query) ||
+			strings.Contains(strings.ToLower(item.Branch), query) {
+			l.filteredItems = append(l.filteredItems, item)
+		}
+	}
+
+	// 如果当前选中项仍在过滤结果中，保持选中
+	if currentSelected != nil && len(l.filteredItems) > 0 {
+		found := false
+		for _, fi := range l.filteredItems {
+			if fi == currentSelected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			l.selectedIdx = 0
+		}
+	} else if len(l.filteredItems) > 0 {
+		l.selectedIdx = 0
+	}
+}
+
+// UpdateFilter 重新计算过滤结果（在搜索输入变化后调用）
+func (l *List) UpdateFilter() {
+	l.updateFilteredItems()
+}
+
+// NumFilteredInstances 返回当前过滤后的实例数量
+func (l *List) NumFilteredInstances() int {
+	if l.filteredItems == nil {
+		return len(l.items)
+	}
+	return len(l.filteredItems)
+}
+
+// GetFilteredInstance 返回过滤后指定索引的实例
+func (l *List) GetFilteredInstance(idx int) *session.Instance {
+	if l.filteredItems == nil {
+		if idx >= len(l.items) {
+			return nil
+		}
+		return l.items[idx]
+	}
+	if idx >= len(l.filteredItems) {
+		return nil
+	}
+	return l.filteredItems[idx]
+}
+
+// visibleItems 返回当前可见的实例列表（过滤后或全部）
+func (l *List) visibleItems() []*session.Instance {
+	if l.filteredItems == nil {
+		return l.items
+	}
+	return l.filteredItems
 }

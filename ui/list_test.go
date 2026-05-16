@@ -82,3 +82,53 @@ func TestInstanceRendererDescription(t *testing.T) {
 		assert.NotContains(t, result, "☰")
 	})
 }
+
+func TestListSearchFilter(t *testing.T) {
+	sp := spinner.New(spinner.WithSpinner(spinner.MiniDot))
+	l := NewList(&sp, false)
+	l.SetSize(60, 20)
+
+	inst1, _ := session.NewInstance(session.InstanceOptions{Title: "feat-login", Path: ".", Program: "claude", Description: "实现用户登录"})
+	inst1.Branch = "feat/login"
+	inst2, _ := session.NewInstance(session.InstanceOptions{Title: "fix-bug", Path: ".", Program: "claude", Description: "修复首页白屏"})
+	inst2.Branch = "fix/white-screen"
+	inst3, _ := session.NewInstance(session.InstanceOptions{Title: "refactor-api", Path: ".", Program: "aider"})
+	inst3.Branch = "refactor/api"
+
+	l.AddInstance(inst1)
+	l.AddInstance(inst2)
+	l.AddInstance(inst3)
+
+	t.Run("空搜索词返回全部实例", func(t *testing.T) {
+		l.SetSearchQuery("")
+		assert.Equal(t, 3, l.NumFilteredInstances())
+	})
+
+	t.Run("按标题模糊搜索", func(t *testing.T) {
+		l.SetSearchQuery("login")
+		assert.Equal(t, 1, l.NumFilteredInstances())
+		assert.Equal(t, "feat-login", l.GetFilteredInstance(0).Title)
+	})
+
+	t.Run("按描述模糊搜索", func(t *testing.T) {
+		l.SetSearchQuery("白屏")
+		assert.Equal(t, 1, l.NumFilteredInstances())
+		assert.Equal(t, "fix-bug", l.GetFilteredInstance(0).Title)
+	})
+
+	t.Run("按分支模糊搜索", func(t *testing.T) {
+		l.SetSearchQuery("api")
+		assert.Equal(t, 1, l.NumFilteredInstances())
+		assert.Equal(t, "refactor-api", l.GetFilteredInstance(0).Title)
+	})
+
+	t.Run("大小写不敏感搜索", func(t *testing.T) {
+		l.SetSearchQuery("LOGIN")
+		assert.Equal(t, 1, l.NumFilteredInstances())
+	})
+
+	t.Run("无匹配时返回空", func(t *testing.T) {
+		l.SetSearchQuery("不存在的关键词")
+		assert.Equal(t, 0, l.NumFilteredInstances())
+	})
+}
