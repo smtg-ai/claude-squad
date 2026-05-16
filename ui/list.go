@@ -215,6 +215,24 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 
 	branchLine := fmt.Sprintf("%s %s-%s%s%s", strings.Repeat(" ", len(prefix)), branchIcon, branch, spaces, diff)
 
+	// Description 行（仅在有描述时显示）
+	if i.Description != "" {
+		descPrefix := strings.Repeat(" ", len(prefix))
+		descText := i.Description
+		descWidthAvail := r.width - 3 - runewidth.StringWidth(prefix) - runewidth.StringWidth("☰ ")
+		if descWidthAvail > 0 && runewidth.StringWidth(descText) > descWidthAvail {
+			descText = runewidth.Truncate(descText, descWidthAvail-1, "…")
+		}
+		descLine := fmt.Sprintf("%s ☰ %s", descPrefix, descText)
+		text := lipgloss.JoinVertical(
+			lipgloss.Left,
+			title,
+			descS.Render(descLine),
+			descS.Render(branchLine),
+		)
+		return text
+	}
+
 	// join title and subtitle
 	text := lipgloss.JoinVertical(
 		lipgloss.Left,
