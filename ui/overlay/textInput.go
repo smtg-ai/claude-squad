@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -41,9 +42,11 @@ type TextInputOverlay struct {
 	OnSubmit      func()
 	width         int
 	height        int
-	profilePicker *ProfilePicker
-	branchPicker  *BranchPicker
-	numStops      int // total number of focus stops
+	profilePicker  *ProfilePicker
+	branchPicker   *BranchPicker
+	descriptionInput textinput.Model
+	numStops       int // total number of focus stops
+	descriptionOnly bool // true when overlay only contains a description input (no textarea/pickers)
 }
 
 // NewTextInputOverlay creates a new text input overlay with the given title and initial value.
@@ -54,6 +57,25 @@ func NewTextInputOverlay(title string, initialValue string) *TextInputOverlay {
 		Title:    title,
 		numStops: 2, // textarea + enter button
 	}
+}
+
+// NewDescriptionOverlay creates a text input overlay for entering a description.
+// It contains only a description input field with a divider above it.
+func NewDescriptionOverlay() *TextInputOverlay {
+	di := textinput.New()
+	di.Placeholder = "Add a description..."
+	di.CharLimit = 128
+	di.Prompt = "" // 去掉默认的 > 符号
+	di.Focus()
+
+	overlay := &TextInputOverlay{
+		descriptionInput: di,
+		numStops:         2, // description input + enter button
+		FocusIndex:       0,
+		descriptionOnly:  true,
+	}
+	overlay.updateFocusState()
+	return overlay
 }
 
 // NewTextInputOverlayWithBranchPicker creates a text input overlay that includes an
@@ -67,17 +89,23 @@ func NewTextInputOverlayWithBranchPicker(title string, initialValue string, prof
 		pp = NewProfilePicker(profiles)
 	}
 
-	numStops := 3 // textarea + branch picker + enter button
+	numStops := 4 // textarea + description + branch picker + enter button
 	if pp != nil && pp.HasMultiple() {
-		numStops = 4 // profile picker + textarea + branch picker + enter button
+		numStops = 5 // profile picker + textarea + description + branch picker + enter button
 	}
 
+	di := textinput.New()
+	di.Placeholder = "Add a description..."
+	di.CharLimit = 128
+	di.Prompt = "" // 去掉默认的 > 符号
+
 	overlay := &TextInputOverlay{
-		textarea:      ti,
-		Title:         title,
-		profilePicker: pp,
-		branchPicker:  bp,
-		numStops:      numStops,
+		textarea:        ti,
+		Title:           title,
+		profilePicker:   pp,
+		branchPicker:    bp,
+		descriptionInput: di,
+		numStops:        numStops,
 	}
 	overlay.updateFocusState()
 	return overlay
@@ -96,7 +124,9 @@ func newTextarea(initialValue string) textarea.Model {
 }
 
 func (t *TextInputOverlay) SetSize(width, height int) {
-	t.textarea.SetHeight(height)
+	if !t.descriptionOnly {
+		t.textarea.SetHeight(height)
+	}
 	t.width = width
 	t.height = height
 	if t.branchPicker != nil {
@@ -105,6 +135,7 @@ func (t *TextInputOverlay) SetSize(width, height int) {
 	if t.profilePicker != nil {
 		t.profilePicker.SetWidth(width - 6)
 	}
+	t.descriptionInput.Width = width - 6
 }
 
 // Init initializes the text input overlay model
@@ -130,6 +161,17 @@ func (t *TextInputOverlay) isTextarea() bool {
 	return t.FocusIndex == 0
 }
 
+// isDescriptionInput returns true if the current focus is on the description input.
+func (t *TextInputOverlay) isDescriptionInput() bool {
+	if t.descriptionOnly {
+		return t.FocusIndex == 0
+	}
+	if t.profilePicker != nil && t.profilePicker.HasMultiple() {
+		return t.FocusIndex == 2
+	}
+	return t.FocusIndex == 1
+}
+
 // isEnterButton returns true if the current focus is on the enter button.
 func (t *TextInputOverlay) isEnterButton() bool {
 	return t.FocusIndex == t.numStops-1
@@ -141,9 +183,9 @@ func (t *TextInputOverlay) isBranchPicker() bool {
 		return false
 	}
 	if t.profilePicker != nil && t.profilePicker.HasMultiple() {
-		return t.FocusIndex == 2
+		return t.FocusIndex == 3
 	}
-	return t.FocusIndex == 1
+	return t.FocusIndex == 2
 }
 
 // setFocusIndex sets the focus index and syncs focus state.
@@ -154,10 +196,12 @@ func (t *TextInputOverlay) setFocusIndex(i int) {
 
 // updateFocusState syncs the textarea/branchPicker/profilePicker focus/blur state.
 func (t *TextInputOverlay) updateFocusState() {
-	if t.isTextarea() {
-		t.textarea.Focus()
-	} else {
-		t.textarea.Blur()
+	if !t.descriptionOnly {
+		if t.isTextarea() {
+			t.textarea.Focus()
+		} else {
+			t.textarea.Blur()
+		}
 	}
 	if t.branchPicker != nil {
 		if t.isBranchPicker() {
@@ -172,6 +216,11 @@ func (t *TextInputOverlay) updateFocusState() {
 		} else {
 			t.profilePicker.Blur()
 		}
+	}
+	if t.isDescriptionInput() {
+		t.descriptionInput.Focus()
+	} else {
+		t.descriptionInput.Blur()
 	}
 }
 
@@ -206,12 +255,28 @@ func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) (bool, bool) {
 			t.setFocusIndex(t.FocusIndex + 1)
 			return false, false
 		}
+		if t.isDescriptionInput() {
+			// Description overlay: Enter 直接提交；Prompt overlay: Enter 跳到下一个焦点
+			if t.descriptionOnly {
+				t.Submitted = true
+				if t.OnSubmit != nil {
+					t.OnSubmit()
+				}
+				return true, false
+			}
+			t.setFocusIndex(t.FocusIndex + 1)
+			return false, false
+		}
 		// Send enter to textarea
 		if t.isTextarea() {
 			t.textarea, _ = t.textarea.Update(msg)
 		}
 		return false, false
 	default:
+		if t.isDescriptionInput() {
+			t.descriptionInput, _ = t.descriptionInput.Update(msg)
+			return false, false
+		}
 		if t.isTextarea() {
 			t.textarea, _ = t.textarea.Update(msg)
 			return false, false
@@ -233,6 +298,11 @@ func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) (bool, bool) {
 // GetValue returns the current value of the text input.
 func (t *TextInputOverlay) GetValue() string {
 	return t.textarea.Value()
+}
+
+// GetDescription returns the current value of the description input.
+func (t *TextInputOverlay) GetDescription() string {
+	return t.descriptionInput.Value()
 }
 
 // GetSelectedBranch returns the selected branch name from the branch picker.
@@ -302,14 +372,34 @@ func (t *TextInputOverlay) Render() string {
 		innerWidth = 1
 	}
 
-	// Set textarea width to fit within the overlay
-	t.textarea.SetWidth(innerWidth)
-
 	// Build a horizontal divider line
 	divider := tiDividerStyle.Render(strings.Repeat("─", innerWidth))
 
 	// Build the view
 	var content string
+
+	// Description-only overlay: 只有 Description 输入框
+	if t.descriptionOnly {
+		t.descriptionInput.Width = innerWidth
+		content += tiTitleStyle.Render("Description") + "\n"
+		content += t.descriptionInput.View() + "\n\n"
+		content += divider + "\n\n"
+
+		// Render enter button with appropriate style
+		enterButton := " Enter "
+		if t.isEnterButton() {
+			enterButton = tiFocusedButtonStyle.Render(enterButton)
+		} else {
+			enterButton = tiButtonStyle.Render(enterButton)
+		}
+		content += enterButton
+
+		return tiStyle.Render(content)
+	}
+
+	// Full overlay with textarea, description, branch picker, etc.
+	// Set textarea width to fit within the overlay
+	t.textarea.SetWidth(innerWidth)
 
 	// Render profile picker if present, above the prompt
 	if t.profilePicker != nil {
@@ -319,6 +409,11 @@ func (t *TextInputOverlay) Render() string {
 
 	content += tiTitleStyle.Render(t.Title) + "\n"
 	content += t.textarea.View() + "\n\n"
+
+	// Description input（风格与 Enter Prompt 一致：分割线 + 标题 + 输入框）
+	content += divider + "\n\n"
+	content += tiTitleStyle.Render("Description") + "\n"
+	content += t.descriptionInput.View() + "\n\n"
 
 	// Render branch picker if present, with dividers
 	if t.branchPicker != nil {

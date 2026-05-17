@@ -40,6 +40,7 @@ const (
 	StateEmpty
 	StateNewInstance
 	StatePrompt
+	StateDescription
 )
 
 type Menu struct {
@@ -56,6 +57,7 @@ type Menu struct {
 var defaultMenuOptions = []keys.KeyName{keys.KeyNew, keys.KeyPrompt, keys.KeyHelp, keys.KeyQuit}
 var newInstanceMenuOptions = []keys.KeyName{keys.KeySubmitName}
 var promptMenuOptions = []keys.KeyName{keys.KeySubmitName}
+var descriptionMenuOptions = []keys.KeyName{keys.KeySubmitDescription}
 
 func NewMenu() *Menu {
 	return &Menu{
@@ -84,7 +86,7 @@ func (m *Menu) SetState(state MenuState) {
 func (m *Menu) SetInstance(instance *session.Instance) {
 	m.instance = instance
 	// Only change the state if we're not in a special state (NewInstance or Prompt)
-	if m.state != StateNewInstance && m.state != StatePrompt {
+	if m.state != StateNewInstance && m.state != StatePrompt && m.state != StateDescription {
 		if m.instance != nil {
 			m.state = StateDefault
 		} else {
@@ -117,6 +119,8 @@ func (m *Menu) updateOptions() {
 		m.options = newInstanceMenuOptions
 	case StatePrompt:
 		m.options = promptMenuOptions
+	case StateDescription:
+		m.options = descriptionMenuOptions
 	}
 }
 

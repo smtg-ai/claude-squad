@@ -40,12 +40,16 @@ const (
 	stateDefault state = iota
 	// stateNew is the state when the user is creating a new instance.
 	stateNew
+	// stateDescription is the state when the user is entering a description for a new instance.
+	stateDescription
 	// statePrompt is the state when the user is entering a prompt.
 	statePrompt
 	// stateHelp is the state when a help screen is displayed.
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
+	// stateSearch is the state when the search input is focused.
+	stateSearch
 )
 
 type home struct {
@@ -339,6 +343,45 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleSearchState 处理搜索态下的键盘事件
+func (m *home) handleSearchState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Ctrl+C 退出搜索（而非退出应用）
+	if msg.String() == "ctrl+c" {
+		m.list.ClearSearch()
+		m.state = stateDefault
+		return m, m.instanceChanged()
+	}
+
+	switch msg.Type {
+	case tea.KeyEnter:
+		// 确认搜索，焦点回到列表（保留搜索词和过滤结果）
+		m.list.SetSearchFocused(false)
+		m.state = stateDefault
+		return m, m.instanceChanged()
+	case tea.KeyEsc:
+		// Esc 退出搜索框聚焦，保留搜索词和过滤结果
+		m.list.SetSearchFocused(false)
+		m.state = stateDefault
+		return m, m.instanceChanged()
+	case tea.KeyUp:
+		// 方向键在搜索态下仍然可以移动列表选中项
+		m.list.Up()
+		return m, m.instanceChanged()
+	case tea.KeyDown:
+		// 方向键在搜索态下仍然可以移动列表选中项
+		m.list.Down()
+		return m, m.instanceChanged()
+	case tea.KeyRunes, tea.KeyBackspace, tea.KeySpace:
+		// 将输入转发给搜索框
+		m.list.HandleSearchInput(msg)
+		return m, nil
+	default:
+		// 其他按键也转发给 textinput
+		m.list.HandleSearchInput(msg)
+		return m, nil
+	}
+}
+
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {
 	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
 		return m, m.handleError(err)
@@ -353,7 +396,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm {
+	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm || m.state == stateSearch {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -373,6 +416,9 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 	// TODO: cleanup: when you press enter on stateNew, we use keys.KeySubmitName. We should unify the keymap.
 	if name == keys.KeyEnter && m.state == stateNew {
 		name = keys.KeySubmitName
+	}
+	if name == keys.KeyEnter && m.state == stateDescription {
+		name = keys.KeySubmitDescription
 	}
 	m.keySent = true
 	return tea.Batch(
@@ -424,24 +470,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, tea.Batch(tea.WindowSize(), initialSearch)
 			}
 
-			// Set Loading status and finalize into the list immediately
-			instance.SetStatus(session.Loading)
-			m.newInstanceFinalizer()
-			m.promptAfterName = false
-			m.state = stateDefault
-			m.menu.SetState(ui.StateDefault)
-
-			// Return a tea.Cmd that runs instance.Start in the background
-			startCmd := func() tea.Msg {
-				err := instance.Start(true)
-				return instanceStartedMsg{
-					instance:        instance,
-					err:             err,
-					promptAfterName: false,
-				}
-			}
-
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
+			// n 键流程：进入 Description 输入
+			m.state = stateDescription
+			m.menu.SetState(ui.StateDescription)
+			m.list.SetDescInputActive(true)
+			return m, tea.WindowSize()
 		case tea.KeyRunes:
 			if runewidth.StringWidth(instance.Title) >= 32 {
 				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
@@ -474,6 +507,79 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				},
 			)
 		default:
+		}
+		return m, nil
+	}
+	if m.state == stateDescription {
+		if msg.String() == "ctrl+c" {
+			// 取消整个创建流程
+			m.state = stateDefault
+			m.promptAfterName = false
+			m.list.SetDescInputActive(false)
+			m.list.Kill()
+			return m, tea.Sequence(
+				tea.WindowSize(),
+				func() tea.Msg {
+					m.menu.SetState(ui.StateDefault)
+					return nil
+				},
+			)
+		}
+
+		instance := m.list.GetInstances()[m.list.NumInstances()-1]
+		switch msg.Type {
+		case tea.KeyEnter:
+			// 确认 Description（留空即跳过），启动 instance
+			m.list.SetDescInputActive(false)
+			instance.SetStatus(session.Loading)
+			m.newInstanceFinalizer()
+			m.promptAfterName = false
+			m.state = stateDefault
+			m.menu.SetState(ui.StateDefault)
+
+			startCmd := func() tea.Msg {
+				err := instance.Start(true)
+				return instanceStartedMsg{
+					instance:        instance,
+					err:             err,
+					promptAfterName: false,
+				}
+			}
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
+
+		case tea.KeyRunes:
+			if runewidth.StringWidth(instance.Description) >= 128 {
+				return m, m.handleError(fmt.Errorf("description cannot be longer than 128 characters"))
+			}
+			instance.SetDescription(instance.Description + string(msg.Runes))
+
+		case tea.KeyBackspace:
+			runes := []rune(instance.Description)
+			if len(runes) == 0 {
+				return m, nil
+			}
+			instance.SetDescription(string(runes[:len(runes)-1]))
+
+		case tea.KeySpace:
+			if runewidth.StringWidth(instance.Description) >= 128 {
+				return m, m.handleError(fmt.Errorf("description cannot be longer than 128 characters"))
+			}
+			instance.SetDescription(instance.Description + " ")
+
+		case tea.KeyEsc:
+			// Esc 取消整个创建流程（与 stateNew 下 Esc 行为一致）
+			m.list.SetDescInputActive(false)
+			m.list.Kill()
+			m.state = stateDefault
+			m.promptAfterName = false
+			m.instanceChanged()
+			return m, tea.Sequence(
+				tea.WindowSize(),
+				func() tea.Msg {
+					m.menu.SetState(ui.StateDefault)
+					return nil
+				},
+			)
 		}
 		return m, nil
 	} else if m.state == statePrompt {
@@ -510,6 +616,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						selected.Program = selectedProgram
 					}
 					selected.Prompt = prompt
+				selected.SetDescription(m.textInputOverlay.GetDescription())
 
 					// Finalize into list and start
 					selected.SetStatus(session.Loading)
@@ -569,6 +676,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, nil
 		}
 		return m, nil
+	}
+
+	if m.state == stateSearch {
+		return m.handleSearchState(msg)
 	}
 
 	// Exit scrolling mode when ESC is pressed and preview pane is in scrolling mode
@@ -788,6 +899,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.state = stateDefault
 			m.instanceChanged()
 		})
+		return m, nil
+	case keys.KeySearch:
+		m.list.SetSearchFocused(true)
+		m.state = stateSearch
 		return m, nil
 	default:
 		return m, nil

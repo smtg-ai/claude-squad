@@ -22,12 +22,14 @@ const (
 
 	KeyCheckout
 	KeyResume
-	KeyPrompt // New key for entering a prompt
-	KeyHelp   // Key for showing help screen
+	KeyPrompt       // New key for entering a prompt
+	KeyHelp         // Key for showing help screen
+	KeySubmitDescription // Submit description in the new instance flow
 
 	// Diff keybindings
 	KeyShiftUp
 	KeyShiftDown
+	KeySearch // / key to search instances
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
@@ -49,6 +51,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"r":          KeyResume,
 	"p":          KeySubmit,
 	"?":          KeyHelp,
+	"/":          KeySearch,
 }
 
 // GlobalkeyBindings is a global, immutable map of KeyName tot keybinding.
@@ -109,11 +112,19 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 		key.WithKeys("r"),
 		key.WithHelp("r", "resume"),
 	),
+	KeySearch: key.NewBinding(
+		key.WithKeys("/"),
+		key.WithHelp("/", "search"),
+	),
 
 	// -- Special keybindings --
 
 	KeySubmitName: key.NewBinding(
 		key.WithKeys("enter"),
 		key.WithHelp("enter", "submit name"),
+	),
+	KeySubmitDescription: key.NewBinding(
+		key.WithKeys("enter"),
+		key.WithHelp("enter", "submit description (optional)"),
 	),
 }
