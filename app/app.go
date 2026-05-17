@@ -359,9 +359,17 @@ func (m *home) handleSearchState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.state = stateDefault
 		return m, m.instanceChanged()
 	case tea.KeyEsc:
-		// 取消搜索，清空搜索词
-		m.list.ClearSearch()
+		// Esc 退出搜索框聚焦，保留搜索词和过滤结果
+		m.list.SetSearchFocused(false)
 		m.state = stateDefault
+		return m, m.instanceChanged()
+	case tea.KeyUp:
+		// 方向键在搜索态下仍然可以移动列表选中项
+		m.list.Up()
+		return m, m.instanceChanged()
+	case tea.KeyDown:
+		// 方向键在搜索态下仍然可以移动列表选中项
+		m.list.Down()
 		return m, m.instanceChanged()
 	case tea.KeyRunes, tea.KeyBackspace, tea.KeySpace:
 		// 将输入转发给搜索框

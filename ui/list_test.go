@@ -101,56 +101,103 @@ func TestListSearchFilter(t *testing.T) {
 
 	t.Run("空搜索词返回全部实例", func(t *testing.T) {
 		l.SetSearchQuery("")
-		assert.Equal(t, 3, l.NumFilteredInstances())
+		assert.Equal(t, 3, l.numFilteredInstances())
 	})
 
 	t.Run("按标题模糊搜索", func(t *testing.T) {
 		l.SetSearchQuery("login")
-		assert.Equal(t, 1, l.NumFilteredInstances())
-		assert.Equal(t, "feat-login", l.GetFilteredInstance(0).Title)
+		assert.Equal(t, 1, l.numFilteredInstances())
+		assert.Equal(t, "feat-login", l.getFilteredInstance(0).Title)
 	})
 
 	t.Run("按描述模糊搜索", func(t *testing.T) {
 		l.SetSearchQuery("白屏")
-		assert.Equal(t, 1, l.NumFilteredInstances())
-		assert.Equal(t, "fix-bug", l.GetFilteredInstance(0).Title)
+		assert.Equal(t, 1, l.numFilteredInstances())
+		assert.Equal(t, "fix-bug", l.getFilteredInstance(0).Title)
 	})
 
 	t.Run("按分支模糊搜索", func(t *testing.T) {
 		l.SetSearchQuery("api")
-		assert.Equal(t, 1, l.NumFilteredInstances())
-		assert.Equal(t, "refactor-api", l.GetFilteredInstance(0).Title)
+		assert.Equal(t, 1, l.numFilteredInstances())
+		assert.Equal(t, "refactor-api", l.getFilteredInstance(0).Title)
 	})
 
 	t.Run("大小写不敏感搜索", func(t *testing.T) {
 		l.SetSearchQuery("LOGIN")
-		assert.Equal(t, 1, l.NumFilteredInstances())
+		assert.Equal(t, 1, l.numFilteredInstances())
 	})
 
 	t.Run("无匹配时返回空", func(t *testing.T) {
 		l.SetSearchQuery("不存在的关键词")
-		assert.Equal(t, 0, l.NumFilteredInstances())
+		assert.Equal(t, 0, l.numFilteredInstances())
+	})
+
+	t.Run("过滤后选中项索引应更新为过滤结果中的位置", func(t *testing.T) {
+		// 清空搜索，选中第 3 项（selectedIdx = 2）
+		l.SetSearchQuery("")
+		l.SetSelectedInstance(2)
+		assert.Equal(t, "refactor-api", l.GetSelectedInstance().Title)
+
+		// 搜索 "login" 只匹配第 1 项，当前选中项不在结果中，应自动选中第 1 项
+		l.SetSearchQuery("login")
+		assert.Equal(t, 0, l.selectedIdx)
+		assert.Equal(t, "feat-login", l.GetSelectedInstance().Title)
+
+		// 清空搜索，选中第 3 项
+		l.SetSearchQuery("")
+		l.SetSelectedInstance(2)
+
+		// 搜索 "feat" 匹配第 1 项，当前选中项不在结果中
+		l.SetSearchQuery("feat")
+		assert.Equal(t, 0, l.selectedIdx)
+		assert.Equal(t, "feat-login", l.GetSelectedInstance().Title)
+	})
+
+	t.Run("选中项在过滤结果中时索引应更新", func(t *testing.T) {
+		// 清空搜索，选中第 2 项 fix-bug
+		l.SetSearchQuery("")
+		l.SetSelectedInstance(1)
+		assert.Equal(t, "fix-bug", l.GetSelectedInstance().Title)
+
+		// 搜索 "白屏" 只匹配 fix-bug（l.items 索引 1）
+		// 过滤后 filteredItems = [fix-bug]，selectedIdx 应更新为 0
+		l.SetSearchQuery("白屏")
+		assert.Equal(t, 0, l.selectedIdx)
+		assert.Equal(t, "fix-bug", l.GetSelectedInstance().Title)
 	})
 }
 
 func TestHighlightMatch(t *testing.T) {
 	t.Run("高亮匹配子串", func(t *testing.T) {
-		result := HighlightMatch("feat-login", "login")
+		result := HighlightMatch("feat-login", "login", "\x1b[39m")
 		assert.Contains(t, result, "login")
 	})
 
 	t.Run("空搜索词不改变原文", func(t *testing.T) {
-		result := HighlightMatch("feat-login", "")
+		result := HighlightMatch("feat-login", "", "\x1b[39m")
 		assert.Equal(t, "feat-login", result)
 	})
 
 	t.Run("大小写不敏感高亮", func(t *testing.T) {
-		result := HighlightMatch("feat-LOGIN", "login")
+		result := HighlightMatch("feat-LOGIN", "login", "\x1b[39m")
 		assert.Contains(t, result, "LOGIN")
 	})
 
 	t.Run("无匹配时不改变原文", func(t *testing.T) {
-		result := HighlightMatch("feat-login", "不存在")
+		result := HighlightMatch("feat-login", "不存在", "\x1b[39m")
 		assert.Equal(t, "feat-login", result)
+	})
+
+	t.Run("选中态恢复前景色", func(t *testing.T) {
+		restoreFg := "\x1b[38;2;26;26;26m"
+		result := HighlightMatch("feat-login", "login", restoreFg)
+		// 匹配后应有重置前缀+恢复前景色序列
+		assert.Contains(t, result, matchHighlightResetPrefix)
+		assert.Contains(t, result, restoreFg)
+	})
+
+	t.Run("非选中态恢复默认前景色", func(t *testing.T) {
+		result := HighlightMatch("feat-login", "login", "\x1b[39m")
+		assert.Contains(t, result, "\x1b[39m")
 	})
 }

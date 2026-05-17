@@ -60,13 +60,16 @@ var autoYesStyle = lipgloss.NewStyle().
 	Background(lipgloss.Color("#dde4f0")).
 	Foreground(lipgloss.Color("#1a1a1a"))
 
-// matchHighlightStyle 搜索匹配子串的高亮样式
-var matchHighlightStyle = lipgloss.NewStyle().
-	Background(lipgloss.Color("#5B4A8A")).
-	Foreground(lipgloss.Color("#FFFFFF"))
+// matchHighlightSeq 是搜索匹配子串的高亮 ANSI 序列（粗体+下划线+紫色前景色）
+const matchHighlightSeq = "\x1b[1;4;38;2;91;74;138m"
 
-// HighlightMatch 在文本中高亮匹配搜索词的子串（rune 级匹配，安全处理多字节字符）
-func HighlightMatch(text, query string) string {
+// matchHighlightResetPrefix 是高亮后清除粗体、下划线、前景色的 ANSI 序列，之后需追加 restoreFg 恢复外层前景色
+const matchHighlightResetPrefix = "\x1b[22;24;39m"
+
+// HighlightMatch 在纯文本中高亮匹配搜索词的子串（rune 级匹配，安全处理多字节字符）。
+// restoreFg 用于在高亮结束后恢复外层前景色（如选中态的深色前景色）。
+// 非选中态传 "\x1b[39m"（默认前景色），选中态传 "\x1b[38;2;26;26;26m"。
+func HighlightMatch(text, query string, restoreFg string) string {
 	if query == "" {
 		return text
 	}
@@ -88,7 +91,10 @@ func HighlightMatch(text, query string) string {
 			}
 			if match {
 				b.WriteString(string(textRunes[lastRuneIdx:i]))
-				b.WriteString(matchHighlightStyle.Render(string(textRunes[i : i+len(lowerQuery)])))
+				b.WriteString(matchHighlightSeq)
+				b.WriteString(string(textRunes[i : i+len(lowerQuery)]))
+				b.WriteString(matchHighlightResetPrefix)
+				b.WriteString(restoreFg)
 				lastRuneIdx = i + len(lowerQuery)
 				found = true
 				break
@@ -184,8 +190,8 @@ func (l *List) SetDescInputActive(active bool) {
 	l.renderer.descInputActive = active
 }
 
-// SetSearchQueryOnRenderer 设置渲染器的搜索词（用于高亮）
-func (l *List) SetSearchQueryOnRenderer(query string) {
+// setSearchQueryOnRenderer 设置渲染器的搜索词（用于高亮）
+func (l *List) setSearchQueryOnRenderer(query string) {
 	l.renderer.searchQuery = query
 }
 
@@ -220,6 +226,16 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	default:
 	}
 
+	// 高亮恢复前景色：选中态恢复深色前景色，非选中态恢复默认前景色
+	titleRestore := "\x1b[39m"
+	branchRestore := "\x1b[39m"
+	descRestore := "\x1b[39m"
+	if selected {
+		titleRestore = "\x1b[38;2;26;26;26m"
+		branchRestore = "\x1b[38;2;26;26;26m"
+		descRestore = "\x1b[38;2;136;136;136m"
+	}
+
 	// Cut the title if it's too long
 	titleText := i.Title
 	widthAvail := r.width - 3 - runewidth.StringWidth(prefix) - 1
@@ -227,7 +243,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		titleText = runewidth.Truncate(titleText, widthAvail-3, "...")
 	}
 	if r.searchQuery != "" {
-		titleText = HighlightMatch(titleText, r.searchQuery)
+		titleText = HighlightMatch(titleText, r.searchQuery, titleRestore)
 	}
 	title := titleS.Render(lipgloss.JoinHorizontal(
 		lipgloss.Left,
@@ -293,7 +309,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	remainingWidth -= runewidth.StringWidth(branch)
 
 	if r.searchQuery != "" {
-		branch = HighlightMatch(branch, r.searchQuery)
+		branch = HighlightMatch(branch, r.searchQuery, branchRestore)
 	}
 
 	// Add spaces to fill the remaining width.
@@ -318,7 +334,7 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 			descText = runewidth.Truncate(descText, descWidthAvail-1, "…")
 		}
 		if r.searchQuery != "" {
-			descText = HighlightMatch(descText, r.searchQuery)
+			descText = HighlightMatch(descText, r.searchQuery, descRestore)
 		}
 		// 闪烁光标：利用 spinner 的当前帧判断是否显示
 		cursor := ""
@@ -329,9 +345,8 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 			}
 		}
 		descLine := fmt.Sprintf("%s ☰ %s%s", descPrefix, descText, cursor)
-		// 填充空格使背景色覆盖到右侧（与 branch 行一致）
-		// descLine 格式: "%s ☰ %s%s" = descPrefix + 空格 + ☰ + 空格 + descText + cursor
-		descContentWidth := runewidth.StringWidth(descPrefix) + 1 + runewidth.StringWidth("☰ ") + runewidth.StringWidth(descText) + runewidth.StringWidth(cursor)
+		// descText 包含 ANSI 序列（来自 HighlightMatch），必须使用 lipgloss.Width 计算
+		descContentWidth := lipgloss.Width(descPrefix) + 1 + lipgloss.Width("☰ ") + lipgloss.Width(descText) + lipgloss.Width(cursor)
 		descRemaining := r.width - descContentWidth
 		if descRemaining > 0 {
 			descLine += strings.Repeat(" ", descRemaining)
@@ -596,12 +611,12 @@ func (l *List) updateFilteredItems() {
 	query := l.searchInput.Value()
 	if query == "" {
 		l.filteredItems = nil
-		l.SetSearchQueryOnRenderer("")
+		l.setSearchQueryOnRenderer("")
 		return
 	}
 
 	// 保存原始搜索词用于高亮
-	l.SetSearchQueryOnRenderer(query)
+	l.setSearchQueryOnRenderer(query)
 
 	// 保存当前选中实例（从 visibleItems 获取，而非 l.items）
 	var currentSelected *session.Instance
@@ -619,11 +634,12 @@ func (l *List) updateFilteredItems() {
 		}
 	}
 
-	// 如果当前选中项仍在过滤结果中，保持选中
+	// 更新 selectedIdx 为当前选中项在 filteredItems 中的位置
 	if currentSelected != nil && len(l.filteredItems) > 0 {
 		found := false
-		for _, fi := range l.filteredItems {
-			if fi == currentSelected {
+		for fi, item := range l.filteredItems {
+			if item == currentSelected {
+				l.selectedIdx = fi
 				found = true
 				break
 			}
@@ -642,16 +658,16 @@ func (l *List) HandleSearchInput(msg tea.KeyMsg) {
 	l.updateFilteredItems()
 }
 
-// NumFilteredInstances 返回当前过滤后的实例数量
-func (l *List) NumFilteredInstances() int {
+// numFilteredInstances 返回当前过滤后的实例数量
+func (l *List) numFilteredInstances() int {
 	if l.filteredItems == nil {
 		return len(l.items)
 	}
 	return len(l.filteredItems)
 }
 
-// GetFilteredInstance 返回过滤后指定索引的实例
-func (l *List) GetFilteredInstance(idx int) *session.Instance {
+// getFilteredInstance 返回过滤后指定索引的实例
+func (l *List) getFilteredInstance(idx int) *session.Instance {
 	if l.filteredItems == nil {
 		if idx >= len(l.items) {
 			return nil
