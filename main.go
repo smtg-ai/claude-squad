@@ -6,6 +6,8 @@ import (
 	"claude-squad/config"
 	"claude-squad/daemon"
 	"claude-squad/log"
+	otelpkg "claude-squad/otel"
+	"claude-squad/server"
 	"claude-squad/session"
 	"claude-squad/session/git"
 	"claude-squad/session/tmux"
@@ -143,6 +145,56 @@ var (
 			fmt.Printf("https://github.com/smtg-ai/claude-squad/releases/tag/v%s\n", version)
 		},
 	}
+
+	serveAddr      string
+	serveAuthToken string
+	serveCmd       = &cobra.Command{
+		Use:   "serve",
+		Short: "Run claude-squad as a headless HTTP server (fork feature).",
+		Long: "Starts a Server-Sent-Events + REST API on the configured " +
+			"address exposing the same session lifecycle the TUI drives. " +
+			"Intended for external orchestrators (e.g. Paperclip). The TUI " +
+			"continues to work normally; this subcommand is additive.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log.Initialize(false)
+			defer log.Close()
+
+			token := serveAuthToken
+			if token == "" {
+				token = os.Getenv("CS_AUTH_TOKEN")
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// Enable OTEL tracing if Langfuse credentials are in env.
+			// Silent no-op when unset — upstream behavior preserved.
+			var otelShutdown func(context.Context) error
+			var otelCfg otelpkg.Config
+			if cfg, ok := otelpkg.ConfigFromEnv(version); ok {
+				shutdown, err := otelpkg.Init(ctx, cfg)
+				if err != nil {
+					log.ErrorLog.Printf("otel init failed: %v (continuing without tracing)", err)
+				} else {
+					otelCfg = cfg
+					otelShutdown = shutdown
+				}
+			}
+			defer func() {
+				if otelShutdown != nil {
+					_ = otelShutdown(context.Background())
+				}
+			}()
+
+			srv := server.New(server.Options{
+				Addr:      serveAddr,
+				AuthToken: token,
+				Version:   version,
+				OtelCfg:   otelCfg,
+			})
+			return srv.Serve(ctx)
+		},
+	}
 )
 
 func init() {
@@ -159,9 +211,16 @@ func init() {
 		panic(err)
 	}
 
+	serveCmd.Flags().StringVar(&serveAddr, "addr", ":3200",
+		"Address to bind (e.g. :3200 or 127.0.0.1:3200)")
+	serveCmd.Flags().StringVar(&serveAuthToken, "auth-token", "",
+		"Bearer token required on every request (env: CS_AUTH_TOKEN). "+
+			"Empty disables auth — local dev only.")
+
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(resetCmd)
+	rootCmd.AddCommand(serveCmd)
 }
 
 func main() {

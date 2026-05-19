@@ -31,6 +31,12 @@ type TmuxSession struct {
 	// The name of the tmux session and the sanitized name used for tmux commands.
 	sanitizedName string
 	program       string
+	// spawnEnv is an optional set of KEY=VALUE strings merged into the
+	// environment of the `tmux new-session ... <program>` command. Used
+	// by the `cs serve` HTTP server to inject per-instance OTEL +
+	// TRACEPARENT vars so the spawned agent emits telemetry into the
+	// same trace as the orchestrator. Empty = inherit parent env as-is.
+	spawnEnv []string
 	// ptyFactory is used to create a PTY for the tmux session.
 	ptyFactory PtyFactory
 	// cmdExec is used to execute commands in the tmux session.
@@ -86,6 +92,20 @@ func newTmuxSession(name string, program string, ptyFactory PtyFactory, cmdExec 
 	}
 }
 
+// SetSpawnEnv supplies extra KEY=VALUE environment strings that are
+// merged into the spawned tmux/agent subprocess's environment. Used by
+// the `cs serve` server to propagate TRACEPARENT + OTEL_* vars. A zero
+// or nil slice restores "inherit parent env unchanged" behavior.
+//
+// Call before Start(). Has no effect after the tmux session is live.
+func (t *TmuxSession) SetSpawnEnv(env []string) {
+	if len(env) == 0 {
+		t.spawnEnv = nil
+		return
+	}
+	t.spawnEnv = append(t.spawnEnv[:0], env...)
+}
+
 // Start creates and starts a new tmux session, then attaches to it. Program is the command to run in
 // the session (ex. claude). workdir is the git worktree directory.
 func (t *TmuxSession) Start(workDir string) error {
@@ -96,6 +116,12 @@ func (t *TmuxSession) Start(workDir string) error {
 
 	// Create a new detached tmux session and start claude in it
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
+
+	// Fork feature: merge per-instance env (OTEL/TRACEPARENT) if any.
+	// No change when spawnEnv is empty (upstream behavior preserved).
+	if len(t.spawnEnv) > 0 {
+		cmd.Env = append(os.Environ(), t.spawnEnv...)
+	}
 
 	ptmx, err := t.ptyFactory.Start(cmd)
 	if err != nil {
