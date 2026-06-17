@@ -2,7 +2,7 @@ module claude-squad
 
 go 1.23.0
 
-toolchain go1.24.1
+toolchain go1.25.8
 
 require (
 	github.com/atotto/clipboard v0.1.4
