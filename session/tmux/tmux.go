@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -23,6 +24,54 @@ const ProgramClaude = "claude"
 
 const ProgramAider = "aider"
 const ProgramGemini = "gemini"
+const ProgramCopilot = "copilot"
+
+// GitHub Copilot CLI auto-approve flags. In autonomous (auto-yes) mode these
+// stop it from blocking on its trust/permission prompt and from pausing to ask
+// the user questions. The broader --allow-all / --yolo flags (allow-all-tools +
+// allow-all-paths + allow-all-urls) are treated as already covering tool
+// approval when a user has configured them.
+const copilotAllowAllToolsFlag = "--allow-all-tools"
+const copilotNoAskUserFlag = "--no-ask-user"
+
+// AutoYesProgram returns the program command to launch for an autonomous
+// (auto-yes) session. For agents that expose non-interactive auto-approve flags
+// it appends them so the agent does not stall on a trust or permission prompt.
+// Currently this is needed for GitHub Copilot. For every other program, and
+// when autoYes is false, program is returned unchanged. The function is
+// idempotent: it never appends a flag that is already present.
+func AutoYesProgram(program string, autoYes bool) string {
+	if !autoYes {
+		return program
+	}
+	fields := strings.Fields(program)
+	if len(fields) == 0 || filepath.Base(fields[0]) != ProgramCopilot {
+		return program
+	}
+
+	result := program
+	// --allow-all and --yolo already imply --allow-all-tools, so only add the
+	// tool-approval flag when none of them is set.
+	if !hasArg(fields, copilotAllowAllToolsFlag) &&
+		!hasArg(fields, "--allow-all") &&
+		!hasArg(fields, "--yolo") {
+		result += " " + copilotAllowAllToolsFlag
+	}
+	if !hasArg(fields, copilotNoAskUserFlag) {
+		result += " " + copilotNoAskUserFlag
+	}
+	return result
+}
+
+// hasArg reports whether args contains the exact flag.
+func hasArg(args []string, flag string) bool {
+	for _, a := range args {
+		if a == flag {
+			return true
+		}
+	}
+	return false
+}
 
 // TmuxSession represents a managed tmux session
 type TmuxSession struct {
