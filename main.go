@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"claude-squad/app"
 	cmd2 "claude-squad/cmd"
 	"claude-squad/config"
@@ -14,17 +15,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	version     = "1.0.19"
-	programFlag string
-	autoYesFlag bool
-	daemonFlag  bool
-	binName     string
-	rootCmd     = &cobra.Command{
+	version        = "1.0.19"
+	programFlag    string
+	autoYesFlag    bool
+	daemonFlag     bool
+	resetForceFlag bool
+	binName        string
+	rootCmd        = &cobra.Command{
 		Use:   "claude-squad",
 		Short: "Claude Squad - Manage multiple AI agents like Claude Code, Aider, Codex, and Amp.",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -83,6 +86,17 @@ var (
 		RunE: func(cmd *cobra.Command, args []string) error {
 			log.Initialize(false)
 			defer log.Close()
+
+			if !resetForceFlag {
+				confirmed, err := confirmReset()
+				if err != nil {
+					return err
+				}
+				if !confirmed {
+					fmt.Println("Aborted.")
+					return nil
+				}
+			}
 
 			state := config.LoadState()
 			storage, err := session.NewStorage(state)
@@ -145,6 +159,32 @@ var (
 	}
 )
 
+// confirmReset warns the user about the destructive nature of `reset` and
+// prompts for confirmation. It returns true if the user confirmed.
+func confirmReset() (bool, error) {
+	dirtyCount, err := git.CountWorktreesWithUncommittedChanges()
+	if err != nil {
+		log.ErrorLog.Printf("failed to check worktrees for uncommitted changes: %v", err)
+	}
+
+	fmt.Println("Warning: This will permanently delete all sessions and worktrees.")
+	if dirtyCount > 0 {
+		fmt.Printf("%d worktree(s) have uncommitted changes that will be lost and cannot be recovered.\n", dirtyCount)
+	} else {
+		fmt.Println("Uncommitted changes will be lost and cannot be recovered.")
+	}
+	fmt.Print("Are you sure? (y/N): ")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil && input == "" {
+		return false, fmt.Errorf("failed to read confirmation input: %w", err)
+	}
+	input = strings.TrimSpace(strings.ToLower(input))
+
+	return input == "y" || input == "yes", nil
+}
+
 func init() {
 	rootCmd.Flags().StringVarP(&programFlag, "program", "p", "",
 		"Program to run in new instances (e.g. 'aider --model ollama_chat/gemma3:1b')")
@@ -158,6 +198,9 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+
+	resetCmd.Flags().BoolVarP(&resetForceFlag, "force", "y", false,
+		"Skip the confirmation prompt (useful for scripting)")
 
 	rootCmd.AddCommand(debugCmd)
 	rootCmd.AddCommand(versionCmd)

@@ -155,6 +155,43 @@ func (g *GitWorktree) Prune() error {
 	return nil
 }
 
+// CountWorktreesWithUncommittedChanges returns the number of worktrees under the
+// worktrees directory that currently have uncommitted changes.
+func CountWorktreesWithUncommittedChanges() (int, error) {
+	worktreesDir, err := getWorktreeDirectory()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get worktree directory: %w", err)
+	}
+
+	entries, err := os.ReadDir(worktreesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to read worktree directory: %w", err)
+	}
+
+	count := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		worktreePath := filepath.Join(worktreesDir, entry.Name())
+		cmd := exec.Command("git", "-C", worktreePath, "status", "--porcelain")
+		output, err := cmd.Output()
+		if err != nil {
+			// Skip entries that are no longer valid git working trees.
+			continue
+		}
+		if len(output) > 0 {
+			count++
+		}
+	}
+
+	return count, nil
+}
+
 // CleanupWorktrees removes all worktrees and their associated branches
 func CleanupWorktrees() error {
 	worktreesDir, err := getWorktreeDirectory()
