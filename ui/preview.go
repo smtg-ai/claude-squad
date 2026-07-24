@@ -16,9 +16,21 @@ type PreviewPane struct {
 	width  int
 	height int
 
+	// showCursor renders the session's cursor cell into the snapshot (focus mode).
+	showCursor bool
+
+	// Mouse selection state. While a selection is active, content updates
+	// pause so the text does not shift under the drag.
+	sel paneSelection
+
 	previewState previewState
 	isScrolling  bool
 	viewport     viewport.Model
+}
+
+// SetShowCursor toggles rendering the session's cursor into the preview.
+func (p *PreviewPane) SetShowCursor(show bool) {
+	p.showCursor = show
 }
 
 type previewState struct {
@@ -51,6 +63,11 @@ func (p *PreviewPane) setFallbackState(message string) {
 
 // Updates the preview pane content with the tmux pane content
 func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
+	// Freeze the snapshot while a mouse selection is in progress so the text
+	// does not shift under the drag.
+	if p.sel.Active() {
+		return nil
+	}
 	switch {
 	case instance == nil:
 		p.setFallbackState("No agents running yet. Spin up a new instance with 'n' to get started!")
@@ -93,8 +110,20 @@ func (p *PreviewPane) UpdateContent(instance *session.Instance) error {
 
 		p.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, content, footer))
 	} else if !p.isScrolling {
-		// In normal mode, use the usual preview
-		content, err = instance.Preview()
+		// In normal mode, use the usual preview. In focus mode, additionally
+		// render the session's cursor into the snapshot.
+		if p.showCursor {
+			var cursorX, cursorY int
+			var cursorVisible bool
+			content, cursorX, cursorY, cursorVisible, err = instance.PreviewAndCursor()
+			if err == nil && cursorVisible {
+				content = OverlayCursor(content, cursorX, cursorY)
+			}
+		} else {
+			// Screen-row capture (not line-joined) so a mouse selection over
+			// wrapped output maps 1:1 onto the displayed rows.
+			content, err = instance.PreviewScreen()
+		}
 		if err != nil {
 			return err
 		}
@@ -164,6 +193,7 @@ func (p *PreviewPane) String() string {
 	availableHeight := p.height - 1 //  1 for ellipsis
 
 	lines := strings.Split(p.previewState.text, "\n")
+	lines = p.sel.Apply(lines)
 
 	// Truncate if we have more lines than available height
 	if availableHeight > 0 {
@@ -269,4 +299,34 @@ func (p *PreviewPane) ResetToNormalMode(instance *session.Instance) error {
 	}
 
 	return nil
+}
+
+// -- Mouse selection ----------------------------------------------------------
+
+// SelectionStart begins a selection at the given content cell.
+func (p *PreviewPane) SelectionStart(row, col int) {
+	if p.previewState.fallback || p.isScrolling {
+		return
+	}
+	p.sel.Start(row, col)
+}
+
+// SelectionDrag extends the selection to the given content cell.
+func (p *PreviewPane) SelectionDrag(row, col int) {
+	p.sel.Drag(row, col)
+}
+
+// SelectionActive reports whether a drag selection is in progress.
+func (p *PreviewPane) SelectionActive() bool {
+	return p.sel.Active()
+}
+
+// SelectionCancel drops an in-progress selection without copying.
+func (p *PreviewPane) SelectionCancel() {
+	p.sel.Cancel()
+}
+
+// SelectionFinish ends the selection and returns the selected plain text.
+func (p *PreviewPane) SelectionFinish() string {
+	return p.sel.FinishText(p.previewState.text)
 }

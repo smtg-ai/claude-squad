@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -470,6 +471,47 @@ func (t *TmuxSession) CapturePaneContent() (string, error) {
 		return "", fmt.Errorf("error capturing pane content: %v", err)
 	}
 	return string(output), nil
+}
+
+// CapturePaneScreen captures the visible pane as screen rows: escape
+// sequences preserved (-e), wrapped lines NOT joined (no -J), so row N of the
+// result is screen row N. The preview uses this so mouse selection and the
+// cursor overlay map 1:1 onto what is displayed.
+func (t *TmuxSession) CapturePaneScreen() (string, error) {
+	cmd := exec.Command("tmux", "capture-pane", "-p", "-e", "-t", t.sanitizedName)
+	output, err := t.cmdExec.Output(cmd)
+	if err != nil {
+		return "", fmt.Errorf("error capturing pane content: %v", err)
+	}
+	return string(output), nil
+}
+
+// CapturePaneContentAndCursor captures the visible pane as screen rows along
+// with the cursor position, so the caller can render the cursor into the
+// snapshot for focus mode.
+func (t *TmuxSession) CapturePaneContentAndCursor() (content string, cursorX, cursorY int, cursorVisible bool, err error) {
+	content, err = t.CapturePaneScreen()
+	if err != nil {
+		return "", 0, 0, false, err
+	}
+
+	posCmd := exec.Command("tmux", "display-message", "-p", "-t", t.sanitizedName,
+		"#{cursor_x},#{cursor_y},#{cursor_flag}")
+	pos, posErr := t.cmdExec.Output(posCmd)
+	if posErr != nil {
+		return content, 0, 0, false, nil
+	}
+	parts := strings.Split(strings.TrimSpace(string(pos)), ",")
+	if len(parts) != 3 {
+		return content, 0, 0, false, nil
+	}
+	x, errX := strconv.Atoi(parts[0])
+	y, errY := strconv.Atoi(parts[1])
+	if errX != nil || errY != nil {
+		return content, 0, 0, false, nil
+	}
+	// Treat an unknown cursor flag as visible so the cursor doesn't silently vanish.
+	return content, x, y, parts[2] != "0", nil
 }
 
 // CapturePaneContentWithOptions captures the pane content with additional options
