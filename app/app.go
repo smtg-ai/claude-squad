@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -776,6 +777,35 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(err)
 		}
 		return m, tea.WindowSize()
+	case keys.KeyOpenEditor:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil || selected.Status == session.Loading || !selected.Started() {
+			return m, nil
+		}
+		if selected.Paused() {
+			return m, m.handleError(fmt.Errorf("session is paused; resume it first to open the worktree"))
+		}
+		worktree, err := selected.GetGitWorktree()
+		if err != nil {
+			return m, m.handleError(err)
+		}
+		workPath := worktree.GetWorktreePath()
+		if workPath == "" {
+			return m, nil
+		}
+		editorParts := strings.Fields(m.appConfig.GetEditorCommand())
+		if len(editorParts) == 0 {
+			return m, m.handleError(fmt.Errorf("no editor configured; set editor_command in the config or $EDITOR"))
+		}
+		// ExecProcess suspends the TUI and hands the terminal to the editor,
+		// so terminal editors (vim, nano) and GUI launchers both work.
+		editorCmd := exec.Command(editorParts[0], append(editorParts[1:], workPath)...)
+		return m, tea.ExecProcess(editorCmd, func(err error) tea.Msg {
+			if err != nil {
+				return fmt.Errorf("editor (%s) exited with error: %w", editorParts[0], err)
+			}
+			return nil
+		})
 	case keys.KeyEnter:
 		if m.list.NumInstances() == 0 {
 			return m, nil

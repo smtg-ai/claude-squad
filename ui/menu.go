@@ -135,7 +135,7 @@ func (m *Menu) addInstanceOptions() {
 	if m.instance.Status == session.Paused {
 		actionGroup = append(actionGroup, keys.KeyResume)
 	} else {
-		actionGroup = append(actionGroup, keys.KeyCheckout)
+		actionGroup = append(actionGroup, keys.KeyOpenEditor, keys.KeyCheckout)
 	}
 
 	// Navigation group (when in diff tab)
@@ -162,14 +162,17 @@ func (m *Menu) SetSize(width, height int) {
 func (m *Menu) String() string {
 	var s strings.Builder
 
-	// Define group boundaries
+	// Define group boundaries. The action group is everything between the
+	// two-item management group and the trailing three-item system group;
+	// computing it keeps the coloring correct as action keys are added.
+	n := len(m.options)
 	groups := []struct {
 		start int
 		end   int
 	}{
-		{0, 2}, // Instance management group (n, d)
-		{2, 5}, // Action group (enter, submit, pause/resume)
-		{6, 8}, // System group (tab, help, q)
+		{0, 2},     // Instance management group (n, D)
+		{2, n - 3}, // Action group (enter, editor, ...)
+		{n - 3, n}, // System group (tab, help, q)
 	}
 
 	for i, k := range m.options {

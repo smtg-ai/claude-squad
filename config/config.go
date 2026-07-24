@@ -42,8 +42,20 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// EditorCommand is the command used to open a session's worktree in an
+	// editor (the 'e' key). Empty falls back to $EDITOR.
+	EditorCommand string `json:"editor_command,omitempty"`
 	// Profiles is a list of named program profiles.
 	Profiles []Profile `json:"profiles,omitempty"`
+}
+
+// GetEditorCommand returns the command used to open a worktree in an editor,
+// falling back to $EDITOR when unset. Empty means no editor is configured.
+func (c *Config) GetEditorCommand() string {
+	if cmd := strings.TrimSpace(c.EditorCommand); cmd != "" {
+		return cmd
+	}
+	return strings.TrimSpace(os.Getenv("EDITOR"))
 }
 
 // GetProgram returns the program to run. If Profiles is non-empty and
