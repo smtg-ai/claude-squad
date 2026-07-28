@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -65,6 +66,47 @@ func TestSetupFromExistingBranch_RemovesOrphanedDirectory(t *testing.T) {
 	currentBranch := mustRunGit(t, worktreePath, "branch", "--show-current")
 	if currentBranch != "feature/test\n" {
 		t.Fatalf("current branch = %q, want %q", currentBranch, "feature/test\n")
+	}
+}
+
+func TestSetupFromExistingBranch_RecordsBaseCommit(t *testing.T) {
+	tempHome := t.TempDir()
+	originalHome := os.Getenv("HOME")
+	if err := os.Setenv("HOME", tempHome); err != nil {
+		t.Fatalf("set HOME: %v", err)
+	}
+	defer func() {
+		_ = os.Setenv("HOME", originalHome)
+	}()
+
+	repoPath := filepath.Join(t.TempDir(), "repo")
+	mustRunGit(t, "", "init", repoPath)
+	mustRunGit(t, repoPath, "config", "user.name", "Test User")
+	mustRunGit(t, repoPath, "config", "user.email", "test@example.com")
+
+	readmePath := filepath.Join(repoPath, "README.md")
+	if err := os.WriteFile(readmePath, []byte("hello\n"), 0644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+
+	mustRunGit(t, repoPath, "add", "README.md")
+	mustRunGit(t, repoPath, "commit", "-m", "initial")
+	mustRunGit(t, repoPath, "branch", "feature/test")
+
+	g := &GitWorktree{
+		repoPath:         repoPath,
+		worktreePath:     filepath.Join(tempHome, ".claude-squad", "worktrees", "feature-test"),
+		branchName:       "feature/test",
+		isExistingBranch: true,
+	}
+
+	if err := g.Setup(); err != nil {
+		t.Fatalf("Setup() error = %v", err)
+	}
+
+	want := strings.TrimSpace(mustRunGit(t, repoPath, "rev-parse", "feature/test"))
+	if got := g.GetBaseCommitSHA(); got != want {
+		t.Fatalf("GetBaseCommitSHA() = %q, want %q", got, want)
 	}
 }
 
