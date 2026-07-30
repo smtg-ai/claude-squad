@@ -86,3 +86,53 @@ func TestStartTmuxSession(t *testing.T) {
 	_, err = ptyFactory.files[1].Stat()
 	require.NoError(t, err)
 }
+
+func TestAutoYesProgram(t *testing.T) {
+	cases := []struct {
+		name    string
+		program string
+		autoYes bool
+		want    string
+	}{
+		{"copilot gets auto-approve flags", "copilot", true, "copilot --allow-all-tools --no-ask-user"},
+		{"copilot unchanged without auto-yes", "copilot", false, "copilot"},
+		{"copilot full path", "/opt/homebrew/bin/copilot", true, "/opt/homebrew/bin/copilot --allow-all-tools --no-ask-user"},
+		{"copilot keeps model passthrough", "copilot --model gpt-5.4", true, "copilot --model gpt-5.4 --allow-all-tools --no-ask-user"},
+		{"copilot is idempotent", "copilot --allow-all-tools --no-ask-user", true, "copilot --allow-all-tools --no-ask-user"},
+		{"copilot yolo already implies allow-all-tools", "copilot --yolo", true, "copilot --yolo --no-ask-user"},
+		{"claude is left untouched", "claude", true, "claude"},
+		{"empty program", "", true, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, AutoYesProgram(tc.program, tc.autoYes))
+		})
+	}
+}
+
+func TestStartTmuxSessionCopilotAutoYes(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	created := false
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "has-session") && !created {
+				created = true
+				return fmt.Errorf("session already exists")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte("output"), nil
+		},
+	}
+
+	workdir := t.TempDir()
+	program := AutoYesProgram("copilot", true)
+	session := newTmuxSession("test-session", program, ptyFactory, cmdExec)
+
+	err := session.Start(workdir)
+	require.NoError(t, err)
+	require.Equal(t, fmt.Sprintf("tmux new-session -d -s claudesquad_test-session -c %s copilot --allow-all-tools --no-ask-user", workdir),
+		cmd2.ToString(ptyFactory.cmds[0]))
+}

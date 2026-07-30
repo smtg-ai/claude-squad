@@ -135,7 +135,7 @@ func FromInstanceData(data InstanceData) (*Instance, error) {
 
 	if instance.Paused() {
 		instance.started = true
-		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, instance.Program)
+		instance.tmuxSession = tmux.NewTmuxSession(instance.Title, tmux.AutoYesProgram(instance.Program, data.AutoYes))
 	} else {
 		if err := instance.Start(false); err != nil {
 			return nil, err
@@ -153,7 +153,9 @@ type InstanceOptions struct {
 	Path string
 	// Program is the program to run in the instance (e.g. "claude", "aider --model ollama_chat/gemma3:1b")
 	Program string
-	// If AutoYes is true, then
+	// AutoYes, when true, runs the instance autonomously: prompts are
+	// auto-accepted and, for agents that support it, auto-approve flags are
+	// added to the launch command (see tmux.AutoYesProgram).
 	AutoYes bool
 	// Branch is an existing branch name to start the session on (empty = new branch from HEAD)
 	Branch string
@@ -177,7 +179,7 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 		Width:          0,
 		CreatedAt:      t,
 		UpdatedAt:      t,
-		AutoYes:        false,
+		AutoYes:        opts.AutoYes,
 		selectedBranch: opts.Branch,
 	}, nil
 }
@@ -210,7 +212,7 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 		tmuxSession = i.tmuxSession
 	} else {
 		// Create new tmux session
-		tmuxSession = tmux.NewTmuxSession(i.Title, i.Program)
+		tmuxSession = tmux.NewTmuxSession(i.Title, tmux.AutoYesProgram(i.Program, i.AutoYes))
 	}
 	i.tmuxSession = tmuxSession
 
