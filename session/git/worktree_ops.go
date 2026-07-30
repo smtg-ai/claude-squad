@@ -56,7 +56,7 @@ func (g *GitWorktree) setupFromExistingBranch() error {
 		if _, err := g.runGitCommand(g.repoPath, "worktree", "add", "-b", g.branchName, g.worktreePath, fmt.Sprintf("origin/%s", g.branchName)); err != nil {
 			return fmt.Errorf("failed to create worktree from remote branch %s: %w", g.branchName, err)
 		}
-		return nil
+		return g.recordBaseCommit()
 	}
 
 	// Create a new worktree from the existing local branch
@@ -64,6 +64,18 @@ func (g *GitWorktree) setupFromExistingBranch() error {
 		return fmt.Errorf("failed to create worktree from branch %s: %w", g.branchName, err)
 	}
 
+	return g.recordBaseCommit()
+}
+
+// recordBaseCommit stores the commit the session starts from. Diffs are computed
+// against it, so leaving it unset makes every git diff invocation fail with an
+// ambiguous argument error once the session is running.
+func (g *GitWorktree) recordBaseCommit() error {
+	output, err := g.runGitCommand(g.worktreePath, "rev-parse", "HEAD")
+	if err != nil {
+		return fmt.Errorf("failed to get base commit hash for branch %s: %w", g.branchName, err)
+	}
+	g.baseCommitSHA = strings.TrimSpace(output)
 	return nil
 }
 
