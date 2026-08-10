@@ -437,7 +437,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 			// Return a tea.Cmd that runs instance.Start in the background
 			startCmd := func() tea.Msg {
-				err := instance.Start(true)
+				err := startInstanceAndSave(instance, m.storage)
 				return instanceStartedMsg{
 					instance:        instance,
 					err:             err,
@@ -523,7 +523,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 					m.menu.SetState(ui.StateDefault)
 
 					startCmd := func() tea.Msg {
-						err := selected.Start(true)
+						err := startInstanceAndSave(selected, m.storage)
 						return instanceStartedMsg{
 							instance:        selected,
 							err:             err,
@@ -920,11 +920,23 @@ type instanceStartDoneMsg struct {
 	err      error
 }
 
+// startInstanceAndSave starts a freshly created instance and persists its
+// record in the same goroutine. Saving immediately — rather than waiting for
+// the UI loop to process the start result — closes the window where an
+// ungraceful exit would leave the just-created worktree and tmux session on
+// disk with no record of them in state.json.
+func startInstanceAndSave(instance *session.Instance, storage *session.Storage) error {
+	if err := instance.Start(true); err != nil {
+		return err
+	}
+	return storage.SaveInstances([]*session.Instance{instance})
+}
+
 // runInstanceStartCmd returns a Cmd that performs the expensive instance.Start(true)
 // in a background goroutine so the main event loop stays responsive.
-func runInstanceStartCmd(instance *session.Instance) tea.Cmd {
+func runInstanceStartCmd(instance *session.Instance, storage *session.Storage) tea.Cmd {
 	return func() tea.Msg {
-		err := instance.Start(true)
+		err := startInstanceAndSave(instance, storage)
 		return instanceStartDoneMsg{instance: instance, err: err}
 	}
 }
