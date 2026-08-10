@@ -53,32 +53,61 @@ func NewStorage(state config.InstanceStorage) (*Storage, error) {
 	}, nil
 }
 
-// SaveInstances saves the list of instances to disk
+// unmarshalInstances parses raw instance data into a list of InstanceData.
+func unmarshalInstances(jsonData json.RawMessage) ([]InstanceData, error) {
+	instancesData := make([]InstanceData, 0)
+	if len(jsonData) == 0 {
+		return instancesData, nil
+	}
+	if err := json.Unmarshal(jsonData, &instancesData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal instances: %w", err)
+	}
+	return instancesData, nil
+}
+
+// SaveInstances saves the list of instances to disk. Each instance is merged
+// into the stored list by title: existing entries are updated in place and new
+// ones appended. Instances saved by other claude-squad processes are
+// preserved; removal only happens through DeleteInstance or
+// DeleteAllInstances.
 func (s *Storage) SaveInstances(instances []*Instance) error {
-	// Convert instances to InstanceData
-	data := make([]InstanceData, 0)
-	for _, instance := range instances {
-		if instance.Started() {
-			data = append(data, instance.ToInstanceData())
+	return s.state.UpdateInstances(func(onDisk json.RawMessage) (json.RawMessage, error) {
+		stored, err := unmarshalInstances(onDisk)
+		if err != nil {
+			return nil, err
 		}
-	}
 
-	// Marshal to JSON
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("failed to marshal instances: %w", err)
-	}
+		for _, instance := range instances {
+			if !instance.Started() {
+				continue
+			}
+			data := instance.ToInstanceData()
+			replaced := false
+			for i := range stored {
+				if stored[i].Title == data.Title {
+					stored[i] = data
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				stored = append(stored, data)
+			}
+		}
 
-	return s.state.SaveInstances(jsonData)
+		jsonData, err := json.Marshal(stored)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal instances: %w", err)
+		}
+		return jsonData, nil
+	})
 }
 
 // LoadInstances loads the list of instances from disk
 func (s *Storage) LoadInstances() ([]*Instance, error) {
-	jsonData := s.state.GetInstances()
-
-	var instancesData []InstanceData
-	if err := json.Unmarshal(jsonData, &instancesData); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal instances: %w", err)
+	instancesData, err := unmarshalInstances(s.state.GetInstances())
+	if err != nil {
+		return nil, err
 	}
 
 	instances := make([]*Instance, len(instancesData))
@@ -95,52 +124,70 @@ func (s *Storage) LoadInstances() ([]*Instance, error) {
 
 // DeleteInstance removes an instance from storage
 func (s *Storage) DeleteInstance(title string) error {
-	instances, err := s.LoadInstances()
-	if err != nil {
-		return fmt.Errorf("failed to load instances: %w", err)
-	}
-
 	found := false
-	newInstances := make([]*Instance, 0)
-	for _, instance := range instances {
-		data := instance.ToInstanceData()
-		if data.Title != title {
-			newInstances = append(newInstances, instance)
-		} else {
-			found = true
+	err := s.state.UpdateInstances(func(onDisk json.RawMessage) (json.RawMessage, error) {
+		stored, err := unmarshalInstances(onDisk)
+		if err != nil {
+			return nil, err
 		}
+
+		remaining := make([]InstanceData, 0, len(stored))
+		for _, data := range stored {
+			if data.Title == title {
+				found = true
+			} else {
+				remaining = append(remaining, data)
+			}
+		}
+
+		jsonData, err := json.Marshal(remaining)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal instances: %w", err)
+		}
+		return jsonData, nil
+	})
+	if err != nil {
+		return err
 	}
 
 	if !found {
 		return fmt.Errorf("instance not found: %s", title)
 	}
-
-	return s.SaveInstances(newInstances)
+	return nil
 }
 
 // UpdateInstance updates an existing instance in storage
 func (s *Storage) UpdateInstance(instance *Instance) error {
-	instances, err := s.LoadInstances()
-	if err != nil {
-		return fmt.Errorf("failed to load instances: %w", err)
-	}
-
 	data := instance.ToInstanceData()
 	found := false
-	for i, existing := range instances {
-		existingData := existing.ToInstanceData()
-		if existingData.Title == data.Title {
-			instances[i] = instance
-			found = true
-			break
+	err := s.state.UpdateInstances(func(onDisk json.RawMessage) (json.RawMessage, error) {
+		stored, err := unmarshalInstances(onDisk)
+		if err != nil {
+			return nil, err
 		}
+
+		for i := range stored {
+			if stored[i].Title == data.Title {
+				stored[i] = data
+				found = true
+				break
+			}
+		}
+
+		jsonData, err := json.Marshal(stored)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal instances: %w", err)
+		}
+		return jsonData, nil
+	})
+	if err != nil {
+		return err
 	}
 
 	if !found {
 		return fmt.Errorf("instance not found: %s", data.Title)
 	}
-
-	return s.SaveInstances(instances)
+	return nil
 }
 
 // DeleteAllInstances removes all stored instances
