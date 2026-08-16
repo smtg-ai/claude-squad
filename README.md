@@ -159,4 +159,4 @@ underlying program (ex. `claude`) to the latest version.
 
 ### Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=smtg-ai/claude-squad&type=Date)](https://www.star-history.com/#smtg-ai/claude-squad&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=smtg-ai/claude-squad&type=Date)](https://star-history.dera.page/#smtg-ai/claude-squad&Date)
