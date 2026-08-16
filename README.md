@@ -1,6 +1,6 @@
 # Claude Squad [![CI](https://github.com/smtg-ai/claude-squad/actions/workflows/build.yml/badge.svg)](https://github.com/smtg-ai/claude-squad/actions/workflows/build.yml) [![GitHub Release](https://img.shields.io/github/v/release/smtg-ai/claude-squad)](https://github.com/smtg-ai/claude-squad/releases/latest)
 
-[Claude Squad](https://smtg-ai.github.io/claude-squad/) is a terminal app that manages multiple [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli) (and other local agents including [Aider](https://github.com/Aider-AI/aider)) in separate workspaces, allowing you to work on multiple tasks simultaneously.
+[Claude Squad](https://smtg-ai.github.io/claude-squad/) is a terminal app that manages multiple [Claude Code](https://github.com/anthropics/claude-code), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [MiniMax Code](https://github.com/MiniMax-AI/MiniMax-Code) (and other local agents including [Aider](https://github.com/Aider-AI/aider)) in separate workspaces, allowing you to work on multiple tasks simultaneously.
 
 
 ![Claude Squad Screenshot](assets/screenshot.png)
@@ -80,10 +80,12 @@ NOTE: The default program is `claude` and we recommend using the latest version.
 
 <b>Using Claude Squad with other AI assistants:</b>
 - For [Codex](https://github.com/openai/codex): Set your API key with `export OPENAI_API_KEY=<your_key>`
+- For [MiniMax Code](https://github.com/MiniMax-AI/MiniMax-Code): Install with `npm install -g @minimax-ai/code@latest`, then authenticate with `mcode login`
 - Launch with specific assistants:
    - Codex: `cs -p "codex"`
    - Aider: `cs -p "aider ..."`
    - Gemini: `cs -p "gemini"`
+   - MiniMax Code: `cs -p "mcode"`
 - Make this the default, by modifying the config file (locate with `cs debug`)
 
 <br />
@@ -126,6 +128,7 @@ To configure profiles, add a `profiles` array to your config file and set `defau
   "profiles": [
     { "name": "claude", "program": "claude" },
     { "name": "codex", "program": "codex" },
+    { "name": "mcode", "program": "mcode" },
     { "name": "aider", "program": "aider --model ollama_chat/gemma3:1b" }
   ]
 }
