@@ -59,6 +59,10 @@ type TmuxSession struct {
 
 const TmuxPrefix = "claudesquad_"
 
+// ErrSessionNotFound is returned when the tmux session backing an instance is gone, which
+// happens whenever the tmux server dies (reboot, crash, `tmux kill-server`).
+var ErrSessionNotFound = errors.New("tmux session no longer exists")
+
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)
 
 func toClaudeSquadTmuxName(str string) string {
@@ -181,6 +185,13 @@ func (t *TmuxSession) CheckAndHandleTrustPrompt() bool {
 
 // Restore attaches to an existing session and restores the window size
 func (t *TmuxSession) Restore() error {
+	// attach-session against a missing session still forks a process successfully, so the
+	// PTY start below would report no error while leaving us attached to nothing. Check
+	// first so callers can tell "session is gone" apart from "PTY failed".
+	if !t.DoesSessionExist() {
+		return ErrSessionNotFound
+	}
+
 	ptmx, err := t.ptyFactory.Start(exec.Command("tmux", "attach-session", "-t", t.sanitizedName))
 	if err != nil {
 		return fmt.Errorf("error opening PTY: %w", err)

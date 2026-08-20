@@ -4,6 +4,7 @@ import (
 	"claude-squad/log"
 	"claude-squad/session/git"
 	"claude-squad/session/tmux"
+	"errors"
 	"path/filepath"
 
 	"fmt"
@@ -245,8 +246,18 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	}()
 
 	if !firstTimeSetup {
-		// Reuse existing session
+		// Reuse existing session. If the tmux server died since we last ran (reboot,
+		// crash, `tmux kill-server`), the session is gone but the worktree and branch
+		// are still on disk. Park the instance as Paused so Resume can rebuild it.
+		// Reporting an error here would be worse than useless: LoadInstances aborts on
+		// the first failure, so a single dead session would hide every other instance.
 		if err := tmuxSession.Restore(); err != nil {
+			if errors.Is(err, tmux.ErrSessionNotFound) {
+				log.WarningLog.Printf(
+					"tmux session for %q no longer exists; pausing instance so it can be resumed", i.Title)
+				i.SetStatus(Paused)
+				return nil
+			}
 			setupErr = fmt.Errorf("failed to restore existing session: %w", err)
 			return setupErr
 		}
@@ -512,10 +523,19 @@ func (i *Instance) Resume() error {
 		return fmt.Errorf("cannot resume: branch is checked out, please switch to a different branch")
 	}
 
-	// Setup git worktree
-	if err := i.gitWorktree.Setup(); err != nil {
-		log.ErrorLog.Print(err)
-		return fmt.Errorf("failed to setup git worktree: %w", err)
+	// Setup git worktree. Setup removes and re-adds the worktree from the branch, which
+	// throws away anything uncommitted in it. After a normal Pause the directory is gone
+	// and that is exactly what we want; but an instance paused because its tmux session
+	// died still has its worktree — and the work in it — sitting on disk, so leave it be.
+	if valid, err := i.gitWorktree.IsValidWorktree(); err != nil || !valid {
+		if err != nil {
+			log.WarningLog.Printf("could not validate worktree at %s, recreating it: %v",
+				i.gitWorktree.GetWorktreePath(), err)
+		}
+		if err := i.gitWorktree.Setup(); err != nil {
+			log.ErrorLog.Print(err)
+			return fmt.Errorf("failed to setup git worktree: %w", err)
+		}
 	}
 
 	// Check if tmux session still exists from pause, otherwise create new one
