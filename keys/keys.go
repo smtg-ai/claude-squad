@@ -32,6 +32,9 @@ const (
 	// Reorder keybindings
 	KeyMoveUp
 	KeyMoveDown
+
+	// KeyOpenEditor opens the selected session's worktree in an editor.
+	KeyOpenEditor
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
@@ -54,6 +57,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"c":          KeyCheckout,
 	"r":          KeyResume,
 	"p":          KeySubmit,
+	"e":          KeyOpenEditor,
 	"?":          KeyHelp,
 }
 
@@ -123,6 +127,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyMoveDown: key.NewBinding(
 		key.WithKeys("J"),
 		key.WithHelp("J", "move down"),
+	),
+	KeyOpenEditor: key.NewBinding(
+		key.WithKeys("e"),
+		key.WithHelp("e", "editor"),
 	),
 
 	// -- Special keybindings --
