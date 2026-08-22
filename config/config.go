@@ -129,17 +129,9 @@ func GetClaudeCommand() (string, error) {
 
 	cmd := exec.Command(shell, "-c", shellCmd)
 	output, err := cmd.Output()
-	if err == nil && len(output) > 0 {
-		path := strings.TrimSpace(string(output))
-		if path != "" {
-			// Check if the output is an alias definition and extract the actual path
-			// Handle formats like "claude: aliased to /path/to/claude" or other shell-specific formats
-			aliasRegex := regexp.MustCompile(`(?:aliased to|->|=)\s*([^\s]+)`)
-			matches := aliasRegex.FindStringSubmatch(path)
-			if len(matches) > 1 {
-				path = matches[1]
-			}
-			return path, nil
+	if err == nil {
+		if program, ok := resolveClaudeCandidate(string(output)); ok {
+			return program, nil
 		}
 	}
 
@@ -150,6 +142,36 @@ func GetClaudeCommand() (string, error) {
 	}
 
 	return "", fmt.Errorf("claude command not found in aliases or PATH")
+}
+
+// resolveClaudeCandidate interprets the output of `which claude` and returns a
+// usable program path. The output may be a plain path, an alias definition
+// (e.g. "claude: aliased to /usr/local/bin/claude"), or — when `claude` is a
+// shell function — the full multi-line function body. We extract the alias
+// target when present, then require the result to resolve to a real executable
+// via exec.LookPath. If it does not (as happens with a function body, where the
+// alias regex can capture a non-path token such as "$?"), we report no match so
+// the caller falls back to a direct PATH lookup instead of persisting an
+// unrunnable program as default_program — which otherwise causes new sessions to
+// fail with "timed out waiting for tmux session ... (cleanup error: ...)".
+func resolveClaudeCandidate(whichOutput string) (string, bool) {
+	path := strings.TrimSpace(whichOutput)
+	if path == "" {
+		return "", false
+	}
+
+	// Extract the target if the output is an alias definition.
+	// Handle formats like "claude: aliased to /path/to/claude" or other shell-specific formats.
+	aliasRegex := regexp.MustCompile(`(?:aliased to|->|=)\s*([^\s]+)`)
+	if matches := aliasRegex.FindStringSubmatch(path); len(matches) > 1 {
+		path = matches[1]
+	}
+
+	// Only trust the candidate if it actually resolves to an executable.
+	if resolved, lookErr := exec.LookPath(path); lookErr == nil {
+		return resolved, true
+	}
+	return "", false
 }
 
 func LoadConfig() *Config {
