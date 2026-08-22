@@ -1,4 +1,4 @@
-module claude-squad
+module github.com/smtg-ai/claude-squad
 
 go 1.23.0
 
