@@ -334,6 +334,42 @@ func (i *Instance) Preview() (string, error) {
 	return i.tmuxSession.CapturePaneContent()
 }
 
+// PreviewScreen captures the visible pane as screen rows (wrapped lines NOT
+// joined), so row N of the result is screen row N. The preview uses this so
+// mouse selection maps 1:1 onto what is displayed.
+func (i *Instance) PreviewScreen() (string, error) {
+	if !i.started || i.Status == Paused {
+		return "", nil
+	}
+	return i.tmuxSession.CapturePaneScreen()
+}
+
+// PreviewAndCursor captures the visible pane content as screen rows along with
+// the cursor position, for rendering the cursor while in focus mode.
+func (i *Instance) PreviewAndCursor() (content string, cursorX, cursorY int, cursorVisible bool, err error) {
+	if !i.started || i.Status == Paused {
+		return "", 0, 0, false, nil
+	}
+	return i.tmuxSession.CapturePaneContentAndCursor()
+}
+
+// SGR mouse button codes for wheel scroll (RFC 1006 / xterm SGR mode).
+const (
+	sgrWheelUp   = 64
+	sgrWheelDown = 65
+)
+
+// SendWheel forwards a mouse-wheel scroll to the session's pane. Alt-screen
+// apps (Claude Code, etc.) scroll their own transcript and ignore the pointer
+// position, so a fixed top-left cell (1;1) is used — always inside the pane.
+func (i *Instance) SendWheel(up bool) error {
+	button := sgrWheelDown
+	if up {
+		button = sgrWheelUp
+	}
+	return i.SendKeys(fmt.Sprintf("\x1b[<%d;1;1M", button))
+}
+
 func (i *Instance) HasUpdated() (updated bool, hasPrompt bool) {
 	if !i.started {
 		return false, false

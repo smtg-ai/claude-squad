@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -46,6 +47,8 @@ const (
 	stateHelp
 	// stateConfirm is the state when a confirmation modal is displayed.
 	stateConfirm
+	// stateFocus is the state when keystrokes are forwarded to the selected session.
+	stateFocus
 )
 
 type home struct {
@@ -101,6 +104,14 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+
+	// previewOriginX is the screen column where the tabbed window block starts,
+	// measured in View so mouse selection maps window-relative coordinates back
+	// to preview content cells.
+	previewOriginX int
+	// totalWidth is the last known terminal width, used to center-correct
+	// previewOriginX.
+	totalWidth int
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -156,6 +167,7 @@ func newHome(ctx context.Context, program string, autoYes bool) *home {
 func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	// List takes 30% of width, preview takes 70%
 	listWidth := int(float32(msg.Width) * 0.3)
+	m.totalWidth = msg.Width
 	tabsWidth := msg.Width - listWidth
 
 	// Menu takes 10% of height, list and window take 90%
@@ -260,18 +272,58 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tickUpdateMetadataCmd(m.snapshotActiveInstances(), m.list.GetSelectedInstance())
 	case tea.MouseMsg:
 		// Handle mouse wheel events for scrolling the diff/preview pane
-		if msg.Action == tea.MouseActionPress {
-			if msg.Button == tea.MouseButtonWheelDown || msg.Button == tea.MouseButtonWheelUp {
-				selected := m.list.GetSelectedInstance()
-				if selected == nil || selected.Status == session.Paused {
-					return m, nil
-				}
+		if msg.Action == tea.MouseActionPress &&
+			(msg.Button == tea.MouseButtonWheelDown || msg.Button == tea.MouseButtonWheelUp) {
+			selected := m.list.GetSelectedInstance()
+			if selected == nil || selected.Status == session.Paused {
+				return m, nil
+			}
 
-				switch msg.Button {
-				case tea.MouseButtonWheelUp:
-					m.tabbedWindow.ScrollUp()
-				case tea.MouseButtonWheelDown:
-					m.tabbedWindow.ScrollDown()
+			// In focus mode, forward the wheel to the session (like when
+			// attached): alt-screen apps such as Claude Code scroll their own
+			// transcript — tmux keeps no scrollback for them. The preview
+			// mirrors the result.
+			if m.state == stateFocus && selected.TmuxAlive() {
+				if err := selected.SendWheel(msg.Button == tea.MouseButtonWheelUp); err != nil {
+					return m, tea.Batch(m.exitFocusMode(), m.handleError(err))
+				}
+				return m, nil
+			}
+
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.tabbedWindow.ScrollUp()
+			case tea.MouseButtonWheelDown:
+				m.tabbedWindow.ScrollDown()
+			}
+			return m, nil
+		}
+
+		// Left-drag in the preview: squad-side selection restricted to the pane
+		// content, copied to the clipboard on release.
+		if m.state == stateDefault || m.state == stateFocus {
+			relX := msg.X - m.previewOriginX
+			relY := msg.Y - 1 // top padding above the tabbed window
+			switch {
+			case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
+				if row, col, ok := m.tabbedWindow.PreviewCellAt(relX, relY); ok {
+					m.tabbedWindow.SelectionStart(row, col)
+				}
+			case msg.Action == tea.MouseActionMotion && m.tabbedWindow.SelectionActive():
+				row, col := m.tabbedWindow.PreviewCellClamped(relX, relY)
+				m.tabbedWindow.SelectionDrag(row, col)
+			case msg.Action == tea.MouseActionRelease && m.tabbedWindow.SelectionActive():
+				row, col := m.tabbedWindow.PreviewCellClamped(relX, relY)
+				m.tabbedWindow.SelectionDrag(row, col)
+				if text := m.tabbedWindow.SelectionFinish(); text != "" {
+					if err := clipboard.WriteAll(text); err != nil {
+						// No clipboard on a headless box; don't pop an error
+						// box on every drag-release.
+						log.WarningLog.Printf("could not copy selection to clipboard: %v", err)
+						return m, nil
+					}
+					lineCount := strings.Count(text, "\n") + 1
+					return m, m.showInfo(fmt.Sprintf("copied selection (%d lines)", lineCount))
 				}
 			}
 		}
@@ -385,6 +437,18 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 }
 
 func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
+	// Typing cancels any in-progress mouse selection. This also heals a stuck
+	// selection whose mouse release never reached the app (e.g. a window
+	// switch mid-click), which would otherwise freeze the preview content.
+	if m.tabbedWindow != nil && m.tabbedWindow.SelectionActive() {
+		m.tabbedWindow.SelectionCancel()
+	}
+
+	// In focus mode every keystroke is forwarded to the session's PTY.
+	if m.state == stateFocus {
+		return m.handleFocusState(msg)
+	}
+
 	cmd, returnEarly := m.handleMenuHighlighting(msg)
 	if returnEarly {
 		return m, cmd
@@ -776,6 +840,15 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			return m, m.handleError(err)
 		}
 		return m, tea.WindowSize()
+	case keys.KeyFocus:
+		selected := m.list.GetSelectedInstance()
+		if selected == nil || selected.Paused() || selected.Status == session.Loading || !selected.TmuxAlive() {
+			return m, nil
+		}
+		if !m.tabbedWindow.IsInPreviewTab() {
+			return m, nil
+		}
+		return m.enterFocusMode(selected)
 	case keys.KeyEnter:
 		if m.list.NumInstances() == 0 {
 			return m, nil
@@ -812,6 +885,65 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	default:
 		return m, nil
 	}
+}
+
+// enterFocusMode switches to focus mode: keystrokes go to the selected session.
+func (m *home) enterFocusMode(selected *session.Instance) (tea.Model, tea.Cmd) {
+	m.state = stateFocus
+	m.menu.SetState(ui.StateFocus)
+	m.tabbedWindow.SetFocused(true)
+	m.tabbedWindow.SetShowCursor(true)
+	// Snap the preview to the live view so keystrokes are visible.
+	if m.tabbedWindow.IsPreviewInScrollMode() {
+		if err := m.tabbedWindow.ResetPreviewToNormalMode(selected); err != nil {
+			log.ErrorLog.Print(err)
+		}
+	}
+	return m, m.instanceChanged()
+}
+
+// exitFocusMode returns from focus mode to the default list navigation.
+func (m *home) exitFocusMode() tea.Cmd {
+	m.state = stateDefault
+	m.menu.SetState(ui.StateDefault)
+	m.tabbedWindow.SetFocused(false)
+	m.tabbedWindow.SetShowCursor(false)
+	return m.instanceChanged()
+}
+
+// handleFocusState forwards keystrokes to the selected session while in focus
+// mode. Exit is ctrl+q or ctrl+space; esc is deliberately forwarded (agents
+// use it to interrupt), so it is not an exit key.
+func (m *home) handleFocusState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// ctrl+space arrives as ctrl+@ (NUL). ctrl+f mirrors the f that enters
+	// focus mode; ctrl+q and ctrl+space stay so existing muscle memory works.
+	if msg.String() == "ctrl+q" || msg.String() == "ctrl+@" || msg.String() == "ctrl+f" {
+		return m, m.exitFocusMode()
+	}
+
+	selected := m.list.GetSelectedInstance()
+	if selected == nil || selected.Paused() || !selected.TmuxAlive() {
+		return m, m.exitFocusMode()
+	}
+
+	// shift+up/down scroll like the wheel: forwarded to the session so Claude
+	// Code scrolls its own transcript (alt-screen apps have no tmux scrollback
+	// to snapshot).
+	if msg.String() == "shift+up" || msg.String() == "shift+down" {
+		if err := selected.SendWheel(msg.String() == "shift+up"); err != nil {
+			return m, tea.Batch(m.exitFocusMode(), m.handleError(err))
+		}
+		return m, m.instanceChanged()
+	}
+
+	data := keyMsgToBytes(msg)
+	if len(data) == 0 {
+		return m, nil
+	}
+	if err := selected.SendKeys(string(data)); err != nil {
+		return m, tea.Batch(m.exitFocusMode(), m.handleError(err))
+	}
+	return m, m.instanceChanged()
 }
 
 // instanceChanged updates the preview pane, menu, and diff pane based on the selected instance. It returns an error
@@ -996,6 +1128,18 @@ func (m *home) handleError(err error) tea.Cmd {
 	}
 }
 
+// showInfo displays a neutral status message that clears itself after 2 seconds.
+func (m *home) showInfo(text string) tea.Cmd {
+	m.errBox.SetInfo(text)
+	return func() tea.Msg {
+		select {
+		case <-m.ctx.Done():
+		case <-time.After(2 * time.Second):
+		}
+		return hideErrMsg{}
+	}
+}
+
 func (m *home) newPromptOverlay() *overlay.TextInputOverlay {
 	return overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "", m.appConfig.GetProfiles())
 }
@@ -1046,6 +1190,16 @@ func (m *home) View() string {
 	listWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.list.String())
 	previewWithPadding := lipgloss.NewStyle().PaddingTop(1).Render(m.tabbedWindow.String())
 	listAndPreview := lipgloss.JoinHorizontal(lipgloss.Top, listWithPadding, previewWithPadding)
+
+	// JoinVertical centers this block under the wider menu row; measure where
+	// the tabbed window actually starts so mouse selection maps correctly.
+	// centerPad/2 mirrors lipgloss's left pad; on odd-width terminals it may
+	// be one column off, which at worst shifts a selection by a single cell.
+	centerPad := m.totalWidth - lipgloss.Width(listAndPreview)
+	if centerPad < 0 {
+		centerPad = 0
+	}
+	m.previewOriginX = centerPad/2 + lipgloss.Width(listWithPadding)
 
 	mainView := lipgloss.JoinVertical(
 		lipgloss.Center,

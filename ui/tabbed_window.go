@@ -18,6 +18,7 @@ var (
 	inactiveTabBorder = tabBorderWithBottom("┴", "─", "┴")
 	activeTabBorder   = tabBorderWithBottom("┘", " ", "└")
 	highlightColor    = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7D56F4"}
+	focusColor        = lipgloss.AdaptiveColor{Light: "#00A000", Dark: "#00D700"}
 	inactiveTabStyle  = lipgloss.NewStyle().
 				Border(inactiveTabBorder, true).
 				BorderForeground(highlightColor).
@@ -49,11 +50,20 @@ type TabbedWindow struct {
 	activeTab int
 	height    int
 	width     int
+	// focused is true while keystrokes are forwarded to the session shown in
+	// the preview (focus mode). It only changes the window's appearance.
+	focused bool
 
 	preview  *PreviewPane
 	diff     *DiffPane
 	terminal *TerminalPane
 	instance *session.Instance
+}
+
+// SetFocused marks the window as the focus-mode input target, which turns the
+// border green and labels the preview tab.
+func (w *TabbedWindow) SetFocused(focused bool) {
+	w.focused = focused
 }
 
 func NewTabbedWindow(preview *PreviewPane, diff *DiffPane, terminal *TerminalPane) *TabbedWindow {
@@ -239,6 +249,11 @@ func (w *TabbedWindow) String() string {
 		} else {
 			style = inactiveTabStyle
 		}
+		// In focus mode, label the active preview tab and tint it green.
+		if w.focused && isActive && i == PreviewTab {
+			t = t + " ● input"
+			style = style.Foreground(focusColor)
+		}
 		border, _, _, _, _ := style.GetBorder()
 		if isFirst && isActive {
 			border.BottomLeft = "│"
@@ -264,10 +279,55 @@ func (w *TabbedWindow) String() string {
 	case TerminalTab:
 		content = w.terminal.String()
 	}
-	window := windowStyle.Render(
+	ws := windowStyle
+	if w.focused {
+		ws = ws.BorderForeground(focusColor)
+	}
+	window := ws.Render(
 		lipgloss.Place(
 			w.width, w.height-2-windowStyle.GetVerticalFrameSize()-tabHeight,
 			lipgloss.Left, lipgloss.Top, content))
 
 	return lipgloss.JoinVertical(lipgloss.Left, "\n", row, window)
 }
+
+// -- Focus mode: cursor and mouse selection ----------------------------------
+
+// SetShowCursor toggles rendering the session's cursor into the preview.
+func (w *TabbedWindow) SetShowCursor(show bool) {
+	w.preview.SetShowCursor(show)
+}
+
+// previewContentTop is the row offset of preview content within this window's
+// rendered block: one spacer line plus the three-line tab row (windowStyle has
+// no top border, so the tab row's bottom border doubles as the content top).
+const previewContentTop = 4
+
+// PreviewCellAt maps window-relative coordinates to a preview content cell.
+// ok is false outside the preview area (tabs, borders, other tabs).
+func (w *TabbedWindow) PreviewCellAt(x, y int) (row, col int, ok bool) {
+	if w.activeTab != PreviewTab {
+		return 0, 0, false
+	}
+	col = x - 1 // left window border
+	row = y - previewContentTop
+	if col < 0 || col >= w.preview.width || row < 0 || row >= w.preview.height {
+		return 0, 0, false
+	}
+	return row, col, true
+}
+
+// PreviewCellClamped maps window-relative coordinates to the nearest preview
+// content cell, for drags that leave the pane.
+func (w *TabbedWindow) PreviewCellClamped(x, y int) (row, col int) {
+	col = min(max(x-1, 0), w.preview.width-1)
+	row = min(max(y-previewContentTop, 0), w.preview.height-1)
+	return row, col
+}
+
+// Selection passthroughs to the preview pane.
+func (w *TabbedWindow) SelectionStart(row, col int) { w.preview.SelectionStart(row, col) }
+func (w *TabbedWindow) SelectionDrag(row, col int)  { w.preview.SelectionDrag(row, col) }
+func (w *TabbedWindow) SelectionActive() bool       { return w.preview.SelectionActive() }
+func (w *TabbedWindow) SelectionCancel()            { w.preview.SelectionCancel() }
+func (w *TabbedWindow) SelectionFinish() string     { return w.preview.SelectionFinish() }

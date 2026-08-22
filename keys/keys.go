@@ -32,6 +32,10 @@ const (
 	// Reorder keybindings
 	KeyMoveUp
 	KeyMoveDown
+
+	// KeyFocus enters focus mode: keystrokes are forwarded to the selected
+	// session from the preview, without a full attach.
+	KeyFocus
 )
 
 // GlobalKeyStringsMap is a global, immutable map string to keybinding.
@@ -54,6 +58,7 @@ var GlobalKeyStringsMap = map[string]KeyName{
 	"c":          KeyCheckout,
 	"r":          KeyResume,
 	"p":          KeySubmit,
+	"f":          KeyFocus,
 	"?":          KeyHelp,
 }
 
@@ -123,6 +128,10 @@ var GlobalkeyBindings = map[KeyName]key.Binding{
 	KeyMoveDown: key.NewBinding(
 		key.WithKeys("J"),
 		key.WithHelp("J", "move down"),
+	),
+	KeyFocus: key.NewBinding(
+		key.WithKeys("f"),
+		key.WithHelp("f", "focus"),
 	),
 
 	// -- Special keybindings --
