@@ -49,7 +49,7 @@ func TestGetClaudeCommand(t *testing.T) {
 		assert.True(t, strings.Contains(result, "claude"))
 	})
 
-	t.Run("handles missing claude command", func(t *testing.T) {
+	t.Run("returns error when claude not found", func(t *testing.T) {
 		// Set PATH to a directory that doesn't contain claude
 		tempDir := t.TempDir()
 		os.Setenv("PATH", tempDir)
@@ -95,6 +95,48 @@ func TestGetClaudeCommand(t *testing.T) {
 		output = "/usr/local/bin/claude"
 		matches = aliasRegex.FindStringSubmatch(output)
 		assert.Len(t, matches, 0)
+	})
+}
+
+func TestFindCommand(t *testing.T) {
+	originalShell := os.Getenv("SHELL")
+	originalPath := os.Getenv("PATH")
+	defer func() {
+		os.Setenv("SHELL", originalShell)
+		os.Setenv("PATH", originalPath)
+	}()
+
+	t.Run("finds command in PATH", func(t *testing.T) {
+		// Create a temporary directory with a mock executable
+		tempDir := t.TempDir()
+		cmdPath := filepath.Join(tempDir, "testcmd")
+
+		// Create a mock executable
+		err := os.WriteFile(cmdPath, []byte("#!/bin/bash\necho 'mock command'"), 0755)
+		require.NoError(t, err)
+
+		// Set PATH to include our temp directory
+		os.Setenv("PATH", tempDir+":"+originalPath)
+		os.Setenv("SHELL", "/bin/bash")
+
+		result, err := findCommand("testcmd")
+
+		assert.NoError(t, err)
+		assert.True(t, strings.Contains(result, "testcmd"))
+	})
+
+	t.Run("returns error when command not found", func(t *testing.T) {
+		// Create an empty temporary directory
+		tempDir := t.TempDir()
+
+		// Set PATH to only include our empty temp directory
+		os.Setenv("PATH", tempDir)
+		os.Setenv("SHELL", "/bin/bash")
+
+		_, err := findCommand("nonexistentcmd")
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "nonexistentcmd command not found")
 	})
 }
 
