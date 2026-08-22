@@ -44,6 +44,12 @@ type Config struct {
 	BranchPrefix string `json:"branch_prefix"`
 	// Profiles is a list of named program profiles.
 	Profiles []Profile `json:"profiles,omitempty"`
+	// WorktreeSetupHook is a command to run after worktree creation.
+	// Environment variables available: CS_REPO_PATH, CS_WORKTREE_PATH, CS_BRANCH, CS_SESSION
+	WorktreeSetupHook string `json:"worktree_setup_hook"`
+	// WorktreeSetupHookFailMode controls behavior on hook failure.
+	// "continue" (default) - log error and continue, "fail" - abort session creation
+	WorktreeSetupHookFailMode string `json:"worktree_setup_hook_fail_mode"`
 }
 
 // GetProgram returns the program to run. If Profiles is non-empty and
