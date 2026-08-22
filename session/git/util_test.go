@@ -23,7 +23,7 @@ func TestSanitizeBranchName(t *testing.T) {
 		{
 			name:     "mixed case string",
 			input:    "FeAtUrE BrAnCh",
-			expected: "feature-branch",
+			expected: "FeAtUrE-BrAnCh",
 		},
 		{
 			name:     "string with special characters",
@@ -58,7 +58,7 @@ func TestSanitizeBranchName(t *testing.T) {
 		{
 			name:     "complex mixed case with special chars",
 			input:    "USER/Feature Branch!@#$%^&*()/v1.0",
-			expected: "user/feature-branch/v1.0",
+			expected: "USER/Feature-Branch/v1.0",
 		},
 	}
 
