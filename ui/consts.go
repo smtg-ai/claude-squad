@@ -1,3 +1,5 @@
+//go:build !pro
+
 package ui
 
 import "github.com/charmbracelet/lipgloss"

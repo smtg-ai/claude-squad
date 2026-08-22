@@ -28,8 +28,25 @@ jobs:
           - goos: windows
             goarch: arm64
 
+    # submodules: https://github.com/actions/checkout/issues/287#issuecomment-707304140
     steps:
-    - uses: actions/checkout@v4
+    - name: checkout claude-squad
+      uses: actions/checkout@v4
+      with:
+         submodules: false
+
+    - name: checkout claude-squad-pro
+      uses: actions/checkout@v4
+      with:
+        repository: smtg-ai/claude-squad-pro
+        path: _pro
+        ref: main
+        ssh-key: ${{ secrets.CLAUDE_SQUAD_PRO_READONLY_DEPLOY_KEY }}
+        persist-credentials: true
+
+    - name: checkout right version of claude-squad-pro
+      run: |
+        git submodule update --init --recursive
 
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -50,6 +67,23 @@ jobs:
           BINARY_NAME=$BINARY_NAME.exe
         fi
         go build -v -o build/${{ matrix.goos }}_${{ matrix.goarch }}/$BINARY_NAME
+
+    - name: Run tests (Pro)
+      run: |
+        ./inline_pro_files.sh
+        go test -v -tags=pro ./...
+
+    - name: Build (Pro)
+      env:
+        GOOS: ${{ matrix.goos }}
+        GOARCH: ${{ matrix.goarch }}
+      run: |
+        BINARY_NAME=claude-squad-pro
+        if [ "${{ matrix.goos }}" = "windows" ]; then
+          BINARY_NAME=$BINARY_NAME.exe
+        fi
+        ./inline_pro_files.sh
+        go build -v -tags=pro -o build/${{ matrix.goos }}_${{ matrix.goarch }}/$BINARY_NAME
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
