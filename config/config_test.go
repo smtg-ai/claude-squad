@@ -114,6 +114,11 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestGetConfigDir(t *testing.T) {
 	t.Run("returns valid config directory", func(t *testing.T) {
+		// Explicitly cleared: the default path is only reached when the override
+		// is unset, and a developer with it exported would otherwise see this
+		// pass or fail depending on their shell.
+		t.Setenv(ConfigDirEnvVar, "")
+
 		configDir, err := GetConfigDir()
 
 		assert.NoError(t, err)
@@ -122,6 +127,48 @@ func TestGetConfigDir(t *testing.T) {
 
 		// Verify it's an absolute path
 		assert.True(t, filepath.IsAbs(configDir))
+	})
+
+	t.Run("honours CLAUDE_SQUAD_DIR when set", func(t *testing.T) {
+		want := t.TempDir()
+		t.Setenv(ConfigDirEnvVar, want)
+
+		configDir, err := GetConfigDir()
+
+		assert.NoError(t, err)
+		assert.Equal(t, want, configDir)
+	})
+
+	t.Run("two overrides yield independent state files", func(t *testing.T) {
+		// The point of the override: instance A and instance B must not write
+		// the same state.json. Without it both resolve to $HOME/.claude-squad
+		// and the last SaveState wins, dropping the other's sessions.
+		dirA, dirB := t.TempDir(), t.TempDir()
+
+		t.Setenv(ConfigDirEnvVar, dirA)
+		gotA, err := GetConfigDir()
+		require.NoError(t, err)
+
+		t.Setenv(ConfigDirEnvVar, dirB)
+		gotB, err := GetConfigDir()
+		require.NoError(t, err)
+
+		assert.NotEqual(t, gotA, gotB)
+		assert.Equal(t, dirA, gotA)
+		assert.Equal(t, dirB, gotB)
+	})
+
+	t.Run("blank or whitespace override falls back to the default", func(t *testing.T) {
+		for _, v := range []string{"", "   ", "\t"} {
+			t.Setenv(ConfigDirEnvVar, v)
+
+			configDir, err := GetConfigDir()
+
+			assert.NoError(t, err)
+			assert.True(t, strings.HasSuffix(configDir, ".claude-squad"),
+				"blank override %q must not produce an empty config dir", v)
+			assert.True(t, filepath.IsAbs(configDir))
+		}
 	})
 }
 

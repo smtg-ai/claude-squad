@@ -15,10 +15,26 @@ import (
 const (
 	ConfigFileName = "config.json"
 	defaultProgram = "claude"
+
+	// ConfigDirEnvVar overrides the configuration directory. Set it to run
+	// independent instances side by side -- one per repository, say -- each with
+	// its own config.json and state.json.
+	//
+	// Without it every instance shares $HOME/.claude-squad/state.json, and because
+	// SaveState writes the whole file without re-reading it, the last instance to
+	// save silently drops the other's sessions. Their worktrees and tmux sessions
+	// survive, so the instances stay alive but stop being listed.
+	ConfigDirEnvVar = "CLAUDE_SQUAD_DIR"
 )
 
-// GetConfigDir returns the path to the application's configuration directory
+// GetConfigDir returns the path to the application's configuration directory.
+//
+// $CLAUDE_SQUAD_DIR takes precedence when set and non-empty; otherwise the
+// directory is $HOME/.claude-squad as before, so existing installs are unaffected.
 func GetConfigDir() (string, error) {
+	if dir := strings.TrimSpace(os.Getenv(ConfigDirEnvVar)); dir != "" {
+		return dir, nil
+	}
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get config home directory: %w", err)
