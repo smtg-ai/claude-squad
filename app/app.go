@@ -221,7 +221,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Save after successful start.
-		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+		if err := m.storage.SyncInstances(m.list.GetInstances()); err != nil {
 			return m, m.handleError(err)
 		}
 
@@ -311,7 +311,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Save after successful start
-		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+		if err := m.storage.SyncInstances(m.list.GetInstances()); err != nil {
 			return m, m.handleError(err)
 		}
 		if m.autoYes {
@@ -344,7 +344,7 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *home) handleQuit() (tea.Model, tea.Cmd) {
-	if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+	if err := m.storage.SyncInstances(m.list.GetInstances()); err != nil {
 		return m, m.handleError(err)
 	}
 	return m, tea.Quit
@@ -753,7 +753,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyMoveUp:
 		if m.list.MoveUp() {
-			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+			if err := m.storage.SyncInstances(m.list.GetInstances()); err != nil {
 				return m, m.handleError(err)
 			}
 			return m, m.instanceChanged()
@@ -761,7 +761,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		return m, nil
 	case keys.KeyMoveDown:
 		if m.list.MoveDown() {
-			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+			if err := m.storage.SyncInstances(m.list.GetInstances()); err != nil {
 				return m, m.handleError(err)
 			}
 			return m, m.instanceChanged()
