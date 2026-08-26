@@ -54,7 +54,9 @@ func IsGitRepo(path string) bool {
 	return cmd.Run() == nil
 }
 
-func findGitRepoRoot(path string) (string, error) {
+// FindGitRepoRoot returns the top-level directory of the git repository
+// containing path, or an error if path is not inside a git repository.
+func FindGitRepoRoot(path string) (string, error) {
 	cmd := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel")
 	out, err := cmd.Output()
 	if err != nil {

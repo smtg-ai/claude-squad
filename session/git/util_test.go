@@ -1,6 +1,8 @@
 package git
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -69,5 +71,29 @@ func TestSanitizeBranchName(t *testing.T) {
 				t.Errorf("sanitizeBranchName(%q) = %q, want %q", tt.input, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestFindGitRepoRoot(t *testing.T) {
+	repo := t.TempDir()
+	mustRunGit(t, repo, "init")
+	sub := filepath.Join(repo, "sub")
+	if err := os.Mkdir(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	root, err := FindGitRepoRoot(sub)
+	if err != nil {
+		t.Fatalf("FindGitRepoRoot() error = %v", err)
+	}
+	// Resolve symlinks: on macOS TempDir is under /var -> /private/var.
+	wantRoot, _ := filepath.EvalSymlinks(repo)
+	gotRoot, _ := filepath.EvalSymlinks(root)
+	if gotRoot != wantRoot {
+		t.Errorf("FindGitRepoRoot() = %q, want %q", gotRoot, wantRoot)
+	}
+
+	if _, err := FindGitRepoRoot(t.TempDir()); err == nil {
+		t.Error("FindGitRepoRoot() on non-repo dir: want error, got nil")
 	}
 }

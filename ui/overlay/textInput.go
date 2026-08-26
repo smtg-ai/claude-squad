@@ -29,6 +29,12 @@ var (
 
 	tiDividerStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240"))
+
+	tiErrorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("9"))
+
+	tiHintStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240"))
 )
 
 // TextInputOverlay represents a text input overlay with state management.
@@ -44,6 +50,12 @@ type TextInputOverlay struct {
 	profilePicker *ProfilePicker
 	branchPicker  *BranchPicker
 	numStops      int // total number of focus stops
+
+	// pathMode turns the overlay into a single-line path prompt: Tab performs
+	// directory completion instead of switching focus, and Enter submits.
+	pathMode   bool
+	candidates []string // completion candidates from the last ambiguous Tab
+	errorMsg   string   // validation error to display, cleared on typing
 }
 
 // NewTextInputOverlay creates a new text input overlay with the given title and initial value.
@@ -53,6 +65,18 @@ func NewTextInputOverlay(title string, initialValue string) *TextInputOverlay {
 		textarea: ti,
 		Title:    title,
 		numStops: 2, // textarea + enter button
+	}
+}
+
+// NewPathInputOverlay creates a text input overlay for entering a directory
+// path. Tab completes directories, Enter submits, Esc cancels.
+func NewPathInputOverlay(title string, initialValue string) *TextInputOverlay {
+	ti := newTextarea(initialValue)
+	return &TextInputOverlay{
+		textarea: ti,
+		Title:    title,
+		numStops: 1, // textarea only; Enter submits directly
+		pathMode: true,
 	}
 }
 
@@ -178,6 +202,31 @@ func (t *TextInputOverlay) updateFocusState() {
 // HandleKeyPress processes a key press and updates the state accordingly.
 // Returns (shouldClose, branchFilterChanged).
 func (t *TextInputOverlay) HandleKeyPress(msg tea.KeyMsg) (bool, bool) {
+	if t.pathMode {
+		switch msg.Type {
+		case tea.KeyTab:
+			completed, candidates := CompletePath(t.textarea.Value())
+			t.textarea.SetValue(completed)
+			t.candidates = candidates
+			t.errorMsg = ""
+			return false, false
+		case tea.KeyEsc:
+			t.Canceled = true
+			return true, false
+		case tea.KeyEnter:
+			t.Submitted = true
+			if t.OnSubmit != nil {
+				t.OnSubmit()
+			}
+			return true, false
+		default:
+			t.errorMsg = ""
+			t.candidates = nil
+			t.textarea, _ = t.textarea.Update(msg)
+			return false, false
+		}
+	}
+
 	switch msg.Type {
 	case tea.KeyTab:
 		t.setFocusIndex((t.FocusIndex + 1) % t.numStops)
@@ -279,6 +328,17 @@ func (t *TextInputOverlay) SetBranchResults(branches []string, version uint64) {
 	t.branchPicker.SetResults(branches, version)
 }
 
+// SetError sets a validation error message to display below the input.
+func (t *TextInputOverlay) SetError(msg string) {
+	t.errorMsg = msg
+}
+
+// ResetSubmitted clears the submitted flag so the overlay can stay open
+// after a submission fails validation.
+func (t *TextInputOverlay) ResetSubmitted() {
+	t.Submitted = false
+}
+
 // IsSubmitted returns whether the form was submitted.
 func (t *TextInputOverlay) IsSubmitted() bool {
 	return t.Submitted
@@ -319,6 +379,18 @@ func (t *TextInputOverlay) Render() string {
 
 	content += tiTitleStyle.Render(t.Title) + "\n"
 	content += t.textarea.View() + "\n\n"
+
+	if t.pathMode {
+		if len(t.candidates) > 0 {
+			content += tiHintStyle.Render(strings.Join(t.candidates, "  ")) + "\n\n"
+		}
+		if t.errorMsg != "" {
+			content += tiErrorStyle.Render(t.errorMsg) + "\n\n"
+		}
+		content += divider + "\n\n"
+		content += tiHintStyle.Render("tab complete · enter confirm · esc cancel")
+		return tiStyle.Render(content)
+	}
 
 	// Render branch picker if present, with dividers
 	if t.branchPicker != nil {

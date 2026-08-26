@@ -74,3 +74,27 @@ func TestStartRestoresInstanceWhenTmuxSessionSurvives(t *testing.T) {
 	require.Equal(t, Running, instance.Status)
 	require.Equal(t, 1, ptyFactory.calls)
 }
+
+// RepoName must work before Start(): the list registers the repo when a new
+// instance is finalized, which happens before the worktree is created. See the
+// (repoName) suffix rendering in ui/list.go.
+func TestRepoNameWorksBeforeStart(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "myrepo")
+	require.NoError(t, os.Mkdir(repo, 0755))
+	require.NoError(t, exec.Command("git", "-C", repo, "init").Run())
+
+	instance, err := NewInstance(InstanceOptions{Title: "test", Path: repo, Program: "echo"})
+	require.NoError(t, err)
+
+	name, err := instance.RepoName()
+	require.NoError(t, err)
+	require.Equal(t, "myrepo", name)
+}
+
+func TestRepoNameErrorsOutsideGitRepo(t *testing.T) {
+	instance, err := NewInstance(InstanceOptions{Title: "test", Path: t.TempDir(), Program: "echo"})
+	require.NoError(t, err)
+
+	_, err = instance.RepoName()
+	require.Error(t, err)
+}

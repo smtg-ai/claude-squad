@@ -184,10 +184,16 @@ func NewInstance(opts InstanceOptions) (*Instance, error) {
 }
 
 func (i *Instance) RepoName() (string, error) {
-	if !i.started {
-		return "", fmt.Errorf("cannot get repo name for instance that has not been started")
+	if i.started {
+		return i.gitWorktree.GetRepoName(), nil
 	}
-	return i.gitWorktree.GetRepoName(), nil
+	// Before Start() there is no worktree yet; resolve the repo from Path so
+	// the list can register the repo as soon as the instance is created.
+	root, err := git.FindGitRepoRoot(i.Path)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Base(root), nil
 }
 
 func (i *Instance) SetStatus(status Status) {

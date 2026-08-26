@@ -38,6 +38,8 @@ type state int
 
 const (
 	stateDefault state = iota
+	// stateNewDir is the state when the user is choosing the directory for a new instance.
+	stateNewDir
 	// stateNew is the state when the user is creating a new instance.
 	stateNew
 	// statePrompt is the state when the user is entering a prompt.
@@ -357,7 +359,7 @@ func (m *home) handleMenuHighlighting(msg tea.KeyMsg) (cmd tea.Cmd, returnEarly 
 		m.keySent = false
 		return nil, false
 	}
-	if m.state == statePrompt || m.state == stateHelp || m.state == stateConfirm {
+	if m.state == statePrompt || m.state == stateNewDir || m.state == stateHelp || m.state == stateConfirm {
 		return nil, false
 	}
 	// If it's in the global keymap, we should try to highlight it.
@@ -392,6 +394,20 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 
 	if m.state == stateHelp {
 		return m.handleHelpState(msg)
+	}
+
+	if m.state == stateNewDir {
+		if msg.String() == "ctrl+c" {
+			return m, m.cancelDirOverlay()
+		}
+		shouldClose, _ := m.textInputOverlay.HandleKeyPress(msg)
+		if !shouldClose {
+			return m, nil
+		}
+		if m.textInputOverlay.IsCanceled() {
+			return m, m.cancelDirOverlay()
+		}
+		return m.handleDirSubmit(strings.TrimSpace(m.textInputOverlay.GetValue()))
 	}
 
 	if m.state == stateNew {
@@ -609,55 +625,13 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 	switch name {
 	case keys.KeyHelp:
 		return m.showHelpScreen(helpTypeGeneral{}, nil)
-	case keys.KeyPrompt:
+	case keys.KeyPrompt, keys.KeyNew:
 		if m.list.NumInstances() >= GlobalInstanceLimit {
 			return m, m.handleError(
 				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
 		}
-
-		// Start a background fetch so branches are up to date by the time the picker opens
-		fetchCmd := func() tea.Msg {
-			currentDir, _ := os.Getwd()
-			git.FetchBranches(currentDir)
-			return nil
-		}
-
-		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
-		})
-		if err != nil {
-			return m, m.handleError(err)
-		}
-
-		m.newInstanceFinalizer = m.list.AddInstance(instance)
-		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
-		m.state = stateNew
-		m.menu.SetState(ui.StateNewInstance)
-		m.promptAfterName = true
-
-		return m, fetchCmd
-	case keys.KeyNew:
-		if m.list.NumInstances() >= GlobalInstanceLimit {
-			return m, m.handleError(
-				fmt.Errorf("you can't create more than %d instances", GlobalInstanceLimit))
-		}
-		instance, err := session.NewInstance(session.InstanceOptions{
-			Title:   "",
-			Path:    ".",
-			Program: m.program,
-		})
-		if err != nil {
-			return m, m.handleError(err)
-		}
-
-		m.newInstanceFinalizer = m.list.AddInstance(instance)
-		m.list.SetSelectedInstance(m.list.NumInstances() - 1)
-		m.state = stateNew
-		m.menu.SetState(ui.StateNewInstance)
-
-		return m, nil
+		m.newDirOverlay(name == keys.KeyPrompt)
+		return m, tea.WindowSize()
 	case keys.KeyUp:
 		m.list.Up()
 		return m, m.instanceChanged()
@@ -888,10 +862,18 @@ func (m *home) scheduleBranchSearch(filter string, version uint64) tea.Cmd {
 }
 
 // runBranchSearch returns a tea.Cmd that performs the git search in the background.
+// The search runs against the repo of the instance being created (the selected
+// one), which may not be the directory claude-squad was launched from.
 func (m *home) runBranchSearch(filter string, version uint64) tea.Cmd {
+	repoDir := ""
+	if selected := m.list.GetSelectedInstance(); selected != nil {
+		repoDir = selected.Path
+	}
 	return func() tea.Msg {
-		currentDir, _ := os.Getwd()
-		branches, err := git.SearchBranches(currentDir, filter)
+		if repoDir == "" {
+			repoDir, _ = os.Getwd()
+		}
+		branches, err := git.SearchBranches(repoDir, filter)
 		if err != nil {
 			log.WarningLog.Printf("branch search failed: %v", err)
 			return nil
@@ -1066,7 +1048,7 @@ func (m *home) View() string {
 		m.errBox.String(),
 	)
 
-	if m.state == statePrompt {
+	if m.state == statePrompt || m.state == stateNewDir {
 		if m.textInputOverlay == nil {
 			log.ErrorLog.Printf("text input overlay is nil")
 		}
