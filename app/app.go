@@ -5,6 +5,7 @@ import (
 	"claude-squad/keys"
 	"claude-squad/log"
 	"claude-squad/session"
+	"claude-squad/session/ci"
 	"claude-squad/session/git"
 	"claude-squad/ui"
 	"claude-squad/ui/overlay"
@@ -189,7 +190,7 @@ func (m *home) Init() tea.Cmd {
 			time.Sleep(100 * time.Millisecond)
 			return previewTickMsg{}
 		},
-		tickUpdateMetadataCmd(m.snapshotActiveInstances(), m.list.GetSelectedInstance()),
+		tickUpdateMetadataCmd(m.snapshotActiveInstances(), m.list.GetSelectedInstance(), m.appConfig.CIStatusEnabled()),
 	)
 }
 
@@ -256,8 +257,9 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				r.instance.SetDiffStats(r.diffStats)
 			}
+			r.instance.SetCIStatus(r.ciStatus)
 		}
-		return m, tickUpdateMetadataCmd(m.snapshotActiveInstances(), m.list.GetSelectedInstance())
+		return m, tickUpdateMetadataCmd(m.snapshotActiveInstances(), m.list.GetSelectedInstance(), m.appConfig.CIStatusEnabled())
 	case tea.MouseMsg:
 		// Handle mouse wheel events for scrolling the diff/preview pane
 		if msg.Action == tea.MouseActionPress {
@@ -907,6 +909,7 @@ type instanceMetaResult struct {
 	updated   bool
 	hasPrompt bool
 	diffStats *git.DiffStats
+	ciStatus  ci.Status
 }
 
 // metadataUpdateDoneMsg is sent when the background metadata update completes.
@@ -951,7 +954,7 @@ func (m *home) snapshotActiveInstances() []*session.Instance {
 // Only the selected instance gets a full diff (with Content); the rest get a
 // lightweight numstat-only summary. This keeps per-instance memory bounded
 // since the diff pane only ever renders the selected one.
-func tickUpdateMetadataCmd(active []*session.Instance, selected *session.Instance) tea.Cmd {
+func tickUpdateMetadataCmd(active []*session.Instance, selected *session.Instance, ciEnabled bool) tea.Cmd {
 	return func() tea.Msg {
 		time.Sleep(500 * time.Millisecond)
 
@@ -972,6 +975,9 @@ func tickUpdateMetadataCmd(active []*session.Instance, selected *session.Instanc
 					r.diffStats = instance.ComputeDiff()
 				} else {
 					r.diffStats = instance.ComputeDiffNumstat()
+				}
+				if ciEnabled {
+					r.ciStatus = ciStatusFor(instance)
 				}
 			}(idx, inst)
 		}
@@ -1072,4 +1078,18 @@ func (m *home) View() string {
 	}
 
 	return mainView
+}
+
+// ciStatusFor returns the cached CI verdict for an instance's branch. The lookup
+// is non-blocking by contract (see ci.Get) because it runs inside the same
+// metadata tick as the git diffs, which only re-schedules once every goroutine
+// has finished.
+func ciStatusFor(instance *session.Instance) ci.Status {
+	worktree, err := instance.GetGitWorktree()
+	if err != nil {
+		return ci.Status{}
+	}
+	// The recorded branch is only the fallback: ci resolves the worktree's actual
+	// HEAD, so a session whose branch was renamed or switched still finds its PR.
+	return ci.Get(worktree.GetRepoPath(), worktree.GetWorktreePath(), instance.Branch)
 }

@@ -54,6 +54,25 @@ func IsGitRepo(path string) bool {
 	return cmd.Run() == nil
 }
 
+// CurrentBranch returns the branch checked out at the given path. This can differ
+// from the branch a session recorded when it was created: renaming the branch, or
+// checking out a different one, from inside the worktree is common, and the
+// recorded name then refers to something that may not exist any more.
+//
+// Returns an error on a detached HEAD, where there is no branch to name.
+func CurrentBranch(path string) (string, error) {
+	cmd := exec.Command("git", "-C", path, "rev-parse", "--abbrev-ref", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to read current branch at %s: %w", path, err)
+	}
+	branch := strings.TrimSpace(string(out))
+	if branch == "" || branch == "HEAD" {
+		return "", fmt.Errorf("detached HEAD at %s", path)
+	}
+	return branch, nil
+}
+
 func findGitRepoRoot(path string) (string, error) {
 	cmd := exec.Command("git", "-C", path, "rev-parse", "--show-toplevel")
 	out, err := cmd.Output()
