@@ -44,6 +44,16 @@ type Config struct {
 	BranchPrefix string `json:"branch_prefix"`
 	// Profiles is a list of named program profiles.
 	Profiles []Profile `json:"profiles,omitempty"`
+	// GitHubCIStatus controls the CI status badge shown next to each branch in
+	// the instance list. Nil means enabled: the badge is opt-out, and every config
+	// written before the feature existed has no such key, so nil must not read as
+	// false or the feature would be invisible on upgrade.
+	GitHubCIStatus *bool `json:"github_ci_status,omitempty"`
+}
+
+// CIStatusEnabled reports whether the GitHub CI status badge should be shown.
+func (c *Config) CIStatusEnabled() bool {
+	return c.GitHubCIStatus == nil || *c.GitHubCIStatus
 }
 
 // GetProgram returns the program to run. If Profiles is non-empty and
@@ -93,6 +103,7 @@ func DefaultConfig() *Config {
 		DefaultProgram:     program,
 		AutoYes:            false,
 		DaemonPollInterval: 1000,
+		GitHubCIStatus:     boolPtr(true),
 		BranchPrefix: func() string {
 			user, err := user.Current()
 			if err != nil || user == nil || user.Username == "" {
@@ -103,6 +114,8 @@ func DefaultConfig() *Config {
 		}(),
 	}
 }
+
+func boolPtr(b bool) *bool { return &b }
 
 // GetClaudeCommand attempts to find the "claude" command in the user's shell
 // It checks in the following order:

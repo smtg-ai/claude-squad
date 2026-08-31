@@ -2,6 +2,7 @@ package session
 
 import (
 	"claude-squad/log"
+	"claude-squad/session/ci"
 	"claude-squad/session/git"
 	"claude-squad/session/tmux"
 	"errors"
@@ -55,6 +56,11 @@ type Instance struct {
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
+
+	// ciStatus is the last known CI verdict for Branch. Deliberately not
+	// persisted: a verdict from a previous run of cs would be arbitrarily stale,
+	// and a fresh one arrives within a tick or two of startup.
+	ciStatus ci.Status
 
 	// selectedBranch is the existing branch to start on (empty = new branch from HEAD)
 	selectedBranch string
@@ -626,6 +632,17 @@ func (i *Instance) SetDiffStats(stats *git.DiffStats) {
 // GetDiffStats returns the current git diff statistics
 func (i *Instance) GetDiffStats() *git.DiffStats {
 	return i.diffStats
+}
+
+// SetCIStatus sets the CI verdict for this instance's branch. Should be called
+// from the main event loop to avoid data races with View.
+func (i *Instance) SetCIStatus(status ci.Status) {
+	i.ciStatus = status
+}
+
+// GetCIStatus returns the last known CI verdict for this instance's branch.
+func (i *Instance) GetCIStatus() ci.Status {
+	return i.ciStatus
 }
 
 // SendPrompt sends a prompt to the tmux session
