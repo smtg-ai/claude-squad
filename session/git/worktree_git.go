@@ -69,7 +69,12 @@ func (g *GitWorktree) runGitCommand(path string, args ...string) (string, error)
 
 // PushChanges commits and pushes changes in the worktree to the remote branch
 func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
-	if err := checkGHCLI(); err != nil {
+	forge := detectForge(g.worktreePath)
+	if forge == forgeForgejo {
+		if err := checkTeaCLI(); err != nil {
+			return err
+		}
+	} else if err := checkGHCLI(); err != nil {
 		return err
 	}
 
@@ -91,6 +96,18 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 			log.ErrorLog.Print(err)
 			return fmt.Errorf("failed to commit changes: %w", err)
 		}
+	}
+
+	if forge == forgeForgejo {
+		if err := pushViaGit(g.worktreePath, g.branchName); err != nil {
+			return err
+		}
+		if open {
+			if err := g.OpenBranchURL(); err != nil {
+				log.ErrorLog.Printf("failed to open branch URL: %v", err)
+			}
+		}
+		return nil
 	}
 
 	// First push the branch to remote to ensure it exists
@@ -189,6 +206,13 @@ func (g *GitWorktree) IsBranchCheckedOut() (bool, error) {
 
 // OpenBranchURL opens the branch URL in the default browser
 func (g *GitWorktree) OpenBranchURL() error {
+	if detectForge(g.worktreePath) == forgeForgejo {
+		if err := checkTeaCLI(); err != nil {
+			return err
+		}
+		return openBranchURLForgejo(g.worktreePath)
+	}
+
 	// Check if GitHub CLI is available
 	if err := checkGHCLI(); err != nil {
 		return err
