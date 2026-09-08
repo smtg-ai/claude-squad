@@ -1,3 +1,3 @@
-tmux kill-server
+tmux -L claudesquad kill-server
 rm -rf worktree*
 rm -rf ~/.claude-squad
