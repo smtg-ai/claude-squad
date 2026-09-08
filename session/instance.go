@@ -4,6 +4,7 @@ import (
 	"claude-squad/log"
 	"claude-squad/session/git"
 	"claude-squad/session/tmux"
+	"errors"
 	"path/filepath"
 
 	"fmt"
@@ -245,8 +246,18 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	}()
 
 	if !firstTimeSetup {
-		// Reuse existing session
+		// Reuse existing session. If the tmux server died since we last ran (reboot,
+		// crash, `tmux kill-server`), the session is gone but the worktree and branch
+		// are still on disk. Park the instance as Paused so Resume can rebuild it.
+		// Reporting an error here would be worse than useless: LoadInstances aborts on
+		// the first failure, so a single dead session would hide every other instance.
 		if err := tmuxSession.Restore(); err != nil {
+			if errors.Is(err, tmux.ErrSessionNotFound) {
+				log.WarningLog.Printf(
+					"tmux session for %q no longer exists; pausing instance so it can be resumed", i.Title)
+				i.SetStatus(Paused)
+				return nil
+			}
 			setupErr = fmt.Errorf("failed to restore existing session: %w", err)
 			return setupErr
 		}
@@ -419,6 +430,33 @@ func (i *Instance) Pause() error {
 
 	var errs []error
 
+	// If the worktree is orphaned (path or .git missing), git cannot operate
+	// on it. Skip dirty check and Remove, prune any lingering metadata, then
+	// transition to Paused so the user can recover via Resume.
+	if valid, err := i.gitWorktree.IsValidWorktree(); err != nil {
+		errs = append(errs, fmt.Errorf("failed to validate worktree: %w", err))
+		log.ErrorLog.Print(err)
+	} else if !valid {
+		log.WarningLog.Printf("worktree at %s is orphaned; skipping dirty check and remove",
+			i.gitWorktree.GetWorktreePath())
+		if err := i.tmuxSession.DetachSafely(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to detach tmux session: %w", err))
+			log.ErrorLog.Print(err)
+		}
+		// Drop any leftover directory so a future Resume's `git worktree add` won't conflict.
+		if err := os.RemoveAll(i.gitWorktree.GetWorktreePath()); err != nil {
+			errs = append(errs, fmt.Errorf("failed to remove orphaned worktree directory: %w", err))
+			log.ErrorLog.Print(err)
+		}
+		if err := i.gitWorktree.Prune(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to prune git worktrees: %w", err))
+			log.ErrorLog.Print(err)
+		}
+		i.SetStatus(Paused)
+		_ = clipboard.WriteAll(i.gitWorktree.GetBranchName())
+		return i.combineErrors(errs)
+	}
+
 	// Check if there are any changes to commit
 	if dirty, err := i.gitWorktree.IsDirty(); err != nil {
 		errs = append(errs, fmt.Errorf("failed to check if worktree is dirty: %w", err))
@@ -458,13 +496,13 @@ func (i *Instance) Pause() error {
 		}
 	}
 
+	i.SetStatus(Paused)
+	_ = clipboard.WriteAll(i.gitWorktree.GetBranchName())
+
 	if err := i.combineErrors(errs); err != nil {
 		log.ErrorLog.Print(err)
 		return err
 	}
-
-	i.SetStatus(Paused)
-	_ = clipboard.WriteAll(i.gitWorktree.GetBranchName())
 	return nil
 }
 
@@ -485,10 +523,19 @@ func (i *Instance) Resume() error {
 		return fmt.Errorf("cannot resume: branch is checked out, please switch to a different branch")
 	}
 
-	// Setup git worktree
-	if err := i.gitWorktree.Setup(); err != nil {
-		log.ErrorLog.Print(err)
-		return fmt.Errorf("failed to setup git worktree: %w", err)
+	// Setup git worktree. Setup removes and re-adds the worktree from the branch, which
+	// throws away anything uncommitted in it. After a normal Pause the directory is gone
+	// and that is exactly what we want; but an instance paused because its tmux session
+	// died still has its worktree — and the work in it — sitting on disk, so leave it be.
+	if valid, err := i.gitWorktree.IsValidWorktree(); err != nil || !valid {
+		if err != nil {
+			log.WarningLog.Printf("could not validate worktree at %s, recreating it: %v",
+				i.gitWorktree.GetWorktreePath(), err)
+		}
+		if err := i.gitWorktree.Setup(); err != nil {
+			log.ErrorLog.Print(err)
+			return fmt.Errorf("failed to setup git worktree: %w", err)
+		}
 	}
 
 	// Check if tmux session still exists from pause, otherwise create new one
@@ -557,6 +604,17 @@ func (i *Instance) ComputeDiff() *git.DiffStats {
 		return nil
 	}
 	return i.gitWorktree.Diff()
+}
+
+// ComputeDiffNumstat runs a lightweight git diff --numstat and returns only the
+// added/removed line counts (Content is left empty). Safe to call from a
+// background goroutine. Use this for instances whose full diff content is not
+// currently needed so we avoid keeping large diffs in memory.
+func (i *Instance) ComputeDiffNumstat() *git.DiffStats {
+	if !i.started || i.Status == Paused {
+		return nil
+	}
+	return i.gitWorktree.DiffNumstat()
 }
 
 // SetDiffStats sets the diff statistics on the instance. Should be called from

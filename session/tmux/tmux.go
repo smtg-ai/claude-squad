@@ -60,6 +60,10 @@ type TmuxSession struct {
 const TmuxPrefix = "claudesquad_"
 const TmuxSocketName = "claudesquad"
 
+// ErrSessionNotFound is returned when the tmux session backing an instance is gone, which
+// happens whenever the tmux server dies (reboot, crash, `tmux kill-server`).
+var ErrSessionNotFound = errors.New("tmux session no longer exists")
+
 var whiteSpaceRegex = regexp.MustCompile(`\s+`)
 
 var tmuxEnvBlacklist = map[string]struct{}{
@@ -129,6 +133,9 @@ func mergeUpdateEnvironment(existing string, additional []string) string {
 		if name == "" {
 			continue
 		}
+		if _, blocked := tmuxEnvBlacklist[name]; blocked {
+			continue
+		}
 		if _, exists := seen[name]; exists {
 			continue
 		}
@@ -150,30 +157,6 @@ func mergeUpdateEnvironment(existing string, additional []string) string {
 	return strings.Join(merged, " ")
 }
 
-func (t *TmuxSession) syncUpdateEnvironment() {
-	if err := t.cmdExec.Run(tmuxCmd("start-server")); err != nil {
-		log.InfoLog.Printf("Warning: failed to start dedicated tmux server for session %s: %v", t.sanitizedName, err)
-		return
-	}
-
-	showCmd := tmuxCmd("show-options", "-gqv", "update-environment")
-	output, err := t.cmdExec.Output(showCmd)
-	if err != nil {
-		log.InfoLog.Printf("Warning: failed to inspect tmux update-environment for session %s: %v", t.sanitizedName, err)
-		return
-	}
-
-	merged := mergeUpdateEnvironment(string(output), envNamesForUpdate())
-	if strings.TrimSpace(merged) == "" || strings.TrimSpace(merged) == strings.TrimSpace(string(output)) {
-		return
-	}
-
-	setCmd := tmuxCmd("set-option", "-g", "update-environment", merged)
-	if err := t.cmdExec.Run(setCmd); err != nil {
-		log.InfoLog.Printf("Warning: failed to sync tmux update-environment for session %s: %v", t.sanitizedName, err)
-	}
-}
-
 // Start creates and starts a new tmux session, then attaches to it. Program is the command to run in
 // the session (ex. claude). workdir is the git worktree directory.
 func (t *TmuxSession) Start(workDir string) error {
@@ -182,13 +165,16 @@ func (t *TmuxSession) Start(workDir string) error {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
 	}
 
-	// Dedicated tmux servers do not automatically learn custom environment
-	// variables from the invoking shell. Sync the current process environment so
-	// newly created agent sessions inherit API keys and similar configuration.
-	t.syncUpdateEnvironment()
-
-	// Create a new detached tmux session and start claude in it
-	cmd := tmuxCmd("new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
+	// Set the environment names before creating the session so the tmux client
+	// updates their values, including removing values unset since an earlier run.
+	showCmd := tmuxCmd("show-options", "-gqv", "update-environment")
+	output, _ := t.cmdExec.Output(showCmd)
+	updateEnvironment := mergeUpdateEnvironment(string(output), envNamesForUpdate())
+	cmd := tmuxCmd(
+		"set-option", "-g", "update-environment", updateEnvironment,
+		";",
+		"new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program,
+	)
 
 	ptmx, err := t.ptyFactory.Start(cmd)
 	if err != nil {
@@ -274,6 +260,13 @@ func (t *TmuxSession) CheckAndHandleTrustPrompt() bool {
 
 // Restore attaches to an existing session and restores the window size
 func (t *TmuxSession) Restore() error {
+	// attach-session against a missing session still forks a process successfully, so the
+	// PTY start below would report no error while leaving us attached to nothing. Check
+	// first so callers can tell "session is gone" apart from "PTY failed".
+	if !t.DoesSessionExist() {
+		return ErrSessionNotFound
+	}
+
 	ptmx, err := t.ptyFactory.Start(tmuxCmd("attach-session", "-t", t.sanitizedName))
 	if err != nil {
 		return fmt.Errorf("error opening PTY: %w", err)
