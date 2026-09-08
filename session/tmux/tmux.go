@@ -167,8 +167,11 @@ func (t *TmuxSession) Start(workDir string) error {
 
 	// Set the environment names before creating the session so the tmux client
 	// updates their values, including removing values unset since an earlier run.
-	showCmd := tmuxCmd("show-options", "-gqv", "update-environment")
-	output, _ := t.cmdExec.Output(showCmd)
+	showCmd := tmuxCmd("start-server", ";", "show-options", "-gqv", "update-environment")
+	output, err := t.cmdExec.Output(showCmd)
+	if err != nil {
+		return fmt.Errorf("error reading tmux update-environment: %w", err)
+	}
 	updateEnvironment := mergeUpdateEnvironment(string(output), envNamesForUpdate())
 	cmd := tmuxCmd(
 		"set-option", "-g", "update-environment", updateEnvironment,

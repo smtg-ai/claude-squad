@@ -101,7 +101,7 @@ func TestStartTmuxSession(t *testing.T) {
 	require.NotContains(t, cmd2.ToString(createCmd), "test-cpa-key")
 	require.Equal(t, "tmux -L claudesquad attach-session -t claudesquad_test-session",
 		cmd2.ToString(ptyFactory.cmds[1]))
-	require.Contains(t, outputCommands, "tmux -L claudesquad show-options -gqv update-environment")
+	require.Contains(t, outputCommands, "tmux -L claudesquad start-server ; show-options -gqv update-environment")
 	updateEnvironment := strings.Fields(createCmd.Args[6])
 	require.Contains(t, updateEnvironment, "DISPLAY")
 	require.Contains(t, updateEnvironment, "CPA_API_KEY")
@@ -118,6 +118,24 @@ func TestStartTmuxSession(t *testing.T) {
 	// File should be open
 	_, err = ptyFactory.files[1].Stat()
 	require.NoError(t, err)
+}
+
+func TestStartFailsWhenUpdateEnvironmentCannotBeRead(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(*exec.Cmd) error {
+			return fmt.Errorf("session not found")
+		},
+		OutputFunc: func(*exec.Cmd) ([]byte, error) {
+			return nil, fmt.Errorf("read failed")
+		},
+	}
+	session := newTmuxSession("test-session", "claude", ptyFactory, cmdExec)
+
+	err := session.Start(t.TempDir())
+
+	require.ErrorContains(t, err, "error reading tmux update-environment: read failed")
+	require.Empty(t, ptyFactory.cmds)
 }
 
 func TestStartRemovesEnvironmentUnsetSincePreviousRun(t *testing.T) {
