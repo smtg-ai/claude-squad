@@ -44,6 +44,42 @@ To use a custom name for the binary:
 curl -fsSL https://raw.githubusercontent.com/smtg-ai/claude-squad/main/install.sh | bash -s -- --name <your-binary-name>
 ```
 
+#### Nix
+
+For Nix users, a flake is provided for easy installation and development.
+
+**Run directly without installing:**
+
+```bash
+nix run github:smtg-ai/claude-squad
+```
+
+**Install to your profile:**
+
+```bash
+nix profile install github:smtg-ai/claude-squad
+```
+
+**Add to your NixOS or Home Manager configuration:**
+
+```nix
+# In your flake inputs
+inputs.claude-squad.url = "github:smtg-ai/claude-squad";
+
+# Then add to your packages
+environment.systemPackages = [ inputs.claude-squad.packages.${system}.default ];
+# or for Home Manager
+home.packages = [ inputs.claude-squad.packages.${system}.default ];
+```
+
+**Development shell (for contributors):**
+
+```bash
+git clone https://github.com/smtg-ai/claude-squad.git
+cd claude-squad
+nix develop
+```
+
 ### Prerequisites
 
 - [tmux](https://github.com/tmux/tmux/wiki/Installing)
