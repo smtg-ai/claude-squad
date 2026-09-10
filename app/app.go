@@ -11,6 +11,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -74,6 +76,12 @@ type home struct {
 
 	// keySent is used to manage underlining menu items
 	keySent bool
+
+	// instanceStarting is true while a background instance start is in progress.
+	// Prevents double-submission and guards against interacting with a not-yet-started instance.
+	instanceStarting bool
+	// startingInstance holds a reference to the instance being started in the background.
+	startingInstance *session.Instance
 
 	// -- UI Components --
 
@@ -181,7 +189,7 @@ func (m *home) Init() tea.Cmd {
 			time.Sleep(100 * time.Millisecond)
 			return previewTickMsg{}
 		},
-		tickUpdateMetadataCmd,
+		tickUpdateMetadataCmd(m.snapshotActiveInstances(), m.list.GetSelectedInstance()),
 	)
 }
 
@@ -201,27 +209,55 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case keyupMsg:
 		m.menu.ClearKeydown()
 		return m, nil
-	case tickUpdateMetadataMessage:
-		for _, instance := range m.list.GetInstances() {
-			if !instance.Started() || instance.Paused() {
+	case instanceStartDoneMsg:
+		m.instanceStarting = false
+		inst := msg.instance
+		m.startingInstance = nil
+
+		if msg.err != nil {
+			// Start failed — remove the instance from the list and show the error.
+			m.list.Kill()
+			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), m.handleError(msg.err))
+		}
+
+		// Save after successful start.
+		if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+			return m, m.handleError(err)
+		}
+
+		if m.promptAfterName {
+			m.state = statePrompt
+			m.menu.SetState(ui.StatePrompt)
+			m.textInputOverlay = overlay.NewTextInputOverlay("Enter prompt", "")
+			m.promptAfterName = false
+		} else {
+			m.showHelpScreen(helpStart(inst), nil)
+		}
+
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+	case metadataUpdateDoneMsg:
+		for _, r := range msg.results {
+			// Skip instances that were paused while metadata was being computed
+			if r.instance.Status == session.Paused {
 				continue
 			}
-			instance.CheckAndHandleTrustPrompt()
-			updated, prompt := instance.HasUpdated()
-			if updated {
-				instance.SetStatus(session.Running)
+			if r.updated {
+				r.instance.SetStatus(session.Running)
+			} else if r.hasPrompt {
+				r.instance.TapEnter()
 			} else {
-				if prompt {
-					instance.TapEnter()
-				} else {
-					instance.SetStatus(session.Ready)
-				}
+				r.instance.SetStatus(session.Ready)
 			}
-			if err := instance.UpdateDiffStats(); err != nil {
-				log.WarningLog.Printf("could not update diff stats: %v", err)
+			if r.diffStats != nil && r.diffStats.Error != nil {
+				if !strings.Contains(r.diffStats.Error.Error(), "base commit SHA not set") {
+					log.WarningLog.Printf("could not update diff stats: %v", r.diffStats.Error)
+				}
+				r.instance.SetDiffStats(nil)
+			} else {
+				r.instance.SetDiffStats(r.diffStats)
 			}
 		}
-		return m, tickUpdateMetadataCmd
+		return m, tickUpdateMetadataCmd(m.snapshotActiveInstances(), m.list.GetSelectedInstance())
 	case tea.MouseMsg:
 		// Handle mouse wheel events for scrolling the diff/preview pane
 		if msg.Action == tea.MouseActionPress {
@@ -715,6 +751,22 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			m.instanceChanged()
 		})
 		return m, nil
+	case keys.KeyMoveUp:
+		if m.list.MoveUp() {
+			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+				return m, m.handleError(err)
+			}
+			return m, m.instanceChanged()
+		}
+		return m, nil
+	case keys.KeyMoveDown:
+		if m.list.MoveDown() {
+			if err := m.storage.SaveInstances(m.list.GetInstances()); err != nil {
+				return m, m.handleError(err)
+			}
+			return m, m.instanceChanged()
+		}
+		return m, nil
 	case keys.KeyResume:
 		selected := m.list.GetSelectedInstance()
 		if selected == nil || selected.Status == session.Loading {
@@ -754,6 +806,7 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 			}
 			<-ch
 			m.state = stateDefault
+			m.instanceChanged()
 		})
 		return m, nil
 	default:
@@ -803,8 +856,6 @@ type hideErrMsg struct{}
 // previewTickMsg implements tea.Msg and triggers a preview update
 type previewTickMsg struct{}
 
-type tickUpdateMetadataMessage struct{}
-
 type instanceChangedMsg struct{}
 
 type instanceStartedMsg struct {
@@ -849,11 +900,85 @@ func (m *home) runBranchSearch(filter string, version uint64) tea.Cmd {
 	}
 }
 
-// tickUpdateMetadataCmd is the callback to update the metadata of the instances every 500ms. Note that we iterate
-// overall the instances and capture their output. It's a pretty expensive operation. Let's do it 2x a second only.
-var tickUpdateMetadataCmd = func() tea.Msg {
-	time.Sleep(500 * time.Millisecond)
-	return tickUpdateMetadataMessage{}
+// instanceMetaResult holds the results of a single instance's metadata update,
+// computed in a background goroutine.
+type instanceMetaResult struct {
+	instance  *session.Instance
+	updated   bool
+	hasPrompt bool
+	diffStats *git.DiffStats
+}
+
+// metadataUpdateDoneMsg is sent when the background metadata update completes.
+type metadataUpdateDoneMsg struct {
+	results []instanceMetaResult
+}
+
+// instanceStartDoneMsg is sent when the background instance start completes.
+type instanceStartDoneMsg struct {
+	instance *session.Instance
+	err      error
+}
+
+// runInstanceStartCmd returns a Cmd that performs the expensive instance.Start(true)
+// in a background goroutine so the main event loop stays responsive.
+func runInstanceStartCmd(instance *session.Instance) tea.Cmd {
+	return func() tea.Msg {
+		err := instance.Start(true)
+		return instanceStartDoneMsg{instance: instance, err: err}
+	}
+}
+
+// snapshotActiveInstances returns the currently active (started, not paused)
+// instances. Called on the main thread so the filtering doesn't race with
+// state mutations.
+func (m *home) snapshotActiveInstances() []*session.Instance {
+	var out []*session.Instance
+	for _, inst := range m.list.GetInstances() {
+		if inst.Started() && !inst.Paused() {
+			out = append(out, inst)
+		}
+	}
+	return out
+}
+
+// tickUpdateMetadataCmd returns a self-chaining Cmd that sleeps 500ms, then performs
+// expensive metadata I/O (tmux capture, git diff) in parallel background goroutines.
+// Because it only re-schedules after completing, overlapping ticks are impossible.
+// The active instances slice should be snapshotted on the main thread via
+// snapshotActiveInstances() before being passed here.
+//
+// Only the selected instance gets a full diff (with Content); the rest get a
+// lightweight numstat-only summary. This keeps per-instance memory bounded
+// since the diff pane only ever renders the selected one.
+func tickUpdateMetadataCmd(active []*session.Instance, selected *session.Instance) tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(500 * time.Millisecond)
+
+		if len(active) == 0 {
+			return metadataUpdateDoneMsg{}
+		}
+
+		results := make([]instanceMetaResult, len(active))
+		var wg sync.WaitGroup
+		for idx, inst := range active {
+			wg.Add(1)
+			go func(i int, instance *session.Instance) {
+				defer wg.Done()
+				r := &results[i]
+				r.instance = instance
+				r.updated, r.hasPrompt = instance.HasUpdated()
+				if instance == selected {
+					r.diffStats = instance.ComputeDiff()
+				} else {
+					r.diffStats = instance.ComputeDiffNumstat()
+				}
+			}(idx, inst)
+		}
+		wg.Wait()
+
+		return metadataUpdateDoneMsg{results: results}
+	}
 }
 
 // handleError handles all errors which get bubbled up to the app. sets the error message. We return a callback tea.Cmd that returns a hideErrMsg message
