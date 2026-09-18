@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -463,4 +464,51 @@ func TestConfirmationModalVisualAppearance(t *testing.T) {
 
 	// Test that the danger indicator is preserved
 	assert.Contains(t, rendered, "[!")
+}
+
+// newTestHome builds a home with only the UI components needed to render a view.
+func newTestHome(titles ...string) *home {
+	h := &home{
+		ctx:          context.Background(),
+		state:        stateDefault,
+		appConfig:    config.DefaultConfig(),
+		spinner:      spinner.New(),
+		menu:         ui.NewMenu(),
+		tabbedWindow: ui.NewTabbedWindow(ui.NewPreviewPane(), ui.NewDiffPane(), ui.NewTerminalPane()),
+		errBox:       ui.NewErrBox(),
+	}
+	h.list = ui.NewList(&h.spinner, false)
+	for _, title := range titles {
+		instance, err := session.NewInstance(session.InstanceOptions{
+			Title:   title,
+			Path:    ".",
+			Program: "echo",
+		})
+		if err != nil {
+			panic(err)
+		}
+		h.list.AddInstance(instance)
+	}
+	return h
+}
+
+// TestViewFitsInTerminal makes sure the rendered frame never grows taller than the
+// terminal. A taller frame scrolls the terminal, which hides the top of the view (the
+// title and the first instances) - see the report of instance 1 disappearing after
+// increasing the terminal font size.
+func TestViewFitsInTerminal(t *testing.T) {
+	// Increasing the font size shrinks the terminal to fewer, bigger rows.
+	for _, height := range []int{10, 12, 16, 20, 24, 30, 40, 60} {
+		for _, instances := range []int{0, 1, 3, 8} {
+			titles := make([]string, instances)
+			for i := range titles {
+				titles[i] = fmt.Sprintf("instance-%d", i)
+			}
+			h := newTestHome(titles...)
+			h.updateHandleWindowSizeEvent(tea.WindowSizeMsg{Width: 120, Height: height})
+
+			require.LessOrEqual(t, lipgloss.Height(h.View()), height,
+				"height %d with %d instances", height, instances)
+		}
+	}
 }

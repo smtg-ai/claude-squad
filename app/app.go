@@ -158,9 +158,13 @@ func (m *home) updateHandleWindowSizeEvent(msg tea.WindowSizeMsg) {
 	listWidth := int(float32(msg.Width) * 0.3)
 	tabsWidth := msg.Width - listWidth
 
-	// Menu takes 10% of height, list and window take 90%
-	contentHeight := int(float32(msg.Height) * 0.9)
-	menuHeight := msg.Height - contentHeight - 1     // minus 1 for error box
+	// View renders the list and the window with one row of top padding, and the error box
+	// takes the last row. Both come out of the height budget: a frame taller than the
+	// terminal scrolls the top of the list (the first instances) out of view.
+	availableHeight := max(msg.Height-2, 2)
+	// Menu takes 10% of the remaining height, list and window take 90%
+	contentHeight := int(float32(availableHeight) * 0.9)
+	menuHeight := availableHeight - contentHeight
 	m.errBox.SetSize(int(float32(msg.Width)*0.9), 1) // error box takes 1 row
 
 	m.tabbedWindow.SetSize(tabsWidth, contentHeight)

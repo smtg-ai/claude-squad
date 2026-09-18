@@ -60,6 +60,10 @@ type List struct {
 	renderer      *InstanceRenderer
 	autoyes       bool
 
+	// scrollOffset is the index of the first instance which is rendered. It only moves
+	// when the selected instance would otherwise fall outside of the visible window.
+	scrollOffset int
+
 	// map of repo name to number of instances using it. Used to display the repo name only if there are
 	// multiple repos in play.
 	repos map[string]int
@@ -114,7 +118,10 @@ func (r *InstanceRenderer) setWidth(width int) {
 // ɹ and ɻ are other options.
 const branchIcon = "Ꮧ"
 
-func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, hasMultipleRepos bool) string {
+// Render renders a single instance. In compact mode the blank line above and below the
+// instance is dropped, which halves its height at the cost of a denser list.
+func (r *InstanceRenderer) Render(
+	i *session.Instance, idx int, selected bool, hasMultipleRepos bool, compact bool) string {
 	prefix := fmt.Sprintf(" %d. ", idx)
 	if idx >= 10 {
 		prefix = prefix[:len(prefix)-1]
@@ -124,6 +131,10 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	if !selected {
 		titleS = titleStyle
 		descS = listDescStyle
+	}
+	if compact {
+		titleS = titleS.PaddingTop(0)
+		descS = descS.PaddingBottom(0)
 	}
 
 	// add spinner next to title if it's running
@@ -225,6 +236,71 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 	return text
 }
 
+// listHeaderHeight is the number of lines String renders above the first instance:
+// two blank lines, the title row, and a blank line separating it from the list.
+const listHeaderHeight = 4
+
+// spanHeight returns how many lines the instances in [start, end) take up, including
+// the blank line rendered between two adjacent instances.
+func spanHeight(heights []int, start, end int) int {
+	if end <= start {
+		return 0
+	}
+	total := end - start - 1 // blank line between adjacent instances
+	for _, h := range heights[start:end] {
+		total += h
+	}
+	return total
+}
+
+// visibleRange returns the half-open range of instances to render given the rendered
+// height of every instance. It scrolls the list if needed so that the selected instance
+// is always inside the returned range.
+func (l *List) visibleRange(heights []int) (start, end int) {
+	if len(heights) == 0 {
+		l.scrollOffset = 0
+		return 0, 0
+	}
+	// A non-positive height means the list is unbounded (SetSize hasn't been called).
+	if l.height <= 0 {
+		l.scrollOffset = 0
+		return 0, len(heights)
+	}
+	avail := l.height - listHeaderHeight
+
+	// Never start below the selected instance.
+	l.scrollOffset = max(0, min(l.scrollOffset, l.selectedIdx))
+	// Scroll down until the selected instance fits. It is always rendered, even if it
+	// doesn't fit on its own: a partial instance beats an empty list.
+	for l.scrollOffset < l.selectedIdx && spanHeight(heights, l.scrollOffset, l.selectedIdx+1) > avail {
+		l.scrollOffset++
+	}
+	// Fit as many of the instances below the selected one as possible.
+	end = l.selectedIdx + 1
+	for end < len(heights) && spanHeight(heights, l.scrollOffset, end+1) <= avail {
+		end++
+	}
+	// When the last instance is visible, spend any leftover space on earlier ones so the
+	// list doesn't keep a gap at the bottom after scrolling down and back up.
+	if end == len(heights) {
+		for l.scrollOffset > 0 && spanHeight(heights, l.scrollOffset-1, end) <= avail {
+			l.scrollOffset--
+		}
+	}
+	return l.scrollOffset, end
+}
+
+// renderInstances renders every instance and returns them along with their heights.
+func (l *List) renderInstances(compact bool) (rendered []string, heights []int) {
+	rendered = make([]string, len(l.items))
+	heights = make([]int, len(l.items))
+	for i, item := range l.items {
+		rendered[i] = l.renderer.Render(item, i+1, i == l.selectedIdx, len(l.repos) > 1, compact)
+		heights[i] = lipgloss.Height(rendered[i])
+	}
+	return rendered, heights
+}
+
 func (l *List) String() string {
 	const titleText = " Instances "
 	const autoYesText = " auto-yes "
@@ -252,14 +328,26 @@ func (l *List) String() string {
 	b.WriteString("\n")
 	b.WriteString("\n")
 
-	// Render the list.
-	for i, item := range l.items {
-		b.WriteString(l.renderer.Render(item, i+1, i == l.selectedIdx, len(l.repos) > 1))
-		if i != len(l.items)-1 {
+	// Render only the instances which fit in the list's height. Rendering past it makes
+	// the whole frame taller than the terminal, which scrolls the top of the list (the
+	// first instances) out of view instead of the bottom.
+	//
+	// Prefer the roomy layout, and fall back to the compact one when that doesn't fit:
+	// showing every instance beats the padding around them.
+	rendered, heights := l.renderInstances(false)
+	if l.height > 0 && listHeaderHeight+spanHeight(heights, 0, len(heights)) > l.height {
+		rendered, heights = l.renderInstances(true)
+	}
+
+	start, end := l.visibleRange(heights)
+	for i := start; i < end; i++ {
+		if i != start {
 			b.WriteString("\n\n")
 		}
+		b.WriteString(rendered[i])
 	}
-	return lipgloss.Place(l.width, l.height, lipgloss.Left, lipgloss.Top, b.String())
+
+	return lipgloss.Place(l.width, l.height, lipgloss.Left, lipgloss.Top, truncateHeight(b.String(), l.height))
 }
 
 // Down selects the next item in the list.

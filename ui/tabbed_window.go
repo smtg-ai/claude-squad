@@ -3,6 +3,8 @@ package ui
 import (
 	"claude-squad/log"
 	"claude-squad/session"
+	"strings"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -76,6 +78,21 @@ func (w *TabbedWindow) SetInstance(instance *session.Instance) {
 // AdjustPreviewWidth adjusts the width of the preview pane to be 90% of the provided width.
 func AdjustPreviewWidth(width int) int {
 	return int(float64(width) * 0.9)
+}
+
+// truncateHeight drops the lines of content past height. A pane which renders taller
+// than the space it was given pushes the frame past the bottom of the terminal, which
+// makes the terminal scroll the top of the frame out of view. A non-positive height
+// means unbounded, in which case content is returned as is.
+func truncateHeight(content string, height int) string {
+	if height <= 0 {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) <= height {
+		return content
+	}
+	return strings.Join(lines[:height], "\n")
 }
 
 func (w *TabbedWindow) SetSize(width, height int) {
@@ -269,5 +286,5 @@ func (w *TabbedWindow) String() string {
 			w.width, w.height-2-windowStyle.GetVerticalFrameSize()-tabHeight,
 			lipgloss.Left, lipgloss.Top, content))
 
-	return lipgloss.JoinVertical(lipgloss.Left, "\n", row, window)
+	return truncateHeight(lipgloss.JoinVertical(lipgloss.Left, "\n", row, window), w.height)
 }
