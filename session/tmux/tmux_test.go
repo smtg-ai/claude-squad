@@ -86,3 +86,36 @@ func TestStartTmuxSession(t *testing.T) {
 	_, err = ptyFactory.files[1].Stat()
 	require.NoError(t, err)
 }
+
+// A tmux server that has gone away (reboot, crash, `tmux kill-server`) takes every session
+// with it. attach-session against a missing session still forks successfully, so Restore
+// has to check for the session itself or it reports success while attached to nothing.
+func TestRestoreReturnsErrSessionNotFoundWhenSessionIsGone(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "has-session") {
+				return fmt.Errorf("can't find session")
+			}
+			return nil
+		},
+	}
+
+	session := NewTmuxSessionWithDeps("gone", "program", ptyFactory, cmdExec)
+	err := session.Restore()
+
+	require.ErrorIs(t, err, ErrSessionNotFound)
+	require.Empty(t, ptyFactory.cmds, "should not have opened a PTY for a session that does not exist")
+}
+
+func TestRestoreAttachesWhenSessionExists(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error { return nil },
+	}
+
+	session := NewTmuxSessionWithDeps("alive", "program", ptyFactory, cmdExec)
+	require.NoError(t, session.Restore())
+	require.Len(t, ptyFactory.cmds, 1)
+	require.Contains(t, ptyFactory.cmds[0].String(), "attach-session")
+}
