@@ -52,6 +52,9 @@ type Instance struct {
 	AutoYes bool
 	// Prompt is the initial prompt to pass to the instance on startup
 	Prompt string
+	// RemoteControl is true if "/remote-control" should be sent as the first
+	// message on startup (before Prompt).
+	RemoteControl bool
 
 	// DiffStats stores the current git diff statistics
 	diffStats *git.DiffStats
@@ -288,6 +291,16 @@ func (i *Instance) Start(firstTimeSetup bool) error {
 	i.SetStatus(Running)
 
 	return nil
+}
+
+// IsClaude reports whether the instance's program is claude code, ignoring
+// the directory and any arguments (e.g. "/usr/local/bin/claude --verbose").
+func (i *Instance) IsClaude() bool {
+	fields := strings.Fields(i.Program)
+	if len(fields) == 0 {
+		return false
+	}
+	return filepath.Base(fields[0]) == tmux.ProgramClaude
 }
 
 // Kill terminates the instance and cleans up all resources

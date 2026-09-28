@@ -103,6 +103,9 @@ type home struct {
 	textOverlay *overlay.TextOverlay
 	// confirmationOverlay displays confirmation modals
 	confirmationOverlay *overlay.ConfirmationOverlay
+	// pendingConfirmCmd is returned to bubbletea once the confirmation overlay closes.
+	// Set by the overlay's callbacks when the outcome needs to run a tea.Cmd.
+	pendingConfirmCmd tea.Cmd
 }
 
 func newHome(ctx context.Context, program string, autoYes bool) *home {
@@ -325,18 +328,11 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.menu.SetState(ui.StatePrompt)
 			m.textInputOverlay = m.newPromptOverlay()
 		} else {
-			// If instance has a prompt (set from Shift+N flow), send it now
-			if msg.instance.Prompt != "" {
-				if err := msg.instance.SendPrompt(msg.instance.Prompt); err != nil {
-					log.ErrorLog.Printf("failed to send prompt: %v", err)
-				}
-				msg.instance.Prompt = ""
-			}
 			m.menu.SetState(ui.StateDefault)
 			m.showHelpScreen(helpStart(msg.instance), nil)
 		}
 
-		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+		return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), sendStartupMessagesCmd(msg.instance))
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -444,24 +440,10 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 				return m, tea.Batch(tea.WindowSize(), initialSearch)
 			}
 
-			// Set Loading status and finalize into the list immediately
-			instance.SetStatus(session.Loading)
-			m.newInstanceFinalizer()
 			m.promptAfterName = false
-			m.state = stateDefault
-			m.menu.SetState(ui.StateDefault)
-
-			// Return a tea.Cmd that runs instance.Start in the background
-			startCmd := func() tea.Msg {
-				err := startInstanceAndSave(instance, m.storage)
-				return instanceStartedMsg{
-					instance:        instance,
-					err:             err,
-					promptAfterName: false,
-				}
-			}
-
-			return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
+			return m, m.withRemoteControlChoice(instance, func() tea.Cmd {
+				return m.startNewInstance(instance, "")
+			})
 		case tea.KeyRunes:
 			if runewidth.StringWidth(instance.Title) >= 32 {
 				return m, m.handleError(fmt.Errorf("title cannot be longer than 32 characters"))
@@ -530,25 +512,11 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 						selected.Program = selectedProgram
 					}
 					selected.Prompt = prompt
-
-					// Finalize into list and start
-					selected.SetStatus(session.Loading)
-					m.newInstanceFinalizer()
 					m.textInputOverlay = nil
-					m.state = stateDefault
-					m.menu.SetState(ui.StateDefault)
 
-					startCmd := func() tea.Msg {
-						err := startInstanceAndSave(selected, m.storage)
-						return instanceStartedMsg{
-							instance:        selected,
-							err:             err,
-							promptAfterName: false,
-							selectedBranch:  selectedBranch,
-						}
-					}
-
-					return m, tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
+					return m, m.withRemoteControlChoice(selected, func() tea.Cmd {
+						return m.startNewInstance(selected, selectedBranch)
+					})
 				}
 
 				// Regular flow: instance already running, just send prompt
@@ -586,7 +554,9 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		if shouldClose {
 			m.state = stateDefault
 			m.confirmationOverlay = nil
-			return m, nil
+			cmd := m.pendingConfirmCmd
+			m.pendingConfirmCmd = nil
+			return m, cmd
 		}
 		return m, nil
 	}
@@ -900,6 +870,100 @@ type metadataUpdateDoneMsg struct {
 type instanceStartDoneMsg struct {
 	instance *session.Instance
 	err      error
+}
+
+// startNewInstance finalizes an unstarted instance into the list and starts it
+// in the background. The result arrives as an instanceStartedMsg.
+func (m *home) startNewInstance(instance *session.Instance, selectedBranch string) tea.Cmd {
+	instance.SetStatus(session.Loading)
+	m.newInstanceFinalizer()
+	m.state = stateDefault
+	m.menu.SetState(ui.StateDefault)
+
+	startCmd := func() tea.Msg {
+		err := startInstanceAndSave(instance, m.storage)
+		return instanceStartedMsg{
+			instance:        instance,
+			err:             err,
+			promptAfterName: false,
+			selectedBranch:  selectedBranch,
+		}
+	}
+
+	return tea.Batch(tea.WindowSize(), m.instanceChanged(), startCmd)
+}
+
+// remoteControlCommand is sent as the first message to new claude instances
+// that opt into remote control, making the session reachable from the Claude app.
+const remoteControlCommand = "/remote-control"
+
+// remoteControlSettleDelay gives claude time to process remoteControlCommand
+// before the user's initial prompt is typed in.
+const remoteControlSettleDelay = 2 * time.Second
+
+// withRemoteControlChoice decides whether a new instance should start with
+// remoteControlCommand according to the configured RemoteControlMode, then
+// calls start. In "ask" mode the decision is deferred to a y/n overlay and
+// start runs once the user answers.
+func (m *home) withRemoteControlChoice(instance *session.Instance, start func() tea.Cmd) tea.Cmd {
+	if !instance.IsClaude() {
+		return start()
+	}
+
+	mode := config.DefaultRemoteControl
+	if m.appConfig != nil {
+		mode = m.appConfig.GetRemoteControl()
+	}
+
+	switch mode {
+	case config.RemoteControlAlways:
+		instance.RemoteControl = true
+		return start()
+	case config.RemoteControlNever:
+		return start()
+	}
+
+	m.state = stateConfirm
+	m.menu.SetState(ui.StateDefault)
+	m.confirmationOverlay = overlay.NewConfirmationOverlay(
+		fmt.Sprintf("Start this session with %s so you can continue it from your phone?", remoteControlCommand))
+	m.confirmationOverlay.SetWidth(50)
+	m.confirmationOverlay.OnConfirm = func() {
+		instance.RemoteControl = true
+		m.pendingConfirmCmd = start()
+	}
+	m.confirmationOverlay.OnCancel = func() {
+		m.pendingConfirmCmd = start()
+	}
+	return tea.WindowSize()
+}
+
+// sendStartupMessagesCmd returns a Cmd that sends the instance's startup
+// messages in the background: remoteControlCommand (if enabled) followed by
+// the initial prompt (if any). Returns nil when there is nothing to send.
+func sendStartupMessagesCmd(instance *session.Instance) tea.Cmd {
+	remoteControl, prompt := instance.RemoteControl, instance.Prompt
+	instance.RemoteControl, instance.Prompt = false, ""
+	if !remoteControl && prompt == "" {
+		return nil
+	}
+
+	return func() tea.Msg {
+		if remoteControl {
+			if err := instance.SendPrompt(remoteControlCommand); err != nil {
+				return fmt.Errorf("failed to send %s: %w", remoteControlCommand, err)
+			}
+			if prompt != "" {
+				time.Sleep(remoteControlSettleDelay)
+			}
+		}
+		if prompt != "" {
+			if err := instance.SendPrompt(prompt); err != nil {
+				return fmt.Errorf("failed to send prompt: %w", err)
+			}
+		}
+		return nil
+	}
 }
 
 // startInstanceAndSave starts a freshly created instance and persists its

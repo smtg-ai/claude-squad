@@ -44,6 +44,37 @@ type Config struct {
 	BranchPrefix string `json:"branch_prefix"`
 	// Profiles is a list of named program profiles.
 	Profiles []Profile `json:"profiles,omitempty"`
+	// RemoteControl controls whether new claude instances are sent "/remote-control"
+	// as their first message. One of "ask", "always" or "never". Empty means
+	// DefaultRemoteControl.
+	RemoteControl RemoteControlMode `json:"remote_control,omitempty"`
+}
+
+// RemoteControlMode controls whether new claude instances start with "/remote-control".
+type RemoteControlMode string
+
+const (
+	// RemoteControlAsk prompts the user (y/n) each time a claude instance is created.
+	RemoteControlAsk RemoteControlMode = "ask"
+	// RemoteControlAlways sends "/remote-control" to every new claude instance.
+	RemoteControlAlways RemoteControlMode = "always"
+	// RemoteControlNever never sends "/remote-control".
+	RemoteControlNever RemoteControlMode = "never"
+
+	// DefaultRemoteControl is used when the config doesn't set remote_control.
+	// Change to RemoteControlAlways to skip the y/n prompt by default.
+	DefaultRemoteControl = RemoteControlAsk
+)
+
+// GetRemoteControl returns the configured RemoteControlMode, falling back to
+// DefaultRemoteControl when unset or unrecognized.
+func (c *Config) GetRemoteControl() RemoteControlMode {
+	switch c.RemoteControl {
+	case RemoteControlAsk, RemoteControlAlways, RemoteControlNever:
+		return c.RemoteControl
+	default:
+		return DefaultRemoteControl
+	}
 }
 
 // GetProgram returns the program to run. If Profiles is non-empty and

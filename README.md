@@ -140,6 +140,16 @@ Each profile has two fields:
 
 If no profiles are defined, Claude Squad uses `default_program` directly as the launch command (the default is `claude`).
 
+#### Remote control
+
+When you create a new `claude` instance, Claude Squad asks (y/n) whether to send `/remote-control` as its first message, so you can continue the session from your phone. Set `remote_control` in your config file to skip the question:
+
+| Value    | Behavior                                         |
+|----------|--------------------------------------------------|
+| `ask`    | Ask each time (default)                          |
+| `always` | Always send `/remote-control` without asking     |
+| `never`  | Never send `/remote-control`                     |
+
 ### FAQs
 
 #### Failed to start new session
