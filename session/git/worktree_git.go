@@ -2,19 +2,32 @@ package git
 
 import (
 	"claude-squad/log"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // MaxBranchSearchResults is the maximum number of branches returned by SearchBranches.
 const MaxBranchSearchResults = 50
 
+// fetchTimeout bounds the background fetch so a slow or unreachable remote can't hang.
+var fetchTimeout = 20 * time.Second
+
 // FetchBranches fetches and prunes remote-tracking branches (best-effort, won't fail if offline).
 func FetchBranches(repoPath string) {
-	cmd := exec.Command("git", "-C", repoPath, "fetch", "--prune")
+	// Never prompt for credentials: git reads them from /dev/tty, so a prompt would
+	// steal keystrokes from the TUI and block forever. Fail fast instead.
+	ctx, cancel := context.WithTimeout(context.Background(), fetchTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", repoPath, "fetch", "--prune")
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if os.Getenv("GIT_SSH_COMMAND") == "" {
+		cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND=ssh -o BatchMode=yes")
+	}
 	_ = cmd.Run()
 }
 
