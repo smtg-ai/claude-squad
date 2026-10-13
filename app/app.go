@@ -997,7 +997,25 @@ func (m *home) handleError(err error) tea.Cmd {
 }
 
 func (m *home) newPromptOverlay() *overlay.TextInputOverlay {
-	return overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "", m.appConfig.GetProfiles())
+	return overlay.NewTextInputOverlayWithBranchPicker("Enter prompt", "", profilesWithProgram(m.appConfig.GetProfiles(), m.program))
+}
+
+// profilesWithProgram puts the program the app was started with (e.g. via -p) first,
+// so the prompt overlay's default profile doesn't silently override it.
+func profilesWithProgram(profiles []config.Profile, program string) []config.Profile {
+	if program == "" || (len(profiles) > 0 && profiles[0].Program == program) {
+		return profiles
+	}
+	first := config.Profile{Name: program, Program: program}
+	rest := make([]config.Profile, 0, len(profiles))
+	for _, p := range profiles {
+		if p.Program == program {
+			first = p // keep the user's name for a matching profile
+		} else {
+			rest = append(rest, p)
+		}
+	}
+	return append([]config.Profile{first}, rest...)
 }
 
 // cancelPromptOverlay cancels the prompt overlay, cleaning up unstarted instances.
