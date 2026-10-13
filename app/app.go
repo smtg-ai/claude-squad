@@ -23,10 +23,40 @@ import (
 
 const GlobalInstanceLimit = 10
 
+// gatedStdin is the TUI's stdin. While a session is attached, the attach loop reads
+// os.Stdin itself; if Bubble Tea kept reading too it would steal the first chunk of
+// input (a keystroke, or the first 256 bytes of a paste) and replay it as UI keys
+// after detach. Attaching holds the write lock so Bubble Tea's reader parks instead.
+type gatedStdin struct {
+	*os.File
+	mu sync.RWMutex
+}
+
+func (g *gatedStdin) Read(p []byte) (int, error) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.File.Read(p)
+}
+
+var uiStdin = &gatedStdin{File: os.Stdin}
+
+// attachAndWait hands stdin to an attached session until it detaches.
+func attachAndWait(attach func() (chan struct{}, error)) error {
+	uiStdin.mu.Lock()
+	defer uiStdin.mu.Unlock()
+	ch, err := attach()
+	if err != nil {
+		return err
+	}
+	<-ch
+	return nil
+}
+
 // Run is the main entrypoint into the application.
 func Run(ctx context.Context, program string, autoYes bool) error {
 	p := tea.NewProgram(
 		newHome(ctx, program, autoYes),
+		tea.WithInput(uiStdin),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(), // Mouse scroll
 	)
@@ -787,24 +817,20 @@ func (m *home) handleKeyPress(msg tea.KeyMsg) (mod tea.Model, cmd tea.Cmd) {
 		// Terminal tab: attach to terminal session
 		if m.tabbedWindow.IsInTerminalTab() {
 			m.showHelpScreen(helpTypeInstanceAttach{}, func() {
-				ch, err := m.tabbedWindow.AttachTerminal()
-				if err != nil {
+				if err := attachAndWait(m.tabbedWindow.AttachTerminal); err != nil {
 					m.handleError(err)
 					return
 				}
-				<-ch
 				m.state = stateDefault
 			})
 			return m, nil
 		}
 		// Show help screen before attaching
 		m.showHelpScreen(helpTypeInstanceAttach{}, func() {
-			ch, err := m.list.Attach()
-			if err != nil {
+			if err := attachAndWait(m.list.Attach); err != nil {
 				m.handleError(err)
 				return
 			}
-			<-ch
 			m.state = stateDefault
 			m.instanceChanged()
 		})
