@@ -191,7 +191,13 @@ func (t *TmuxSession) IsCliReady() bool {
 	if err != nil {
 		return false
 	}
+	return t.hasReadyPrompt(content)
+}
 
+// hasReadyPrompt reports whether a pane snapshot shows the ready prompt of the
+// configured program. It only inspects content: deciding how long a snapshot must
+// stay put before it can be trusted is WaitForCliReady's job.
+func (t *TmuxSession) hasReadyPrompt(content string) bool {
 	trimmed := strings.TrimRight(content, " \t\n\r")
 	if trimmed == "" {
 		return false
@@ -232,48 +238,64 @@ func (t *TmuxSession) cliHasReadyDetection() bool {
 }
 
 // WaitForCliReady polls until the CLI is ready for input or the timeout expires.
-// It first checks known CLI prompt patterns via IsCliReady, and only for CLIs
-// without a known ready pattern it falls back to content stability detection.
+// A known CLI must show its ready prompt and the pane must then stay unchanged for
+// a full second. Claude Code with SessionStart hooks paints its prompt glyph while
+// the hooks are still writing, and submitting a prompt during that window loses the
+// Enter keystroke. CLIs without a known ready pattern fall back to content
+// stability alone.
 // Returns true if the CLI became ready, false on timeout.
 func (t *TmuxSession) WaitForCliReady(timeout time.Duration) bool {
-	deadline := time.After(timeout)
-	const interval = 200 * time.Millisecond
-	var prevContent string
-	stableCount := 0
-	const stableThreshold = 5 // 5 * 200ms = 1s of stable content
+	if timeout <= 0 {
+		return false
+	}
+
+	const (
+		interval     = 200 * time.Millisecond
+		settleWindow = time.Second
+	)
+
+	known := t.cliHasReadyDetection()
+	deadline := time.Now().Add(timeout)
+	var (
+		prevContent string
+		stableSince time.Time
+	)
 
 	for {
-		select {
-		case <-deadline:
+		if !time.Now().Before(deadline) {
 			log.InfoLog.Printf("WaitForCliReady: timed out after %v for %s", timeout, t.program)
 			return false
-		default:
 		}
 
-		if t.IsCliReady() {
-			return true
+		content, err := t.CapturePaneContent()
+		qualifies := err == nil && strings.TrimSpace(content) != "" && (!known || t.hasReadyPrompt(content))
+		switch {
+		case !qualifies:
+			// A failed, blank, or prompt-less capture is not a settled input surface.
+			prevContent, stableSince = "", time.Time{}
+		case content != prevContent:
+			// New output restarts the stability window.
+			prevContent, stableSince = content, time.Now()
 		}
 
-		// Fallback: detect content stability (content not changing). A known CLI must
-		// not use it, since a static startup screen would otherwise be mistaken for a
-		// ready prompt.
-		if !t.cliHasReadyDetection() {
-			content, err := t.CapturePaneContent()
-			if err == nil && content != "" && content == prevContent {
-				stableCount++
-				if stableCount >= stableThreshold {
-					log.InfoLog.Printf("WaitForCliReady: content stable for %s, assuming ready", t.program)
-					return true
+		if !stableSince.IsZero() && time.Since(stableSince) >= settleWindow {
+			if time.Now().Before(deadline) {
+				if !known {
+					log.InfoLog.Printf("WaitForCliReady: content stable for %v, assuming ready", settleWindow)
 				}
-			} else {
-				stableCount = 0
-				if err == nil {
-					prevContent = content
-				}
+				return true
 			}
+			log.InfoLog.Printf("WaitForCliReady: timed out after %v for %s", timeout, t.program)
+			return false
 		}
 
-		time.Sleep(interval)
+		sleep := interval
+		if remaining := time.Until(deadline); remaining < sleep {
+			sleep = remaining
+		}
+		if sleep > 0 {
+			time.Sleep(sleep)
+		}
 	}
 }
 

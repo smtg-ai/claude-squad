@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -144,6 +145,170 @@ func TestWaitForCliReadyUnknownCliFallsBackToStableContent(t *testing.T) {
 	session := newTmuxSession("test-session", "my-cli", ptyFactory, cmdExec)
 
 	require.True(t, session.WaitForCliReady(3*time.Second))
+}
+
+// Claude Code with SessionStart hooks paints its prompt glyph while hooks are still
+// writing to the pane, so the first prompt-shaped frame is not a usable input surface.
+// Readiness has to wait until the pane has stopped changing.
+func TestWaitForCliReadyRequiresSettledPrompt(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+	var (
+		mu           sync.Mutex
+		captures     int
+		firstSettled time.Time
+	)
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			captures++
+			if captures <= 5 {
+				return []byte(fmt.Sprintf("SessionStart hook %d\n❯ ", captures)), nil
+			}
+			if firstSettled.IsZero() {
+				firstSettled = time.Now()
+			}
+			return []byte("Claude Code\n❯ "), nil
+		},
+	}
+
+	session := newTmuxSession("test-session", "claude", ptyFactory, cmdExec)
+
+	require.True(t, session.WaitForCliReady(5*time.Second))
+
+	mu.Lock()
+	settledAt, total := firstSettled, captures
+	mu.Unlock()
+	require.False(t, settledAt.IsZero(), "never observed the settled prompt")
+	require.GreaterOrEqual(t, time.Since(settledAt), time.Second,
+		"reported ready before the prompt had been unchanged for a full second")
+	require.GreaterOrEqual(t, total, 6, "should have waited past the startup frames")
+}
+
+// A capture error is not a stable pane: the stability window must start over, and
+// success must require a whole fresh second of unchanged content.
+func TestWaitForCliReadyResetsStability(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+	var (
+		mu        sync.Mutex
+		calls     int
+		resumedAt time.Time
+	)
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			calls++
+			if calls == 4 {
+				return nil, fmt.Errorf("pane capture failed")
+			}
+			if calls > 4 && resumedAt.IsZero() {
+				resumedAt = time.Now()
+			}
+			return []byte("Claude Code\n❯ "), nil
+		},
+	}
+
+	session := newTmuxSession("test-session", "claude", ptyFactory, cmdExec)
+
+	require.True(t, session.WaitForCliReady(5*time.Second))
+
+	mu.Lock()
+	resumed, total := resumedAt, calls
+	mu.Unlock()
+	require.False(t, resumed.IsZero(), "never captured the pane again after the error")
+	require.GreaterOrEqual(t, time.Since(resumed), time.Second,
+		"stability window was not reset by the capture error")
+	require.GreaterOrEqual(t, total, 5)
+}
+
+// Blank panes are not a ready input surface, no matter how long they stay blank.
+func TestWaitForCliReadyNeverAcceptsBlankOutput(t *testing.T) {
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte("  \n\t\n"), nil
+		},
+	}
+
+	session := newTmuxSession("test-session", "claude", NewMockPtyFactory(t), cmdExec)
+
+	require.False(t, session.WaitForCliReady(1500*time.Millisecond))
+}
+
+// Continuously changing output never settles, so it must not be mistaken for readiness.
+func TestWaitForCliReadyNeverAcceptsChangingOutput(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+	var mu sync.Mutex
+	frames := 0
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error { return nil },
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			frames++
+			return []byte(fmt.Sprintf("SessionStart hook %d\n❯ ", frames)), nil
+		},
+	}
+
+	session := newTmuxSession("test-session", "claude", ptyFactory, cmdExec)
+
+	require.False(t, session.WaitForCliReady(1500*time.Millisecond))
+}
+
+// The stability gate must never outlive the caller's deadline.
+func TestWaitForCliReadyCannotExceedDeadline(t *testing.T) {
+	for _, timeout := range []time.Duration{0, -time.Millisecond, 500 * time.Millisecond} {
+		t.Run(timeout.String(), func(t *testing.T) {
+			cmdExec := cmd_test.MockCmdExec{
+				RunFunc: func(cmd *exec.Cmd) error { return nil },
+				OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+					return []byte("Claude Code\n❯ "), nil
+				},
+			}
+
+			session := newTmuxSession("test-session", "claude", NewMockPtyFactory(t), cmdExec)
+
+			require.False(t, session.WaitForCliReady(timeout))
+		})
+	}
+}
+
+// IsCliReady stays an instantaneous predicate over one capture; it must not grow the
+// stability requirement that belongs to WaitForCliReady.
+func TestIsCliReadyKnownPrompts(t *testing.T) {
+	tests := []struct {
+		name    string
+		program string
+		content string
+		want    bool
+	}{
+		{"claude prompt glyph", "claude", "Claude Code\n❯ ", true},
+		{"claude help hint", "claude", "Claude Code\n/help", true},
+		{"claude startup screen", "claude", "Claude Code is starting...\nLoading plugins", false},
+		{"aider prompt", "aider", "aider v0.50.0\n>", true},
+		{"gemini prompt", "gemini", "Gemini CLI\n>", true},
+		{"codex prompt", "codex", "codex\n>", true},
+		{"unknown cli prompt", "my-cli", "my-cli\n>", false},
+		{"blank pane", "claude", "  \n\t\n", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmdExec := cmd_test.MockCmdExec{
+				RunFunc: func(cmd *exec.Cmd) error { return nil },
+				OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+					return []byte(tt.content), nil
+				},
+			}
+
+			session := newTmuxSession("test-session", tt.program, NewMockPtyFactory(t), cmdExec)
+
+			require.Equal(t, tt.want, session.IsCliReady())
+		})
+	}
 }
 
 // A tmux server that has gone away (reboot, crash, `tmux kill-server`) takes every session

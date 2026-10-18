@@ -648,8 +648,11 @@ func (i *Instance) SendPrompt(prompt string) error {
 		return fmt.Errorf("error sending keys to tmux session: %w", err)
 	}
 
-	// Brief pause to prevent carriage return from being interpreted as newline
-	time.Sleep(100 * time.Millisecond)
+	// Give the CLI time to finish processing the pasted text before submitting it.
+	// CLIs such as Claude Code discard a carriage return that arrives while the
+	// input is still being handled (for example while SessionStart hooks run),
+	// which silently drops the prompt even though the text is visible.
+	time.Sleep(500 * time.Millisecond)
 	if err := i.tmuxSession.TapEnter(); err != nil {
 		return fmt.Errorf("error tapping enter: %w", err)
 	}
