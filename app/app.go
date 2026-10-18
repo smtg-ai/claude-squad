@@ -323,18 +323,38 @@ func (m *home) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.menu.SetState(ui.StatePrompt)
 			m.textInputOverlay = m.newPromptOverlay()
 		} else {
-			// If instance has a prompt (set from Shift+N flow), send it now
+			// If instance has a prompt (set from Shift+N flow), wait for CLI
+			// readiness before sending to avoid the prompt being lost.
+			cmds := []tea.Cmd{tea.WindowSize(), m.instanceChanged()}
 			if msg.instance.Prompt != "" {
-				if err := msg.instance.SendPrompt(msg.instance.Prompt); err != nil {
-					log.ErrorLog.Printf("failed to send prompt: %v", err)
-				}
+				prompt := msg.instance.Prompt
 				msg.instance.Prompt = ""
+				instance := msg.instance
+				cmds = append(cmds, func() tea.Msg {
+					if !instance.WaitForCliReady(30 * time.Second) {
+						return promptNotSentMsg{
+							instance: instance,
+							prompt:   prompt,
+							err:      fmt.Errorf("prompt not sent: CLI did not become ready"),
+						}
+					}
+					if err := instance.SendPrompt(prompt); err != nil {
+						return promptNotSentMsg{instance: instance, prompt: prompt, err: err}
+					}
+					return nil
+				})
 			}
 			m.menu.SetState(ui.StateDefault)
 			m.showHelpScreen(helpStart(msg.instance), nil)
+			return m, tea.Batch(cmds...)
 		}
 
 		return m, tea.Batch(tea.WindowSize(), m.instanceChanged())
+	case promptNotSentMsg:
+		// The prompt was not sent: keep it on the instance so it is not lost and
+		// tell the user about the failure.
+		msg.instance.Prompt = msg.prompt
+		return m, m.handleError(msg.err)
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -863,6 +883,14 @@ type instanceStartedMsg struct {
 	err             error
 	promptAfterName bool
 	selectedBranch  string
+}
+
+// promptNotSentMsg reports that a pending prompt was not sent, so that its
+// content can be restored and the user informed.
+type promptNotSentMsg struct {
+	instance *session.Instance
+	prompt   string
+	err      error
 }
 
 // branchSearchDebounceMsg fires after the debounce interval to trigger a search.
