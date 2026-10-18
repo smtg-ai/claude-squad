@@ -4,7 +4,6 @@ import (
 	"claude-squad/cmd/cmd_test"
 	"claude-squad/log"
 	"claude-squad/session/tmux"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -142,7 +141,7 @@ func TestSendPromptWaitsForInputProcessing(t *testing.T) {
 					lastText = time.Now()
 					continue
 				}
-				if !lastText.IsZero() && time.Since(lastText) < processingDelay {
+				if time.Since(lastText) < processingDelay {
 					dropped++
 					continue
 				}
@@ -153,9 +152,7 @@ func TestSendPromptWaitsForInputProcessing(t *testing.T) {
 			}
 			if readErr != nil {
 				state := terminalState{submitted: submitted, dropped: dropped, pending: string(pending)}
-				if !errors.Is(readErr, io.EOF) {
-					state.err = readErr
-				}
+				state.err = readErr
 				results <- state
 				return
 			}
@@ -168,7 +165,7 @@ func TestSendPromptWaitsForInputProcessing(t *testing.T) {
 
 	select {
 	case state := <-results:
-		require.NoError(t, state.err)
+		require.ErrorIs(t, state.err, io.EOF)
 		require.Empty(t, state.pending, "prompt text was never acted on")
 		require.Zero(t, state.dropped, "the carriage return was dropped while the CLI was still processing")
 		require.Equal(t, []string{prompt}, state.submitted, "the prompt must be submitted exactly once")

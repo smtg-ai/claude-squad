@@ -188,10 +188,7 @@ func (t *TmuxSession) CheckAndHandleTrustPrompt() bool {
 // initializing and is ready to accept user input.
 func (t *TmuxSession) IsCliReady() bool {
 	content, err := t.CapturePaneContent()
-	if err != nil {
-		return false
-	}
-	return t.hasReadyPrompt(content)
+	return err == nil && t.hasReadyPrompt(content)
 }
 
 // hasReadyPrompt reports whether a pane snapshot shows the ready prompt of the
@@ -199,9 +196,6 @@ func (t *TmuxSession) IsCliReady() bool {
 // stay put before it can be trusted is WaitForCliReady's job.
 func (t *TmuxSession) hasReadyPrompt(content string) bool {
 	trimmed := strings.TrimRight(content, " \t\n\r")
-	if trimmed == "" {
-		return false
-	}
 
 	switch {
 	case strings.HasSuffix(t.program, ProgramClaude):
@@ -268,12 +262,10 @@ func (t *TmuxSession) WaitForCliReady(timeout time.Duration) bool {
 		}
 
 		content, err := t.CapturePaneContent()
-		qualifies := err == nil && strings.TrimSpace(content) != "" && (!known || t.hasReadyPrompt(content))
-		switch {
-		case !qualifies:
+		if err != nil || strings.TrimSpace(content) == "" || (known && !t.hasReadyPrompt(content)) {
 			// A failed, blank, or prompt-less capture is not a settled input surface.
 			prevContent, stableSince = "", time.Time{}
-		case content != prevContent:
+		} else if content != prevContent {
 			// New output restarts the stability window.
 			prevContent, stableSince = content, time.Now()
 		}

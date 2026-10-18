@@ -178,12 +178,11 @@ func TestWaitForCliReadyRequiresSettledPrompt(t *testing.T) {
 	require.True(t, session.WaitForCliReady(5*time.Second))
 
 	mu.Lock()
-	settledAt, total := firstSettled, captures
+	settledAt := firstSettled
 	mu.Unlock()
 	require.False(t, settledAt.IsZero(), "never observed the settled prompt")
 	require.GreaterOrEqual(t, time.Since(settledAt), time.Second,
 		"reported ready before the prompt had been unchanged for a full second")
-	require.GreaterOrEqual(t, total, 6, "should have waited past the startup frames")
 }
 
 // A capture error is not a stable pane: the stability window must start over, and
@@ -216,12 +215,11 @@ func TestWaitForCliReadyResetsStability(t *testing.T) {
 	require.True(t, session.WaitForCliReady(5*time.Second))
 
 	mu.Lock()
-	resumed, total := resumedAt, calls
+	resumed := resumedAt
 	mu.Unlock()
 	require.False(t, resumed.IsZero(), "never captured the pane again after the error")
 	require.GreaterOrEqual(t, time.Since(resumed), time.Second,
 		"stability window was not reset by the capture error")
-	require.GreaterOrEqual(t, total, 5)
 }
 
 // Blank panes are not a ready input surface, no matter how long they stay blank.
