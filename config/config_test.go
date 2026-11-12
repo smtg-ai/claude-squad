@@ -172,6 +172,34 @@ func TestLoadConfig(t *testing.T) {
 		assert.True(t, config.AutoYes)
 		assert.Equal(t, 2000, config.DaemonPollInterval)
 		assert.Equal(t, "test/", config.BranchPrefix)
+		// Options missing from the file keep their default (zero) behavior
+		assert.Equal(t, "", config.PushRemote)
+		assert.False(t, config.SkipBrowserOnPush)
+	})
+
+	t.Run("loads push options", func(t *testing.T) {
+		tempHome := t.TempDir()
+		configDir := filepath.Join(tempHome, ".claude-squad")
+		err := os.MkdirAll(configDir, 0755)
+		require.NoError(t, err)
+
+		configPath := filepath.Join(configDir, ConfigFileName)
+		configContent := `{
+			"default_program": "test-claude",
+			"push_remote": "upstream",
+			"skip_browser_on_push": true
+		}`
+		err = os.WriteFile(configPath, []byte(configContent), 0644)
+		require.NoError(t, err)
+
+		originalHome := os.Getenv("HOME")
+		os.Setenv("HOME", tempHome)
+		defer os.Setenv("HOME", originalHome)
+
+		config := LoadConfig()
+
+		assert.Equal(t, "upstream", config.PushRemote)
+		assert.True(t, config.SkipBrowserOnPush)
 	})
 
 	t.Run("returns default config on invalid JSON", func(t *testing.T) {
@@ -284,6 +312,8 @@ func TestSaveConfig(t *testing.T) {
 			AutoYes:            true,
 			DaemonPollInterval: 3000,
 			BranchPrefix:       "test-branch/",
+			PushRemote:         "upstream",
+			SkipBrowserOnPush:  true,
 		}
 
 		err := SaveConfig(testConfig)
@@ -301,5 +331,7 @@ func TestSaveConfig(t *testing.T) {
 		assert.Equal(t, testConfig.AutoYes, loadedConfig.AutoYes)
 		assert.Equal(t, testConfig.DaemonPollInterval, loadedConfig.DaemonPollInterval)
 		assert.Equal(t, testConfig.BranchPrefix, loadedConfig.BranchPrefix)
+		assert.Equal(t, testConfig.PushRemote, loadedConfig.PushRemote)
+		assert.Equal(t, testConfig.SkipBrowserOnPush, loadedConfig.SkipBrowserOnPush)
 	})
 }

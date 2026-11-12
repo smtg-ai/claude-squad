@@ -42,6 +42,11 @@ type Config struct {
 	DaemonPollInterval int `json:"daemon_poll_interval"`
 	// BranchPrefix is the prefix used for git branches created by the application.
 	BranchPrefix string `json:"branch_prefix"`
+	// PushRemote is the git remote that the push action pushes to. When empty, the
+	// branch is pushed to origin and synced with gh (the default behavior).
+	PushRemote string `json:"push_remote"`
+	// SkipBrowserOnPush disables opening the branch in the browser after pushing.
+	SkipBrowserOnPush bool `json:"skip_browser_on_push"`
 	// Profiles is a list of named program profiles.
 	Profiles []Profile `json:"profiles,omitempty"`
 }
