@@ -140,6 +140,24 @@ Each profile has two fields:
 
 If no profiles are defined, Claude Squad uses `default_program` directly as the launch command (the default is `claude`).
 
+#### Pushing
+
+By default, the push action commits any changes, pushes the branch to `origin`, syncs it with the GitHub CLI, and opens the branch in your browser. Two options change this:
+
+| Field                  | Description                                                                                          |
+|------------------------|------------------------------------------------------------------------------------------------------|
+| `push_remote`          | Git remote to push to. When set, the branch is pushed with `git push -u <remote>` and `gh repo sync` is skipped. |
+| `skip_browser_on_push` | Set to `true` to stop opening the branch in the browser after a push.                                |
+
+For example, if you push branches to your own fork, configured as the `upstream` remote:
+
+```json
+{
+  "push_remote": "upstream",
+  "skip_browser_on_push": true
+}
+```
+
 ### FAQs
 
 #### Failed to start new session
