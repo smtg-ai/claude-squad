@@ -63,7 +63,7 @@ func resolveWorktreePaths(repoPath string, branchName string) (resolvedRepo stri
 		return "", "", err
 	}
 
-	worktreePath = filepath.Join(worktreeDir, sanitizeBranchName(branchName))
+	worktreePath = filepath.Join(worktreeDir, sanitizeBranchName(branchName, false))
 	worktreePath = worktreePath + "_" + fmt.Sprintf("%x", time.Now().UnixNano())
 
 	return resolvedRepo, worktreePath, nil
@@ -75,7 +75,7 @@ func NewGitWorktree(repoPath string, sessionName string) (tree *GitWorktree, bra
 	branchName := fmt.Sprintf("%s%s", cfg.BranchPrefix, sessionName)
 	// Sanitize the final branch name to handle invalid characters from any source
 	// (e.g., backslashes from Windows domain usernames like DOMAIN\user)
-	branchName = sanitizeBranchName(branchName)
+	branchName = sanitizeBranchName(branchName, cfg.PreserveBranchCase)
 
 	repoPath, worktreePath, err := resolveWorktreePaths(repoPath, branchName)
 	if err != nil {
