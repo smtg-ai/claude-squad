@@ -140,6 +140,16 @@ Each profile has two fields:
 
 If no profiles are defined, Claude Squad uses `default_program` directly as the launch command (the default is `claude`).
 
+#### Branch name case
+
+Branch names are lower-cased by default. Set `preserve_branch_case` to `true` to keep upper-case letters, e.g. for branches like `Ticket/19235/FeatureName` or Jira keys like `JRA-123`:
+
+```json
+{
+  "preserve_branch_case": true
+}
+```
+
 ### FAQs
 
 #### Failed to start new session
