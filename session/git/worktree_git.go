@@ -93,17 +93,12 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 		}
 	}
 
-	// First push the branch to remote to ensure it exists
-	pushCmd := exec.Command("gh", "repo", "sync", "--source", "-b", g.branchName)
-	pushCmd.Dir = g.worktreePath
-	if err := pushCmd.Run(); err != nil {
-		// If sync fails, try creating the branch on remote first
-		gitPushCmd := exec.Command("git", "push", "-u", "origin", g.branchName)
-		gitPushCmd.Dir = g.worktreePath
-		if pushOutput, pushErr := gitPushCmd.CombinedOutput(); pushErr != nil {
-			log.ErrorLog.Print(pushErr)
-			return fmt.Errorf("failed to push branch: %s (%w)", pushOutput, pushErr)
-		}
+	// Push the branch to the remote, creating it if it doesn't exist
+	gitPushCmd := exec.Command("git", "push", "-u", "origin", g.branchName)
+	gitPushCmd.Dir = g.worktreePath
+	if pushOutput, pushErr := gitPushCmd.CombinedOutput(); pushErr != nil {
+		log.ErrorLog.Print(pushErr)
+		return fmt.Errorf("failed to push branch: %s (%w)", pushOutput, pushErr)
 	}
 
 	// Now sync with remote
