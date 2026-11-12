@@ -67,10 +67,14 @@ func (g *GitWorktree) runGitCommand(path string, args ...string) (string, error)
 	return string(output), nil
 }
 
-// PushChanges commits and pushes changes in the worktree to the remote branch
-func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
-	if err := checkGHCLI(); err != nil {
-		return err
+// PushChanges commits and pushes changes in the worktree to the remote branch.
+// If remote is empty, the branch is pushed to origin and synced using the GitHub CLI.
+// Otherwise the branch is pushed to the given remote with git only.
+func (g *GitWorktree) PushChanges(commitMessage string, open bool, remote string) error {
+	if remote == "" {
+		if err := checkGHCLI(); err != nil {
+			return err
+		}
 	}
 
 	// Check if there are any changes to commit
@@ -93,20 +97,27 @@ func (g *GitWorktree) PushChanges(commitMessage string, open bool) error {
 		}
 	}
 
+	pushRemote := remote
+	if pushRemote == "" {
+		pushRemote = "origin"
+	}
+
 	// Push the branch to the remote, creating it if it doesn't exist
-	gitPushCmd := exec.Command("git", "push", "-u", "origin", g.branchName)
+	gitPushCmd := exec.Command("git", "push", "-u", pushRemote, g.branchName)
 	gitPushCmd.Dir = g.worktreePath
 	if pushOutput, pushErr := gitPushCmd.CombinedOutput(); pushErr != nil {
 		log.ErrorLog.Print(pushErr)
 		return fmt.Errorf("failed to push branch: %s (%w)", pushOutput, pushErr)
 	}
 
-	// Now sync with remote
-	syncCmd := exec.Command("gh", "repo", "sync", "-b", g.branchName)
-	syncCmd.Dir = g.worktreePath
-	if output, err := syncCmd.CombinedOutput(); err != nil {
-		log.ErrorLog.Print(err)
-		return fmt.Errorf("failed to sync changes: %s (%w)", output, err)
+	if remote == "" {
+		// Now sync with remote
+		syncCmd := exec.Command("gh", "repo", "sync", "-b", g.branchName)
+		syncCmd.Dir = g.worktreePath
+		if output, err := syncCmd.CombinedOutput(); err != nil {
+			log.ErrorLog.Print(err)
+			return fmt.Errorf("failed to sync changes: %s (%w)", output, err)
+		}
 	}
 
 	// Open the branch in the browser
