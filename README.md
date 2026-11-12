@@ -100,7 +100,7 @@ The menu at the bottom of the screen shows available commands:
 ##### Actions
 - `↵/o` - Attach to the selected session to reprompt
 - `ctrl-q` - Detach from session
-- `s` - Commit and push branch to github
+- `p` - Commit and push branch to github
 - `c` - Checkout. Commits changes and pauses the session
 - `r` - Resume a paused session
 - `?` - Show help menu
@@ -139,6 +139,18 @@ Each profile has two fields:
 | `program` | Shell command used to launch the agent for that profile  |
 
 If no profiles are defined, Claude Squad uses `default_program` directly as the launch command (the default is `claude`).
+
+#### Branch names
+
+New sessions get a branch named `branch_prefix` followed by the session title. The default prefix is `<your username>/`. Set it to `""` to use the session title as the full branch name:
+
+```json
+{
+  "branch_prefix": ""
+}
+```
+
+Session titles are limited to 32 characters.
 
 ### FAQs
 
