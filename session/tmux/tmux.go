@@ -23,6 +23,7 @@ const ProgramClaude = "claude"
 
 const ProgramAider = "aider"
 const ProgramGemini = "gemini"
+const ProgramCodex = "codex"
 
 // TmuxSession represents a managed tmux session
 type TmuxSession struct {
@@ -181,6 +182,113 @@ func (t *TmuxSession) CheckAndHandleTrustPrompt() bool {
 		}
 	}
 	return false
+}
+
+// IsCliReady checks if the CLI program in the tmux session has finished
+// initializing and is ready to accept user input.
+func (t *TmuxSession) IsCliReady() bool {
+	content, err := t.CapturePaneContent()
+	return err == nil && t.hasReadyPrompt(content)
+}
+
+// hasReadyPrompt reports whether a pane snapshot shows the ready prompt of the
+// configured program. It only inspects content: deciding how long a snapshot must
+// stay put before it can be trusted is WaitForCliReady's job.
+func (t *TmuxSession) hasReadyPrompt(content string) bool {
+	trimmed := strings.TrimRight(content, " \t\n\r")
+
+	switch {
+	case strings.HasSuffix(t.program, ProgramClaude):
+		// Claude shows ❯ prompt or /help text when ready
+		return strings.Contains(content, "❯") || strings.Contains(content, "/help")
+	case strings.HasPrefix(t.program, ProgramAider):
+		return strings.HasSuffix(trimmed, ">")
+	case strings.HasPrefix(t.program, ProgramGemini):
+		return strings.HasSuffix(trimmed, ">")
+	case strings.HasPrefix(t.program, ProgramCodex):
+		return strings.HasSuffix(trimmed, ">")
+	default:
+		// Unknown CLI: no specific check, rely on stability fallback in WaitForCliReady
+		return false
+	}
+}
+
+// cliHasReadyDetection reports whether IsCliReady can detect the ready state of the
+// configured program. CLIs without a known ready pattern rely on the content
+// stability fallback in WaitForCliReady.
+func (t *TmuxSession) cliHasReadyDetection() bool {
+	switch {
+	case strings.HasSuffix(t.program, ProgramClaude):
+		return true
+	case strings.HasPrefix(t.program, ProgramAider):
+		return true
+	case strings.HasPrefix(t.program, ProgramGemini):
+		return true
+	case strings.HasPrefix(t.program, ProgramCodex):
+		return true
+	default:
+		return false
+	}
+}
+
+// WaitForCliReady polls until the CLI is ready for input or the timeout expires.
+// A known CLI must show its ready prompt and the pane must then stay unchanged for
+// a full second. Claude Code with SessionStart hooks paints its prompt glyph while
+// the hooks are still writing, and submitting a prompt during that window loses the
+// Enter keystroke. CLIs without a known ready pattern fall back to content
+// stability alone.
+// Returns true if the CLI became ready, false on timeout.
+func (t *TmuxSession) WaitForCliReady(timeout time.Duration) bool {
+	if timeout <= 0 {
+		return false
+	}
+
+	const (
+		interval     = 200 * time.Millisecond
+		settleWindow = time.Second
+	)
+
+	known := t.cliHasReadyDetection()
+	deadline := time.Now().Add(timeout)
+	var (
+		prevContent string
+		stableSince time.Time
+	)
+
+	for {
+		if !time.Now().Before(deadline) {
+			log.InfoLog.Printf("WaitForCliReady: timed out after %v for %s", timeout, t.program)
+			return false
+		}
+
+		content, err := t.CapturePaneContent()
+		if err != nil || strings.TrimSpace(content) == "" || (known && !t.hasReadyPrompt(content)) {
+			// A failed, blank, or prompt-less capture is not a settled input surface.
+			prevContent, stableSince = "", time.Time{}
+		} else if content != prevContent {
+			// New output restarts the stability window.
+			prevContent, stableSince = content, time.Now()
+		}
+
+		if !stableSince.IsZero() && time.Since(stableSince) >= settleWindow {
+			if time.Now().Before(deadline) {
+				if !known {
+					log.InfoLog.Printf("WaitForCliReady: content stable for %v, assuming ready", settleWindow)
+				}
+				return true
+			}
+			log.InfoLog.Printf("WaitForCliReady: timed out after %v for %s", timeout, t.program)
+			return false
+		}
+
+		sleep := interval
+		if remaining := time.Until(deadline); remaining < sleep {
+			sleep = remaining
+		}
+		if sleep > 0 {
+			time.Sleep(sleep)
+		}
+	}
 }
 
 // Restore attaches to an existing session and restores the window size

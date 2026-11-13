@@ -464,3 +464,24 @@ func TestConfirmationModalVisualAppearance(t *testing.T) {
 	// Test that the danger indicator is preserved
 	assert.Contains(t, rendered, "[!")
 }
+
+// TestPromptNotSentKeepsPrompt verifies that a prompt which could not be sent is
+// restored on the instance and surfaced to the user instead of being dropped.
+func TestPromptNotSentKeepsPrompt(t *testing.T) {
+	h := &home{
+		ctx:       context.Background(),
+		state:     stateDefault,
+		appConfig: config.DefaultConfig(),
+		errBox:    ui.NewErrBox(),
+	}
+	instance := &session.Instance{}
+
+	_, cmd := h.Update(promptNotSentMsg{
+		instance: instance,
+		prompt:   "fix the failing test",
+		err:      fmt.Errorf("prompt not sent: CLI did not become ready"),
+	})
+
+	require.NotNil(t, cmd)
+	assert.Equal(t, "fix the failing test", instance.Prompt)
+}
