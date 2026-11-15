@@ -3,6 +3,7 @@ package ui
 import (
 	"claude-squad/log"
 	"claude-squad/session"
+	"claude-squad/session/ci"
 	"errors"
 	"fmt"
 	"strings"
@@ -15,6 +16,18 @@ import (
 const readyIcon = "● "
 const pausedIcon = "⏸ "
 
+// CI badge icons. The verdict is a glyph so it reads at a glance, and the colour
+// carries the same information again for anyone scanning the column rather than
+// reading the row.
+const (
+	ciSuccessIcon = "✓"
+	ciFailureIcon = "✗"
+	ciPendingIcon = "◌"
+	ciMergedIcon  = "◆"
+	ciClosedIcon  = "⊘"
+	ciNoPRIcon    = "–"
+)
+
 var readyStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.AdaptiveColor{Light: "#51bd73", Dark: "#51bd73"})
 
@@ -23,6 +36,18 @@ var addedLinesStyle = lipgloss.NewStyle().
 
 var removedLinesStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.Color("#de613e"))
+
+// Amber for "still running": the one CI state with no existing colour in the
+// palette. Success, failure and no-PR reuse addedLinesStyle, removedLinesStyle
+// and pausedStyle, so the badge introduces no colour the list does not already
+// use elsewhere.
+var ciPendingStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.AdaptiveColor{Light: "#b8860b", Dark: "#e3b341"})
+
+// Violet for a merged pull request, matching the colour GitHub itself uses for
+// the state, so it reads as "landed" rather than as another shade of pass/fail.
+var ciMergedStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.AdaptiveColor{Light: "#8250df", Dark: "#a371f7"})
 
 var pausedStyle = lipgloss.NewStyle().
 	Foreground(lipgloss.AdaptiveColor{Light: "#888888", Dark: "#888888"})
@@ -114,6 +139,63 @@ func (r *InstanceRenderer) setWidth(width int) {
 // ɹ and ɻ are other options.
 const branchIcon = "Ꮧ"
 
+// minBranchWidth is the fewest characters of a branch name worth keeping. Below
+// this the name stops being recognisable, so a badge that would push it there
+// costs the row its identity to save its decoration.
+const minBranchWidth = 6
+
+// visibleBranchWidth reports how many characters of a branch name survive in a
+// column of the given width, mirroring the truncation Render applies below.
+func visibleBranchWidth(branch string, column int) int {
+	width := runewidth.StringWidth(branch)
+	switch {
+	case column >= width:
+		return width
+	case column < 3:
+		return 0
+	default:
+		return column - 3 // the ellipsis takes the rest
+	}
+}
+
+// ciBadge renders a branch's CI verdict twice over: plain for width accounting,
+// styled for display. Both are empty when there is nothing to report, which is
+// also what a disabled feature and a not-yet-completed first lookup produce, so
+// the badge appears only once it can say something true.
+func ciBadge(status ci.Status, bg lipgloss.TerminalColor) (plain, styled string) {
+	var icon string
+	var style lipgloss.Style
+
+	switch status.State {
+	case ci.StateSuccess:
+		icon, style = ciSuccessIcon, addedLinesStyle
+	case ci.StateFailure:
+		icon, style = ciFailureIcon, removedLinesStyle
+	case ci.StatePending:
+		icon, style = ciPendingIcon, ciPendingStyle
+	// The three terminal states name themselves instead of showing the PR number.
+	// Nothing is going to change about them, so there is nothing to go and look at;
+	// what matters is the state, and cs documents none of its glyphs anywhere.
+	case ci.StateMerged:
+		plain = ciMergedIcon + " merged"
+		return plain, ciMergedStyle.Background(bg).Render(plain)
+	case ci.StateClosed:
+		plain = ciClosedIcon + " closed"
+		return plain, pausedStyle.Background(bg).Render(plain)
+	case ci.StateNoPR:
+		plain = ciNoPRIcon + " no PR"
+		return plain, pausedStyle.Background(bg).Render(plain)
+	default:
+		return "", ""
+	}
+
+	plain = icon
+	if status.PRNumber > 0 {
+		plain = fmt.Sprintf("%s #%d", icon, status.PRNumber)
+	}
+	return plain, style.Background(bg).Render(plain)
+}
+
 func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, hasMultipleRepos bool) string {
 	prefix := fmt.Sprintf(" %d. ", idx)
 	if idx >= 10 {
@@ -193,6 +275,22 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 			branch += fmt.Sprintf(" (%s)", repoName)
 		}
 	}
+	// Reserve the CI badge out of the width budget before the branch is truncated,
+	// so an overlong branch gives way to the verdict rather than pushing it off the
+	// end of the line.
+	ciPlain, ciStyled := ciBadge(i.GetCIStatus(), descS.GetBackground())
+	ciWidth := runewidth.StringWidth(ciPlain)
+	if ciWidth > 0 {
+		ciWidth += 2 // the spaces either side of the badge in branchLine
+	}
+	// Up to a point: the branch name is the row's identity and the badge is an
+	// extra, so on a pane too narrow for both it is the badge that gives way.
+	// Otherwise a 20-column list renders an icon, an ellipsis and no name at all.
+	if visibleBranchWidth(branch, remainingWidth-ciWidth) < minBranchWidth {
+		ciStyled, ciWidth = "", 0
+	}
+	remainingWidth -= ciWidth
+
 	// Don't show branch if there's no space for it. Or show ellipsis if it's too long.
 	branchWidth := runewidth.StringWidth(branch)
 	if remainingWidth < 0 {
@@ -213,7 +311,17 @@ func (r *InstanceRenderer) Render(i *session.Instance, idx int, selected bool, h
 		spaces = strings.Repeat(" ", remainingWidth)
 	}
 
-	branchLine := fmt.Sprintf("%s %s-%s%s%s", strings.Repeat(" ", len(prefix)), branchIcon, branch, spaces, diff)
+	ciSegment := ""
+	if ciStyled != "" {
+		// The padding spaces have to carry the row background themselves. They sit
+		// either side of an already-styled span whose trailing reset clears it, so a
+		// bare " " here renders as a black gap on the selected row rather than picking
+		// up its highlight. Same reason the diff separator below is styled.
+		pad := lipgloss.Style{}.Background(descS.GetBackground()).Render(" ")
+		ciSegment = pad + ciStyled + pad
+	}
+
+	branchLine := fmt.Sprintf("%s %s-%s%s%s%s", strings.Repeat(" ", len(prefix)), branchIcon, branch, spaces, ciSegment, diff)
 
 	// join title and subtitle
 	text := lipgloss.JoinVertical(
