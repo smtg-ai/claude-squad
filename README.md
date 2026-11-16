@@ -89,13 +89,13 @@ NOTE: The default program is `claude` and we recommend using the latest version.
 <br />
 
 #### Menu
-The menu at the bottom of the screen shows available commands: 
+The menu at the bottom of the screen shows available commands:
 
 ##### Instance/Session Management
 - `n` - Create a new session
 - `N` - Create a new session with a prompt
 - `D` - Kill (delete) the selected session
-- `↑/j`, `↓/k` - Navigate between sessions
+- `↓/j`, `↑/k` - Navigate between sessions
 
 ##### Actions
 - `↵/o` - Attach to the selected session to reprompt
