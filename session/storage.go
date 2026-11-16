@@ -72,6 +72,60 @@ func (s *Storage) SaveInstances(instances []*Instance) error {
 	return s.state.SaveInstances(jsonData)
 }
 
+// SyncInstances saves the caller's instances without discarding instances that
+// another writer added since this process read state.
+//
+// SaveInstances writes the caller's list verbatim. That is correct for
+// DeleteInstance and UpdateInstance, which compute the exact list they intend
+// to persist, and wrong for a caller that only means "save what I have":
+// anything a second writer added is erased. Because the worktree and tmux
+// session are created before the save, the erased session keeps running while
+// vanishing from every list, which is indistinguishable from a display bug.
+//
+// ⚠ It re-reads through config.LoadState(), which reads the state FILE. It must
+// NOT use s.state.GetInstances(): that returns State.InstancesData, an in-memory
+// field populated once at startup, so the "re-read" would return this process's
+// own stale copy and the merge would be a no-op. That mistake passes every test
+// written against a fake and fails immediately against a second live writer.
+//
+// The merge works on InstanceData rather than *Instance because LoadInstances
+// calls FromInstanceData, which calls Start(false) and restores a tmux session
+// per entry. A save must not attach to anything.
+//
+// The caller's copy wins for any title it holds; titles only on disk are carried
+// through. ⚠ Omitting an instance therefore does NOT delete it -- use
+// DeleteInstance, which is why the merge cannot live inside SaveInstances.
+func (s *Storage) SyncInstances(instances []*Instance) error {
+	data := make([]InstanceData, 0, len(instances))
+	held := make(map[string]struct{}, len(instances))
+	for _, instance := range instances {
+		if !instance.Started() {
+			continue
+		}
+		d := instance.ToInstanceData()
+		data = append(data, d)
+		held[d.Title] = struct{}{}
+	}
+
+	var stored []InstanceData
+	if raw := config.LoadState().GetInstances(); len(raw) > 0 {
+		if err := json.Unmarshal(raw, &stored); err != nil {
+			return fmt.Errorf("failed to unmarshal stored instances: %w", err)
+		}
+	}
+	for _, d := range stored {
+		if _, ok := held[d.Title]; !ok {
+			data = append(data, d)
+		}
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal instances: %w", err)
+	}
+	return s.state.SaveInstances(jsonData)
+}
+
 // LoadInstances loads the list of instances from disk
 func (s *Storage) LoadInstances() ([]*Instance, error) {
 	jsonData := s.state.GetInstances()
