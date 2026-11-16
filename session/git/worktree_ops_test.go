@@ -125,3 +125,44 @@ func mustRunGit(t *testing.T, dir string, args ...string) string {
 	}
 	return string(output)
 }
+
+// Resume re-runs Setup on the session's branch after Pause removed the worktree. By then
+// the branch holds the session's own commits, which must not become the new base.
+func TestSetup_KeepsBaseCommitAcrossResume(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+
+	repoPath := filepath.Join(t.TempDir(), "repo")
+	mustRunGit(t, "", "init", repoPath)
+	mustRunGit(t, repoPath, "config", "user.name", "Test User")
+	mustRunGit(t, repoPath, "config", "user.email", "test@example.com")
+	if err := os.WriteFile(filepath.Join(repoPath, "README.md"), []byte("hello\n"), 0644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	mustRunGit(t, repoPath, "add", "README.md")
+	mustRunGit(t, repoPath, "commit", "-m", "initial")
+
+	worktreePath := filepath.Join(tempHome, ".claude-squad", "worktrees", "session")
+	g := &GitWorktree{repoPath: repoPath, worktreePath: worktreePath, branchName: "session"}
+	if err := g.Setup(); err != nil {
+		t.Fatalf("Setup() error = %v", err)
+	}
+	base := g.GetBaseCommitSHA()
+
+	if err := os.WriteFile(filepath.Join(worktreePath, "work.txt"), []byte("work\n"), 0644); err != nil {
+		t.Fatalf("write work: %v", err)
+	}
+	if err := g.CommitChanges("[claudesquad] paused"); err != nil {
+		t.Fatalf("CommitChanges() error = %v", err)
+	}
+	if err := g.Remove(); err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+
+	if err := g.Setup(); err != nil {
+		t.Fatalf("Setup() after pause error = %v", err)
+	}
+	if got := g.GetBaseCommitSHA(); got != base {
+		t.Fatalf("GetBaseCommitSHA() = %q, want original base %q", got, base)
+	}
+}

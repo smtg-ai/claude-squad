@@ -439,10 +439,7 @@ func (i *Instance) Pause() error {
 	} else if !valid {
 		log.WarningLog.Printf("worktree at %s is orphaned; skipping dirty check and remove",
 			i.gitWorktree.GetWorktreePath())
-		if err := i.tmuxSession.DetachSafely(); err != nil {
-			errs = append(errs, fmt.Errorf("failed to detach tmux session: %w", err))
-			log.ErrorLog.Print(err)
-		}
+		errs = append(errs, i.stopTmuxForPause()...)
 		// Drop any leftover directory so a future Resume's `git worktree add` won't conflict.
 		if err := os.RemoveAll(i.gitWorktree.GetWorktreePath()); err != nil {
 			errs = append(errs, fmt.Errorf("failed to remove orphaned worktree directory: %w", err))
@@ -472,12 +469,10 @@ func (i *Instance) Pause() error {
 		}
 	}
 
-	// Detach from tmux session instead of closing to preserve session output
-	if err := i.tmuxSession.DetachSafely(); err != nil {
-		errs = append(errs, fmt.Errorf("failed to detach tmux session: %w", err))
-		log.ErrorLog.Print(err)
-		// Continue with pause process even if detach fails
-	}
+	// Stop the tmux session. Its working directory is about to be deleted, so the program
+	// in it can't keep working; Resume restarts it and continues the same conversation.
+	// Continue with the pause even if this fails.
+	errs = append(errs, i.stopTmuxForPause()...)
 
 	// Check if worktree exists before trying to remove it
 	if _, err := os.Stat(i.gitWorktree.GetWorktreePath()); err == nil {
@@ -504,6 +499,22 @@ func (i *Instance) Pause() error {
 		return err
 	}
 	return nil
+}
+
+// stopTmuxForPause detaches from and kills the instance's tmux session.
+func (i *Instance) stopTmuxForPause() []error {
+	var errs []error
+	if err := i.tmuxSession.DetachSafely(); err != nil {
+		errs = append(errs, fmt.Errorf("failed to detach tmux session: %w", err))
+		log.ErrorLog.Print(err)
+	}
+	if i.tmuxSession.DoesSessionExist() {
+		if err := i.tmuxSession.Close(); err != nil {
+			errs = append(errs, fmt.Errorf("failed to close tmux session: %w", err))
+			log.ErrorLog.Print(err)
+		}
+	}
+	return errs
 }
 
 // Resume recreates the worktree and restarts the tmux session
@@ -544,7 +555,7 @@ func (i *Instance) Resume() error {
 		if err := i.tmuxSession.Restore(); err != nil {
 			log.ErrorLog.Print(err)
 			// If restore fails, fall back to creating new session
-			if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+			if err := i.tmuxSession.StartContinue(i.gitWorktree.GetWorktreePath()); err != nil {
 				log.ErrorLog.Print(err)
 				// Cleanup git worktree if tmux session creation fails
 				if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {
@@ -556,7 +567,7 @@ func (i *Instance) Resume() error {
 		}
 	} else {
 		// Create new tmux session
-		if err := i.tmuxSession.Start(i.gitWorktree.GetWorktreePath()); err != nil {
+		if err := i.tmuxSession.StartContinue(i.gitWorktree.GetWorktreePath()); err != nil {
 			log.ErrorLog.Print(err)
 			// Cleanup git worktree if tmux session creation fails
 			if cleanupErr := i.gitWorktree.Cleanup(); cleanupErr != nil {

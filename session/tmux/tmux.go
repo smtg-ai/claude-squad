@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -93,13 +94,35 @@ func newTmuxSession(name string, program string, ptyFactory PtyFactory, cmdExec 
 // Start creates and starts a new tmux session, then attaches to it. Program is the command to run in
 // the session (ex. claude). workdir is the git worktree directory.
 func (t *TmuxSession) Start(workDir string) error {
+	return t.start(workDir, t.program)
+}
+
+// StartContinue starts a new session like Start, but asks the program to pick up its most
+// recent conversation in workDir (see continueCommand). Used when resuming a paused instance.
+func (t *TmuxSession) StartContinue(workDir string) error {
+	return t.start(workDir, continueCommand(t.program))
+}
+
+// continueCommand returns the shell command that resumes program's most recent conversation
+// in the current directory. For claude that is `claude --continue`, falling back to a fresh
+// `claude` when there is no conversation to continue (tmux runs the command via the shell).
+// Programs without a known continue flag are returned unchanged.
+func continueCommand(program string) string {
+	fields := strings.Fields(program)
+	if len(fields) == 0 || filepath.Base(fields[0]) != ProgramClaude {
+		return program
+	}
+	return program + " --continue || " + program
+}
+
+func (t *TmuxSession) start(workDir string, command string) error {
 	// Check if the session already exists
 	if t.DoesSessionExist() {
 		return fmt.Errorf("tmux session already exists: %s", t.sanitizedName)
 	}
 
-	// Create a new detached tmux session and start claude in it
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, t.program)
+	// Create a new detached tmux session and start the program in it
+	cmd := exec.Command("tmux", "new-session", "-d", "-s", t.sanitizedName, "-c", workDir, command)
 
 	ptmx, err := t.ptyFactory.Start(cmd)
 	if err != nil {

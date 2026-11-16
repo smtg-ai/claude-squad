@@ -119,3 +119,42 @@ func TestRestoreAttachesWhenSessionExists(t *testing.T) {
 	require.Len(t, ptyFactory.cmds, 1)
 	require.Contains(t, ptyFactory.cmds[0].String(), "attach-session")
 }
+
+func TestContinueCommand(t *testing.T) {
+	tests := map[string]string{
+		"claude":                "claude --continue || claude",
+		"/usr/bin/claude --foo": "/usr/bin/claude --foo --continue || /usr/bin/claude --foo",
+		"aider --model ollama":  "aider --model ollama",
+		"codex":                 "codex",
+		"":                      "",
+	}
+	for program, want := range tests {
+		require.Equal(t, want, continueCommand(program), "program %q", program)
+	}
+}
+
+func TestStartContinueTmuxSession(t *testing.T) {
+	ptyFactory := NewMockPtyFactory(t)
+
+	created := false
+	cmdExec := cmd_test.MockCmdExec{
+		RunFunc: func(cmd *exec.Cmd) error {
+			if strings.Contains(cmd.String(), "has-session") && !created {
+				created = true
+				return fmt.Errorf("session already exists")
+			}
+			return nil
+		},
+		OutputFunc: func(cmd *exec.Cmd) ([]byte, error) {
+			return []byte("output"), nil
+		},
+	}
+
+	workdir := t.TempDir()
+	session := newTmuxSession("test-session", "claude", ptyFactory, cmdExec)
+
+	require.NoError(t, session.StartContinue(workdir))
+	require.Equal(t,
+		fmt.Sprintf("tmux new-session -d -s claudesquad_test-session -c %s claude --continue || claude", workdir),
+		cmd2.ToString(ptyFactory.cmds[0]))
+}
