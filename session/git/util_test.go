@@ -6,9 +6,10 @@ import (
 
 func TestSanitizeBranchName(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected string
+		name         string
+		input        string
+		preserveCase bool
+		expected     string
 	}{
 		{
 			name:     "simple lowercase string",
@@ -60,13 +61,37 @@ func TestSanitizeBranchName(t *testing.T) {
 			input:    "USER/Feature Branch!@#$%^&*()/v1.0",
 			expected: "user/feature-branch/v1.0",
 		},
+		{
+			name:         "preserve case keeps mixed case",
+			input:        "Ticket/19235/FeatureName",
+			preserveCase: true,
+			expected:     "Ticket/19235/FeatureName",
+		},
+		{
+			name:         "preserve case with spaces",
+			input:        "FeAtUrE BrAnCh",
+			preserveCase: true,
+			expected:     "FeAtUrE-BrAnCh",
+		},
+		{
+			name:         "preserve case with special chars",
+			input:        "USER/Feature Branch!@#$%^&*()/v1.0",
+			preserveCase: true,
+			expected:     "USER/Feature-Branch/v1.0",
+		},
+		{
+			name:         "preserve case strips backslash",
+			input:        "DOMAIN\\User/x",
+			preserveCase: true,
+			expected:     "DOMAINUser/x",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := sanitizeBranchName(tt.input)
+			got := sanitizeBranchName(tt.input, tt.preserveCase)
 			if got != tt.expected {
-				t.Errorf("sanitizeBranchName(%q) = %q, want %q", tt.input, got, tt.expected)
+				t.Errorf("sanitizeBranchName(%q, %v) = %q, want %q", tt.input, tt.preserveCase, got, tt.expected)
 			}
 		})
 	}

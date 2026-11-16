@@ -9,17 +9,20 @@ import (
 
 // sanitizeBranchName transforms an arbitrary string into a Git branch name friendly string.
 // Note: Git branch names have several rules, so this function uses a simple approach
-// by allowing only a safe subset of characters.
-func sanitizeBranchName(s string) string {
-	// Convert to lower-case
-	s = strings.ToLower(s)
+// by allowing only a safe subset of characters. Unless preserveCase is true, the
+// result is lower-cased.
+func sanitizeBranchName(s string, preserveCase bool) string {
+	// Here we allow: letters, digits, dash, underscore, slash, and dot.
+	re := regexp.MustCompile(`[^a-zA-Z0-9\-_/.]+`)
+	if !preserveCase {
+		// Convert to lower-case
+		s = strings.ToLower(s)
+	}
 
 	// Replace spaces with a dash
 	s = strings.ReplaceAll(s, " ", "-")
 
 	// Remove any characters not allowed in our safe subset.
-	// Here we allow: letters, digits, dash, underscore, slash, and dot.
-	re := regexp.MustCompile(`[^a-z0-9\-_/.]+`)
 	s = re.ReplaceAllString(s, "")
 
 	// Replace multiple dashes with a single dash (optional cleanup)

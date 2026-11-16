@@ -172,6 +172,8 @@ func TestLoadConfig(t *testing.T) {
 		assert.True(t, config.AutoYes)
 		assert.Equal(t, 2000, config.DaemonPollInterval)
 		assert.Equal(t, "test/", config.BranchPrefix)
+		// Options missing from the file keep their default (zero) behavior
+		assert.False(t, config.PreserveBranchCase)
 	})
 
 	t.Run("returns default config on invalid JSON", func(t *testing.T) {
@@ -284,6 +286,7 @@ func TestSaveConfig(t *testing.T) {
 			AutoYes:            true,
 			DaemonPollInterval: 3000,
 			BranchPrefix:       "test-branch/",
+			PreserveBranchCase: true,
 		}
 
 		err := SaveConfig(testConfig)
@@ -301,5 +304,6 @@ func TestSaveConfig(t *testing.T) {
 		assert.Equal(t, testConfig.AutoYes, loadedConfig.AutoYes)
 		assert.Equal(t, testConfig.DaemonPollInterval, loadedConfig.DaemonPollInterval)
 		assert.Equal(t, testConfig.BranchPrefix, loadedConfig.BranchPrefix)
+		assert.Equal(t, testConfig.PreserveBranchCase, loadedConfig.PreserveBranchCase)
 	})
 }
