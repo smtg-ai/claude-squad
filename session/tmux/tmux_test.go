@@ -41,6 +41,58 @@ func NewMockPtyFactory(t *testing.T) *MockPtyFactory {
 	}
 }
 
+func TestScanForDetach(t *testing.T) {
+	modifyOtherKeysCtrlQ := []byte{0x1b, '[', '2', '7', ';', '5', ';', '1', '1', '3', '~'}
+	modifyOtherKeysCtrlShiftQ := []byte{0x1b, '[', '2', '7', ';', '6', ';', '8', '1', '~'}
+	// Sequences that look like the detach key but are not, plus a mouse-report
+	// burst of the kind that routinely arrives co-buffered with a keystroke.
+	ctrlP := []byte("\x1b[27;5;112~")
+	shiftQ := []byte("\x1b[27;2;81~")
+	truncated := []byte("\x1b[27;5;11")
+	mouseBurst := []byte("\x1b[<64;10;5M")
+
+	cases := []struct {
+		name        string
+		buf         []byte
+		wantForward int
+		wantDetach  bool
+	}{
+		{"empty buffer", []byte{}, 0, false},
+		{"single non-ctrl-q byte", []byte{'a'}, 1, false},
+		{"multi-byte without ctrl-q", []byte("hello"), 5, false},
+		{"single ctrl-q byte", []byte{0x11}, 0, true},
+		{"ctrl-q at start with trailing bytes", []byte{0x11, 'a', 'b'}, 0, true},
+		{"ctrl-q in the middle", []byte{'a', 0x11, 'b'}, 1, true},
+		{"ctrl-q after mouse-tracking escape", []byte{0x1b, '[', 'M', ' ', '!', '!', 0x11}, 6, true},
+		{"modifyOtherKeys ctrl-q alone", modifyOtherKeysCtrlQ, 0, true},
+		{"modifyOtherKeys ctrl-q preceded by other bytes", append([]byte{'a', 'b'}, modifyOtherKeysCtrlQ...), 2, true},
+		{"modifyOtherKeys ctrl-shift-q", modifyOtherKeysCtrlShiftQ, 0, true},
+		{"unrelated CSI sequence is not ctrl-q", []byte{0x1b, '[', 'A'}, 3, false},
+		{"modifyOtherKeys ctrl-p is not ctrl-q", ctrlP, len(ctrlP), false},
+		{"modifyOtherKeys shift-q without ctrl is not ctrl-q", shiftQ, len(shiftQ), false},
+		{"truncated modifyOtherKeys sequence is not ctrl-q", truncated, len(truncated), false},
+		{
+			"ctrl-q after an SGR mouse burst",
+			append(append([]byte{}, mouseBurst...), 0x11),
+			len(mouseBurst),
+			true,
+		},
+		{
+			"earliest encoding wins when both forms are present",
+			append(append([]byte{}, modifyOtherKeysCtrlQ...), 'a', 0x11),
+			0,
+			true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotForward, gotDetach := scanForDetach(tc.buf)
+			require.Equal(t, tc.wantForward, gotForward)
+			require.Equal(t, tc.wantDetach, gotDetach)
+		})
+	}
+}
+
 func TestSanitizeName(t *testing.T) {
 	session := NewTmuxSession("asdf", "program")
 	require.Equal(t, TmuxPrefix+"asdf", session.sanitizedName)

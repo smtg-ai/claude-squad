@@ -266,6 +266,55 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 	return false, hasPrompt
 }
 
+// ctrlQModifyOtherKeys is the xterm modifyOtherKeys-encoded Ctrl+Q sequence:
+// CSI 27 ; <modifier=5 (ctrl)> ; <key=113 (q)> ~.
+var ctrlQModifyOtherKeys = []byte{0x1b, '[', '2', '7', ';', '5', ';', '1', '1', '3', '~'}
+
+// ctrlQModifyOtherKeysShift handles Ctrl+Shift+Q (capital Q = 81).
+var ctrlQModifyOtherKeysShift = []byte{0x1b, '[', '2', '7', ';', '6', ';', '8', '1', '~'}
+
+// scanForDetach inspects a chunk read from stdin for a Ctrl+Q detach signal.
+// Returns the number of preceding bytes to forward to the inner session and
+// detach=true if found. Otherwise returns (len(buf), false) so the caller
+// forwards everything.
+//
+// Ctrl+Q can arrive in two forms:
+//
+//   - Single byte 0x11, the normal control-character encoding.
+//
+//   - The 11-byte sequence "\x1b[27;5;113~", the xterm modifyOtherKeys
+//     encoding. Terminals emit this once they have been put into
+//     modifyOtherKeys mode. That happens outside our control: with tmux's
+//     "extended-keys" option enabled, an application running inside the pane
+//     (Claude Code does this) requests modifyOtherKeys with CSI > 4 ; 2 m, and
+//     tmux propagates the request outward to the real terminal. From then on
+//     every Ctrl+Q reaches us as 11 bytes and never as 0x11.
+//
+// os.Stdin.Read also returns multiple bytes per call routinely — terminal
+// query replies, mouse-tracking sequences (sessions run with "mouse on"), and
+// keystrokes co-buffered with either — so we scan the whole chunk rather than
+// checking for a lone byte.
+//
+// Known limitation: a bracketed paste whose contents include a literal 0x11
+// will detach. This is benign (press Enter to reattach) and not a regression:
+// forwarding that byte to tmux instead makes it swallow the byte as XON, so
+// the paste is corrupted either way.
+func scanForDetach(buf []byte) (forwardLen int, detach bool) {
+	// Take the earliest match across all encodings, so everything typed before
+	// the detach key still reaches the session no matter which form arrived.
+	forwardLen = len(buf)
+	for _, idx := range []int{
+		bytes.IndexByte(buf, 17),
+		bytes.Index(buf, ctrlQModifyOtherKeys),
+		bytes.Index(buf, ctrlQModifyOtherKeysShift),
+	} {
+		if idx >= 0 && idx < forwardLen {
+			forwardLen, detach = idx, true
+		}
+	}
+	return forwardLen, detach
+}
+
 func (t *TmuxSession) Attach() (chan struct{}, error) {
 	t.attachCh = make(chan struct{})
 
@@ -302,8 +351,10 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 			close(timeoutCh)
 		}()
 
-		// Read input from stdin and check for Ctrl+q
-		buf := make([]byte, 32)
+		// Read input from stdin and check for Ctrl+q. The buffer is large
+		// enough that a multi-byte key encoding cannot straddle two reads,
+		// which would hide it from scanForDetach.
+		buf := make([]byte, 4096)
 		for {
 			nr, err := os.Stdin.Read(buf)
 			if err != nil {
@@ -327,15 +378,14 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 				continue
 			}
 
-			// Check for Ctrl+q (ASCII 17)
-			if nr == 1 && buf[0] == 17 {
-				// Detach from the session
+			forwardLen, detach := scanForDetach(buf[:nr])
+			if forwardLen > 0 {
+				_, _ = t.ptmx.Write(buf[:forwardLen])
+			}
+			if detach {
 				t.Detach()
 				return
 			}
-
-			// Forward other input to tmux
-			_, _ = t.ptmx.Write(buf[:nr])
 		}
 	}()
 
