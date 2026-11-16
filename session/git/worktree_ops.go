@@ -70,7 +70,13 @@ func (g *GitWorktree) setupFromExistingBranch() error {
 // recordBaseCommit stores the commit the session starts from. Diffs are computed
 // against it, so leaving it unset makes every git diff invocation fail with an
 // ambiguous argument error once the session is running.
+//
+// An already-recorded base is kept: Resume re-runs Setup on the session's branch, whose
+// HEAD by then includes the session's own commits (e.g. the pause commit).
 func (g *GitWorktree) recordBaseCommit() error {
+	if g.baseCommitSHA != "" {
+		return nil
+	}
 	output, err := g.runGitCommand(g.worktreePath, "rev-parse", "HEAD")
 	if err != nil {
 		return fmt.Errorf("failed to get base commit hash for branch %s: %w", g.branchName, err)
