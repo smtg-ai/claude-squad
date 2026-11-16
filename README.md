@@ -49,6 +49,11 @@ curl -fsSL https://raw.githubusercontent.com/smtg-ai/claude-squad/main/install.s
 - [tmux](https://github.com/tmux/tmux/wiki/Installing)
 - [gh](https://cli.github.com/)
 
+Claude Squad uses a dedicated tmux server. When upgrading from a version that used your default
+tmux server, finish running agent sessions first: existing sessions are not reattached, and Resume
+starts a new process. New sessions inherit the environment of the process that starts `cs`, so
+restart `cs` after changing environment variables.
+
 ### Usage
 
 ```
