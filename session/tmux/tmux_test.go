@@ -119,3 +119,34 @@ func TestRestoreAttachesWhenSessionExists(t *testing.T) {
 	require.Len(t, ptyFactory.cmds, 1)
 	require.Contains(t, ptyFactory.cmds[0].String(), "attach-session")
 }
+
+func TestStripTerminalReplies(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"plain typing", "hello", "hello"},
+		{"ctrl-q", "\x11", "\x11"},
+		{"primary device attributes", "\x1b[?64;1;2;4;6;17;18;21;22c", ""},
+		{"secondary device attributes", "\x1b[>64;2500;0c", ""},
+		{"xtversion", "\x1bP>|iTerm2 3.7.7\x1b\\", ""},
+		{"decrpm", "\x1b[?2026;2$y", ""},
+		{"replies in one read", "\x1b[>64;2500;0c\x1bP>|iTerm2 3.7.7\x1b\\\x1b[?2026;2$y", ""},
+		{"typing around a reply", "a\x1bP>|tmux 3.8\x1b\\b", "ab"},
+		{"ctrl-q after a reply", "\x1b[?1;2;4c\x11", "\x11"},
+		// Input that tmux still handles itself, or that a key can produce.
+		{"colour report", "\x1b]10;rgb:f8f7/f8f8/f37d\x1b\\", "\x1b]10;rgb:f8f7/f8f8/f37d\x1b\\"},
+		{"theme report", "\x1b[?997;1n", "\x1b[?997;1n"},
+		{"alt+shift+p", "\x1bP", "\x1bP"},
+		{"escape", "\x1b", "\x1b"},
+		{"arrow key", "\x1b[A", "\x1b[A"},
+		{"mouse report", "\x1b[<64;10;5M", "\x1b[<64;10;5M"},
+		{"modifyOtherKeys ctrl-q", "\x1b[27;5;113~", "\x1b[27;5;113~"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, string(stripTerminalReplies([]byte(tc.in))))
+		})
+	}
+}

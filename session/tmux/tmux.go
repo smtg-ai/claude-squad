@@ -266,6 +266,18 @@ func (t *TmuxSession) HasUpdated() (updated bool, hasPrompt bool) {
 	return false, hasPrompt
 }
 
+// terminalReplyRe matches the terminal's replies to the queries a tmux client
+// sends once at startup: primary and secondary device attributes, XTVERSION and
+// DECRPM. tmux stops recognising them once that startup query has timed out and
+// passes them to the pane as keystrokes instead.
+var terminalReplyRe = regexp.MustCompile(`\x1b\[[?>][0-9;]*(?:c|\$y)|\x1bP>\|[^\x1b]*\x1b\\`)
+
+// stripTerminalReplies removes terminal query replies from a chunk of stdin so
+// only real input is forwarded to the session.
+func stripTerminalReplies(buf []byte) []byte {
+	return terminalReplyRe.ReplaceAll(buf, nil)
+}
+
 func (t *TmuxSession) Attach() (chan struct{}, error) {
 	t.attachCh = make(chan struct{})
 
@@ -302,8 +314,9 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 			close(timeoutCh)
 		}()
 
-		// Read input from stdin and check for Ctrl+q
-		buf := make([]byte, 32)
+		// Read input from stdin and check for Ctrl+q. The buffer is large enough
+		// that a terminal reply is not split across two reads.
+		buf := make([]byte, 4096)
 		for {
 			nr, err := os.Stdin.Read(buf)
 			if err != nil {
@@ -327,15 +340,23 @@ func (t *TmuxSession) Attach() (chan struct{}, error) {
 				continue
 			}
 
+			// Replies can also arrive after the 50ms window, where tmux would
+			// type them into the session: an XTVERSION reply starts with ESC P,
+			// which Claude Code reads as Alt+P.
+			input := stripTerminalReplies(buf[:nr])
+			if len(input) == 0 {
+				continue
+			}
+
 			// Check for Ctrl+q (ASCII 17)
-			if nr == 1 && buf[0] == 17 {
+			if len(input) == 1 && input[0] == 17 {
 				// Detach from the session
 				t.Detach()
 				return
 			}
 
 			// Forward other input to tmux
-			_, _ = t.ptmx.Write(buf[:nr])
+			_, _ = t.ptmx.Write(input)
 		}
 	}()
 
